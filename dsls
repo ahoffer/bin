@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+ARGS="$@"
+
+if [[ ! -z "${ARGS}" ]]
+  then
+      NAME=$(docker service ls  --format='{{.Names}}' | grep $ARGS)
+fi
+echo
+docker service ls --format='table {{.ID}}\t{{.Name}}\t{{.Ports}}' --filter "name=$NAME"
+echo

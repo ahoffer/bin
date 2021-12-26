@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+echo
+docker service ps --no-trunc --format 'table {{.Name}}\t{{ (index (split .Node "." ) 0) }}\t{{.CurrentState}}\t{{.Error}}' $(docker service ls -q)
+echo

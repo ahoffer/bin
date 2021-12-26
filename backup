@@ -1,0 +1,48 @@
+#! /bin/bash
+
+# This first argument becomes part of the output filename.
+# I used the words 'odd' for odd-numbered days, or 'even'
+# or 'monthy' or 'quarterly', depending on when chron runs
+# the backup job.
+
+TAR_FILENAME=/tmp/backup-$1.tar.gz
+CHANGE_TO=/home/aaron
+
+# BACKINGUP is a the directory (or file) relative to the CHANGE_TO
+# directory that will be tarred, zipped, and encrypted (archived).
+# When BACKINGUP is set to the dot '.' (current dir),
+# an archive is created for the entire CHANGE_TO directory.
+
+BACKINGUP=.
+ENCRYPT_FILENAME=$TAR_FILENAME.aes
+EXT_FOLDER=/media/aaron/HOFFER_BACKUP
+PASSWORD=`cat /home/aaron/bin/password`
+
+# Save the scripts that handle the backup and restore. 
+mkdir -p /media/aaron/HOFFER_BACKUP/scripts && cp /home/aaron/bin/{backup,restore} /media/aaron/HOFFER_BACKUP/scripts
+
+echo ...Backing up $BACKINGUP to $TAR_FILENAME
+
+# The option "C" tells tar to change directory so the package content will be unpacked there
+tar cz -C $CHANGE_TO -f $TAR_FILENAME --exclude='.m2/repository' --exclude='.cache' --exclude='.local/share/Trash' $BACKINGUP  #2> /dev/null
+
+if [ $? -eq 2 ]; then
+	echo Tar command failed. Exiting now.
+	exit 1
+fi
+echo ...Created `ls -sh $TAR_FILENAME` ...
+
+echo ...Encrypting file as $ENCRYPT_FILENAME
+aescrypt -e -p $PASSWORD -o $ENCRYPT_FILENAME $TAR_FILENAME 
+if [ $? -ne 0 ]; then
+	echo Encryption failed. Exiting now.
+	exit 2
+fi
+
+echo ...Moving $ENCRYPT_FILENAME to $EXT_FOLDER
+mv -f $ENCRYPT_FILENAME $EXT_FOLDER
+if [ $? -ne 0 ]; then
+	echo Could not move file to backup folder. Exiting now.
+	exit 3
+fi
+echo ...Done!

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+ARGS="$1"
+echo
+#docker container ls --format='table {{.ID}}\t{{.Names}}\t{{.RunningFor}}\t{{.Status}}\t{{.Ports}}' --filter "name=$ARGS"
+docker container ls --format='table {{.ID}}\t{{.Names}}\t{{.RunningFor}}\t{{.Status}}' --filter "name=$ARGS"
+echo
+

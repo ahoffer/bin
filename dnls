@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+echo
+docker node ls
+echo

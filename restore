@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+
+import argparse
+from pathlib import Path
+from sys import exit
+import time
+import sys
+import shutil
+import subprocess
+
+def countdown(start_val):
+    for remaining in range(start_val, 0, -1):
+        sys.stdout.write("\r")
+        sys.stdout.write("Starting in {:1d} seconds".format(remaining))
+        sys.stdout.flush()
+        time.sleep(1)
+    print()
+
+def confirm_or_abort():
+    # TODO: Replace /home/aaron with $USER
+    confirm = input('...Overwrite /home/aaron? Type "confirm" to continue\n>')
+    if confirm != 'confirm':
+        print(f'Answer is "{confirm}". ABORTING.')
+        exit(1)
+    countdown(5)
+
+def validate_input():
+    if not backup_file_path.is_file():
+        print(f'"{backup_file_path}" is not a file')
+        exit(2)
+    if backup_file_path.suffix != ".aes":
+        print(backup_file_path.suffix)
+        print(f'ABORTING. File extension must be "aes"') # AESCrypt is picky
+        exit(3)
+    print(f'...File to restore is "{backup_file_path}"')
+
+def validate_aescrypt():
+    if not shutil.which('aescrypt'):
+        printf('Could not find aescrypt. Please install it first')
+        exit(4)
+
+# TODO Add progress indicator
+def copy_file_to(strpath):
+    print(f'...Copying {backup_file_path.name} to "{strpath}"')
+    return shutil.copy(backup_file_path, strpath)
+
+def get_password(password_file_path):
+    if not password_file_path.is_file():
+        print(f'ABORTING Could not find password file "{password_file_path}"')
+        exit(5)
+    else:
+        print(f'...Found password file "{password_file_path}"')
+    #Beware newline characters in the password file
+    return password_file_path.read_text().strip()
+
+# TODO Add progess indicator
+def decrypt_file(password, encrypted_file_path):
+    tar_file_path = encrypted_file_path.with_suffix('')
+    print(f'...Decrypting "{encrypted_file_path}"')
+    decrypt_result = subprocess.run(['aescrypt', '-d', '-p', password, '-o', tar_file_path, encrypted_file_path],
+                                    capture_output=True, text=True)
+    if decrypt_result.returncode != 0:
+        print(f'ABORTING {decrypt_result.stderr}')
+        exit(6)
+    return tar_file_path
+
+# TODO Add progress indicator
+def untar_file(file_path):
+    print(f'Untarring "{file_path}"')
+    untar_result = subprocess.run(['tar', '-vxz', '-f', file_path, '-C', '/home/aaron'],
+                              capture_output=True, text=True)
+    if untar_result.returncode != 0:
+        print(f'ERROR {untar_result.stderr}')
+        exit(7)
+
+# BEGIN MAIN FUNCTION
+parser = argparse.ArgumentParser()
+parser.add_argument("backupfile")
+args = parser.parse_args()
+backup_file_path = Path(args.backupfile)
+validate_aescrypt()
+validate_input()
+confirm_or_abort()
+copied_file_str = copy_file_to('/tmp')
+
+# TODO Move location of file to home directory and give it a more specific name like backup.password.
+# TODO Allow password to be specified on command line
+password = get_password(Path('/home/aaron/bin/password'))
+
+tar_file_path = decrypt_file(password, Path('/tmp', copied_file_str))
+untar_file(tar_file_path)
+print('...Done!')

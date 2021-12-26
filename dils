@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+#{"Containers":"N/A",
+# "CreatedAt":"1969-12-31 17:00:00 -0700 MST",
+# "CreatedSince":"51 years ago",
+# "Digest":"\u003cnone\u003e","ID":"ceeed163a643",
+# "Repository":"docker-mn.di2e.net/reflex/channelguide-ui",
+# "SharedSize":"N/A",
+# "Size":"174MB",
+# "Tag":"latest",
+# "UniqueSize":"N/A",
+# "VirtualSize":"173.9MB"}
+
+export FIRST_ARG=$1
+if [ -z "$FIRST_ARG" ]; then
+  docker image ls --format='table {{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}\t{{.Size}}'
+else
+  docker image ls --format='table {{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}\t{{.Size}}' | grep -i $FIRST_ARG
+fi

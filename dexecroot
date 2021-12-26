@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+dexec $1 -u 0
+

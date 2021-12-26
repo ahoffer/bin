@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+
+# Open a shell in a container, given the partial name of the container
+
+import sys
+
+from dockerutil import execute_docker
+
+args = ' '.join(sys.argv[2:])
+cmd = f'docker exec -it {args} $name bash'
+execute_docker(cmd, sys.argv[1])

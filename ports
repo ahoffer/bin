@@ -1,0 +1,5 @@
+# For Debian, use
+sudo lsof -i 4 -P -n # | grep LISTEN
+
+# For Redhat, use
+# sudo netstat -tulp

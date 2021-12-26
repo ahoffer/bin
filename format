@@ -1,0 +1,3 @@
+#! /bin/bash
+
+mvn initialize spotless:apply --nsu -o
