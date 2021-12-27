@@ -1,5 +1,10 @@
 #! /bin/bash
 
+# TODO Use pigz to enable multithreaded compression. 
+# Update the restore file to do the same.
+# gz:   tar -I pigz -cf tarball.tgz files
+# https://www.peterdavehello.org/2015/02/use-multi-threads-to-compress-files-when-taring-something/
+
 # This first argument becomes part of the output filename.
 # I used the words 'odd' for odd-numbered days, or 'even'
 # or 'monthy' or 'quarterly', depending on when chron runs
@@ -16,10 +21,10 @@ CHANGE_TO=/home/aaron
 BACKINGUP=.
 ENCRYPT_FILENAME=$TAR_FILENAME.aes
 EXT_FOLDER=/media/aaron/HOFFER_BACKUP
-PASSWORD=`cat /home/aaron/bin/password`
+PASSWORD=`cat /home/aaron/password`
 
 # Save the scripts that handle the backup and restore. 
-mkdir -p /media/aaron/HOFFER_BACKUP/scripts && cp /home/aaron/bin/{backup,restore} /media/aaron/HOFFER_BACKUP/scripts
+mkdir -p /media/aaron/HOFFER_BACKUP/scripts && cp /home/aaron/.local/bin/{backup,restore} /media/aaron/HOFFER_BACKUP/scripts
 
 echo ...Backing up $BACKINGUP to $TAR_FILENAME
 

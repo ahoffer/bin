@@ -85,7 +85,7 @@ copied_file_str = copy_file_to('/tmp')
 
 # TODO Move location of file to home directory and give it a more specific name like backup.password.
 # TODO Allow password to be specified on command line
-password = get_password(Path('/home/aaron/bin/password'))
+password = get_password(Path('/home/aaron/password'))
 
 tar_file_path = decrypt_file(password, Path('/tmp', copied_file_str))
 untar_file(tar_file_path)
