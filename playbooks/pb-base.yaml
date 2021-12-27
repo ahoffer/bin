@@ -1,0 +1,25 @@
+---
+  - name: Restore Desktop
+    hosts: localhost
+    connection: local
+    become: yes
+    vars_files:
+      - vars.yaml
+
+    tasks:
+      - name: Update apt cache
+        apt: update_cache=yes cache_valid_time=3600
+
+      - name: Upgrade all apt packages
+        apt: upgrade=dist
+
+      - name: Install Debian packages
+        apt:
+          name:
+            - locate
+            - git
+            - maven
+            - vim
+            - flameshot
+            - clipit
+          state: present
