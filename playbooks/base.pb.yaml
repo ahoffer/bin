@@ -1,0 +1,42 @@
+---
+- name: Restore Desktop
+  hosts: localhost
+  connection: local
+  become: yes
+  vars_files:
+    - vars.yaml
+
+  tasks:
+    - name: Update apt cache
+      apt: update_cache=yes
+
+    - name: Upgrade all apt packages
+      apt: upgrade=dist
+
+    - name: Install Debian packages
+      apt:
+        name:
+          - python3-pip
+          - locate
+          - git
+          - maven
+          - vim
+          - flameshot
+          - clipit
+          - pcscd
+          - gnome-tweaks
+          - baobab
+          - ansible-lint
+        state: present
+
+    - name: Screenshot shortcut
+      shell: dconf load / <<< {{ dconf_settings }}
+      args:
+        executable: /bin/bash
+      vars:
+        dconf_settings: |
+          [org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0]
+          binding='Print'
+          command='flameshot gui'
+          name='Flameshot'
+          

@@ -1,0 +1,7 @@
+---
+- name: Runn all playbooks
+  hosts: all
+- import_playbook: base.pb.yaml
+- import_playbook: chrome.pb.yaml
+- import_playbook: steam.pb.yaml
+- import_playbook: docker.pb.yaml
