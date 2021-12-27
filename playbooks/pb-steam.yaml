@@ -1,0 +1,16 @@
+---
+- name: Restore Desktop
+  hosts: localhost
+  connection: local
+  become: yes
+  vars_files:
+    - vars.yaml
+
+  tasks:
+    - name: Make sure universe repository is enabled
+      command: add-apt-repository multiverse
+
+    - name: Install Steam
+      apt:
+        name: steam
+        state: present
