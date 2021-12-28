@@ -31,7 +31,7 @@
 
     # psutil upgrade was needed for Ubuntu 20.04
     - name: Update pip
-      shell: pip3 install --upgrade psutil
+      command: pip3 install --upgrade psutil
 
     - name: Slack
       snap:
