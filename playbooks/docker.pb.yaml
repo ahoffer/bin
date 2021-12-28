@@ -63,3 +63,8 @@
     - name: Move docker-compose to /usr/local/bin/docker-compose
       command: mv ~/docker-compose /usr/local/bin/docker-compose
       when: docker_compose.stat.exists
+
+    - name: Natural scrolling
+      command:
+        - gsettings set org.gnome.desktop.peripherals.touchpad natural-scroll true
+        - gsettings set org.gnome.desktop.peripherals.mouse natural-scroll true

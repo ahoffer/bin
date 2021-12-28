@@ -29,6 +29,10 @@
           - ansible-lint
         state: present
 
+    # psutil upgrade was needed for Ubuntu 20.04
+    - name: Update pip
+      shell: pip3 install --upgrade psutil
+
     - name: Screenshot shortcut
       shell: dconf load / <<< {{ dconf_settings }}
       args:
@@ -39,4 +43,29 @@
           binding='Print'
           command='flameshot gui'
           name='Flameshot'
-          
+
+    - name: Slack
+      snap:
+        name:
+          - slack
+          - gimp
+
+    - name: Set GNOME Wallpaper
+      become_user: aaron
+      dconf: key="/org/gnome/desktop/background/picture-uri" value="'file:///home/aaron/Pictures/coral.jpg'"
+
+    - name: Create projects dir
+      file:
+        path: /projects
+        state: directory
+        mode: '0755'
+        owner: aaron
+        group: aaron
+
+    - name: Create builds dir
+      file:
+        path: /builds
+        state: directory
+        mode: '0755'
+        owner: aaron
+        group: aaron

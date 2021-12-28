@@ -1,0 +1,11 @@
+
+- name: Test
+  hosts: localhost
+  tasks:
+    - name: Create a directory if it does not exist
+      file:
+          path: /x
+          state: directory
+          mode: '0755'
+          owner: aaron
+          group: aaron
