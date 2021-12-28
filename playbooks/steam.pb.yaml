@@ -1,5 +1,5 @@
 ---
-- name: Restore Desktop
+- name: Install Stream
   hosts: localhost
   connection: local
   become: yes

@@ -1,7 +1,7 @@
-- name: Test
+- name: Git checkouts
   hosts: localhost
   tasks:
-    - name: Checkout
+    - name: Reflex
       git:
         repo: ssh://git@bitbucket.di2e.net:7999/mn/reflex.git
         dest: /projects/reflex
