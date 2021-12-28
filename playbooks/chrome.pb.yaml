@@ -1,6 +1,6 @@
 ---
 - name: install Google Chrome
-  hosts: all
+  hosts: localhost
   become: true
   tasks:
     - name: Install apt-transport-https

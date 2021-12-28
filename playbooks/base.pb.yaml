@@ -33,26 +33,12 @@
     - name: Update pip
       shell: pip3 install --upgrade psutil
 
-    - name: Screenshot shortcut
-      shell: dconf load / <<< {{ dconf_settings }}
-      args:
-        executable: /bin/bash
-      vars:
-        dconf_settings: |
-          [org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0]
-          binding='Print'
-          command='flameshot gui'
-          name='Flameshot'
-
     - name: Slack
       snap:
         name:
           - slack
           - gimp
-
-    - name: Set GNOME Wallpaper
-      become_user: aaron
-      dconf: key="/org/gnome/desktop/background/picture-uri" value="'file:///home/aaron/Pictures/coral.jpg'"
+        classic: yes
 
     - name: Create projects dir
       file:

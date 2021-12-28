@@ -1,0 +1,63 @@
+- name: Reinstall GNOME settings
+  hosts: localhost
+  become: yes
+  become_user: aaron
+  vars_files:
+    - vars.yaml
+
+  tasks:
+    - name: Night mode auto
+      dconf:
+        key: /org/gnome/settings-daemon/plugins/color/night-light-schedule-automatic
+        value: 'false'
+
+    - name: Night mode from
+      dconf:
+        key: /org/gnome/settings-daemon/plugins/color/night-light-schedule-from
+        value: '3.0'
+
+    - name: Night mode to
+      dconf:
+        key: /org/gnome/settings-daemon/plugins/color/night-light-schedule-to
+        value: '3.0'
+
+    - name: Night mode temp
+      dconf:
+        key: /org/gnome/settings-daemon/plugins/color/night-light-temperature
+        value: 'uint32 2700'
+
+    - name: Night mode enabled
+      dconf:
+        key: /org/gnome/settings-daemon/plugins/color/night-light-enabled
+        value: 'true'
+
+    - name: Flameshot shortcut
+      shell: dconf load / <<< {{ flameshot }}
+      args:
+        executable: /usr/bin/bash
+      vars:
+        flameshot: |
+          [org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0]
+          binding=Print
+          command=flameshot gui
+          name=Flameshot
+
+    - name: Ext
+      dconf:
+        key: /org/gnome/shell/enabled-extensions
+        value: "['clipboard-indicator@tudmotu.com', 'cpupower@mko-sl.de']"
+
+    - name: Mouse natural
+      dconf:
+        key: /org/gnome/desktop/peripherals/mouse/natural-scroll
+        value: 'true'
+
+    - name: Touchpad natural
+      dconf:
+        key: /org/gnome/desktop/peripherals/touchpad/natural-scroll
+        value: 'true'
+
+    - name: Wallpaper
+      dconf:
+        key: /org/gnome/desktop/background/picture-uri
+        value: "'file:///home/aaron/Pictures/coral.jpg'"
