@@ -1,7 +1,34 @@
-- name: Test
+# Run with sudo
+# WORK-IN-PROGRSS
+-
+- name: Enable PKCS 11 with Google Chrome
   hosts: localhost
+  connection: local
+  become: yes
+  vars_files:
+    - vars.yaml
+
   tasks:
-    - name: Checkout
-      git:
-        repo: ssh://git@bitbucket.di2e.net:7999/mn/reflex.git
-        dest: /projects/reflex
+    - name: Get user home dir
+      shell: 'getent passwd "{{ user }}" | cut -d: -f6'
+      register: home_dir
+
+    - debug:
+        msg: "{{ home_dir.stdout }}"
+
+    - name: Install wmctrl
+      apt:
+        name: wmctrl
+
+    - name: Make sure Google Chrome is not running
+      ignore_errors: yes
+      shell: 'pkill --oldest chrome'
+
+    - name: Add PKCS 11 reader to Chrome
+      become_user: root
+      expect:
+        command: 'modutil -dbdir sql:.pki/nssdb/ -add "CAC Module" -libfile /usr/lib/x86_64-linux-gnu/pkcs11/opensc-pkcs11.so'
+        chdir: "{{ home_dir.stdout }}"
+        responses:
+          ' to continue' : "\n"
+

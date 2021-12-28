@@ -61,3 +61,13 @@
       dconf:
         key: /org/gnome/desktop/background/picture-uri
         value: "'file:///home/aaron/Pictures/coral.jpg'"
+
+    - name: IM Module
+      dconf:
+        key: /org/gnome/desktop/interface/gtk-im-module
+        value: 'gtk-im-context-simple'
+
+    -name: Theme
+     dconf:
+        key: /org/gnome/desktop/interface/gtk-theme
+        value: 'Orchis-light'

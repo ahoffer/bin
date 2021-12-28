@@ -1,0 +1,7 @@
+- name: Enable PKCS 11 with Google Chrome
+  hosts: localhost
+  connection: local
+  become: yes
+  become_user: aaron
+  vars_files:
+    - vars.yaml

@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="GNOME" type="ShConfigurationType">
-    <option name="SCRIPT_TEXT" value="ansible-playbook $PROJECT_DIR$/playbooks/gnome.pb.yaml" />
+  <configuration default="false" name="Test" type="ShConfigurationType">
+    <option name="SCRIPT_TEXT" value="sudo ansible-playbook $PROJECT_DIR$/playbooks/test.pb.yaml" />
     <option name="INDEPENDENT_SCRIPT_PATH" value="true" />
     <option name="SCRIPT_PATH" value="sudo ansible-playbook pb-docker.yaml -u aaron" />
     <option name="SCRIPT_OPTIONS" value="" />

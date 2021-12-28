@@ -1,0 +1,11 @@
+- name: User tasks
+  hosts: localhost
+  connection: local
+  become: yes
+  become_user: aaron
+  vars_files:
+    - vars.yaml
+
+  tasks:
+    - name: Import VPN file
+      command: nmcli connection import type openvpn file /home/aaron/

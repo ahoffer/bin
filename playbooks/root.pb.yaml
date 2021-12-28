@@ -1,5 +1,5 @@
----
-- name: Restore Desktop
+
+- name: Root tasks
   hosts: localhost
   connection: local
   become: yes
@@ -16,17 +16,26 @@
     - name: Install Debian packages
       apt:
         name:
-          - python3-pip
-          - locate
-          - git
-          - maven
-          - vim
-          - flameshot
-          - clipit
-          - pcscd
-          - gnome-tweaks
-          - baobab
           - ansible-lint
+          - clipit
+          - baobab
+          - flameshot
+          - git
+          - gnome-tweaks
+          - locate
+          - maven
+          - python3-pip
+          - vim
+        state: present
+
+    - name: PKCS 11 libs
+      apt:
+        name:
+          - libpcsclite1
+          - pcscd
+          - pcsc-tools
+          - opensc
+          - libnss3-tools
         state: present
 
     # psutil upgrade was needed for Ubuntu 20.04
