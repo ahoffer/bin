@@ -8,6 +8,12 @@ Ansible playbooks are in a subdirectory
 ### IntelliJ Run Configurations
 Subdirectory `.run`
 
+## TODO:
+
+* Instead of defining the user as `aaron` in the var file, pass `aaron` in the command line (`-u`), and use `{{ remote_user }}" -- double check that.
+
+* Instead of using localhost in the playbooks, try settings up the (ansible.cfg ?) file and pass in a group name. The group name should just point to localhost/127.0.0.1. That would be a good step to moving the ansible control node off of local host and onto a raspberry PI.
+
 ## NOTES
 
 ## Ansible's dconf plugin

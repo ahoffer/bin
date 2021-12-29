@@ -5,3 +5,46 @@
   become_user: aaron
   vars_files:
     - vars.yaml
+
+  tasks:
+    - name: Get user home dir
+      shell: 'getent passwd "{{ user }}" | cut -d: -f6'
+      register: home_dir
+
+    - debug:
+        msg: "{{ home_dir.stdout }}"
+
+    - name: Install wmctrl. Needed for pkill --oldest command
+      apt:
+        name: wmctrl
+
+    - name: Make sure Google Chrome is not running to prevent NSS DB corruptions
+      ignore_errors: yes
+      failed_when: false
+      shell: 'pkill --oldest chrome'
+
+    - name: Make sure Firefox is not running to prevent NSS DB corruptions
+      ignore_errors: yes
+      failed_when: false
+      shell: 'pkill -f firefox;0;'
+
+    - name: Attempt to update NSS DB
+      block:
+        - name: Add PKCS 11 reader to NSS DB
+          expect:
+            command: 'modutil -dbdir sql:.pki/nssdb/ -add "CAC Module" -libfile /usr/lib/x86_64-linux-gnu/pkcs11/opensc-pkcs11.so'
+            echo: yes
+            chdir: "{{ home_dir.stdout }}"
+            responses:
+              ' to continue' : "\n"
+
+      always:
+        - name: Get PKCS 11 Modules
+          command: '/usr/bin/modutil -dbdir sql:.pki/nssdb/ -list'
+          args:
+            chdir: "{{ home_dir.stdout }}"
+          register: listmodules
+
+        - name: Print PKCS 11 Modules
+          command: echo "{{ item }}"
+          loop: "{{ listmodules.stdout_lines }}"
