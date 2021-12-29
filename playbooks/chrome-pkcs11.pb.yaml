@@ -36,15 +36,15 @@
             echo: yes
             chdir: "{{ home_dir.stdout }}"
             responses:
-              ' to continue' : "\n"
+              'to continue': "\n"
+      ignore_errors: yes
 
-      always:
-        - name: Get PKCS 11 Modules
-          command: '/usr/bin/modutil -dbdir sql:.pki/nssdb/ -list'
-          args:
-            chdir: "{{ home_dir.stdout }}"
-          register: listmodules
+    - name: Get PKCS 11 Modules
+      command: '/usr/bin/modutil -dbdir sql:.pki/nssdb/ -list'
+      args:
+        chdir: "{{ home_dir.stdout }}"
+      register: listmodules
 
-        - name: Print PKCS 11 Modules
-          command: echo "{{ item }}"
-          loop: "{{ listmodules.stdout_lines }}"
+    - name: Print PKCS 11 Modules
+      command: echo "{{ item }}"
+      loop: "{{ listmodules.stdout_lines }}"
