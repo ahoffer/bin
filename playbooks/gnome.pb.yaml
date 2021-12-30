@@ -31,16 +31,20 @@
         key: /org/gnome/settings-daemon/plugins/color/night-light-enabled
         value: 'true'
 
-    - name: Flameshot shortcut
-      shell: dconf load / <<< {{ flameshot }}
-      args:
-        executable: /usr/bin/bash
-      vars:
-        flameshot: |
-          [org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0]
-          binding=Print
-          command=flameshot gui
-          name=Flameshot
+    - name: Flameshot keybinding name
+      dconf:
+        key: /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/name
+        value: "'Flameshot'"
+
+    - name: Flameshot command
+      dconf:
+        key: /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/command
+        value: "'flameshot gui'"
+
+    - name: Flameshot bind to a key combo
+      dconf:
+        key: /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/binding
+        value: "'Print'"
 
     - name: Ext
       dconf:
@@ -65,9 +69,9 @@
     - name: IM Module
       dconf:
         key: /org/gnome/desktop/interface/gtk-im-module
-        value: 'gtk-im-context-simple'
+        value: "'gtk-im-context-simple'"
 
-    -name: Theme
-     dconf:
+    - name: Theme
+      dconf:
         key: /org/gnome/desktop/interface/gtk-theme
-        value: 'Orchis-light'
+        value: "'Orchis-light'"

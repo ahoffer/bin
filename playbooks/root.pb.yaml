@@ -2,6 +2,8 @@
   hosts: localhost
   connection: local
   become: yes
+  roles:
+    - adoptopenjdk_role
   vars_files:
     - vars.yaml
 
@@ -18,9 +20,11 @@
           - ansible-lint
           - clipit
           - baobab
+          - default-jdk
           - flameshot
           - git
           - gnome-tweaks
+          - htop
           - locate
           - maven
           - python3-pip

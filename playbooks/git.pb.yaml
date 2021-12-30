@@ -1,7 +1,16 @@
+---
 - name: Git checkouts
   hosts: localhost
+  vars_files:
+    - vars.yaml
   tasks:
     - name: Reflex
       git:
         repo: ssh://git@bitbucket.di2e.net:7999/mn/reflex.git
         dest: /projects/reflex
+        version: master
+    - name: Reflex
+      git:
+        repo: ssh://git@bitbucket.di2e.net:7999/mn/sensor-schema.git
+        dest: /projects/sensor-schema
+        version: master

@@ -47,8 +47,9 @@ if [ $? -ne 0 ]; then
 	exit 2
 fi
 
-echo ...Moving $ENCRYPT_FILENAME to $EXT_FOLDER
-mv -f $ENCRYPT_FILENAME $EXT_FOLDER
+# Change move to copy. It's nice to have the latest on the local drive in case an ext drive is not handy
+echo ...Copy $ENCRYPT_FILENAME to $EXT_FOLDER
+cp -f $ENCRYPT_FILENAME $EXT_FOLDER
 if [ $? -ne 0 ]; then
 	echo Could not move file to backup folder. Exiting now.
 	exit 3

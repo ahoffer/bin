@@ -1,0 +1,5 @@
+- src: sfuhrm.adoptopenjdk_role
+  vars:
+    adoptopenjdk_package: adoptopenjdk-13-hotspot
+  version: master
+  name: adoptopenjdk_role

@@ -1,0 +1,6 @@
+---
+
+# which OS package to install
+adoptopenjdk_package: adoptopenjdk-13-hotspot
+# present or absent
+adoptopenjdk_state: present
