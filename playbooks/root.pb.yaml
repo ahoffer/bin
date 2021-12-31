@@ -6,7 +6,7 @@
     - adoptopenjdk_role
     - ms_teams
   vars_files:
-    - vars.yaml
+    - global-vars.yaml
 
   tasks:
     - name: Update apt cache
@@ -28,6 +28,7 @@
           - htop
           - locate
           - maven
+          - notepadqq
           - python3-pip
           - vim
         state: present

@@ -1,4 +1,0 @@
----
-user: aaron
-docker_compose_version: 'v2.2.2'
-adoptopenjdk_package: adoptopenjdk-11-hotspot

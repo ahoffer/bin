@@ -4,7 +4,7 @@
   become: yes
   become_user: aaron
   vars_files:
-    - vars.yaml
+    - global-vars.yaml
 
   tasks:
     - name: Get user home dir

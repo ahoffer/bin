@@ -1,10 +1,11 @@
+# To install the roles, run
+
 - name: Reinstall GNOME settings
   hosts: localhost
   become: yes
   become_user: aaron
   vars_files:
-    - vars.yaml
-
+    - global-vars.yaml
   tasks:
     - name: Night mode auto
       dconf:
@@ -75,3 +76,8 @@
       dconf:
         key: /org/gnome/desktop/interface/gtk-theme
         value: "'Orchis-light'"
+
+    - name: Favorites icons
+      dconf:
+        key: /org/gnome/shell/favorite-apps
+        value: "['org.gnome.Nautilus.desktop', 'jetbrains-idea-ce.desktop', 'google-chrome.desktop', 'slack_slack.desktop', 'org.gnome.Terminal.desktop', 'gnome-control-center.desktop', 'firefox.desktop', 'notepadqq.desktop']"

@@ -2,7 +2,7 @@
 - name: Git checkouts
   hosts: localhost
   vars_files:
-    - vars.yaml
+    - global-vars.yaml
   tasks:
     - name: Reflex
       git:
