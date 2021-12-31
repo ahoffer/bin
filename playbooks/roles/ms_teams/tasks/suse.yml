@@ -1,0 +1,16 @@
+---
+- name: Microsoft RPM GPG key imported
+  rpm_key:
+    key: "{{ teams_packages_gpg_key }}"
+    state: present
+  become: yes
+
+- name: Zypper repository added
+  zypper_repository:
+    repo: "{{ teams_yum_repo }}"
+    name: "{{ teams_repo_name }}"
+    description: "{{ teams_repo_name }}"
+    autorefresh: yes
+    enabled: yes
+    state: present
+  become: yes

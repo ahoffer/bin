@@ -4,6 +4,7 @@
   become: yes
   roles:
     - adoptopenjdk_role
+    - ms_teams
   vars_files:
     - vars.yaml
 

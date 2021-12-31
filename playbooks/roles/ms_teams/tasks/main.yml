@@ -1,0 +1,17 @@
+---
+# tasks file for ms-teams
+
+- name: Include tasks for "{{ ansible_os_family }}"
+  include: "{{ ansible_os_family | lower }}.yml"
+
+- name: install teams
+  package:
+    name: teams
+  when:
+    - teams_install | bool
+
+- name: install teams insiders
+  package:
+    name: teams-insiders
+  when:
+    - teams_insiders_install | bool

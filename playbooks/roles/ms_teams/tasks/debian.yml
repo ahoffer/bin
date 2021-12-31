@@ -1,0 +1,19 @@
+---
+- name: set gpg key
+  apt_key:
+    url: "{{ teams_packages_gpg_key }}"
+    state: present
+
+- name: add repository
+  apt_repository:
+    repo: 'deb [arch=amd64] https://packages.microsoft.com/repos/ms-teams stable main'
+    filename: "{{ teams_repo_name }}"
+    update_cache: no
+    state: present
+
+# Handle cache update on a dedicated task to cover the case where the
+# repository was already added, but the cache was not updated. This also
+# allows to move the cache update out of the package install task.
+- name: APT cache updated
+  apt:
+    update_cache: yes

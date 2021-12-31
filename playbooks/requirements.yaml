@@ -3,3 +3,6 @@
     adoptopenjdk_package: adoptopenjdk-13-hotspot
   version: master
   name: adoptopenjdk_role
+
+- src: ngetchell.ms_teams
+  name: ms_teams

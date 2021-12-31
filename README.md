@@ -5,6 +5,12 @@ The contents of my bin dir. Eventually expand to "Configure your desktop with An
 ## Playbooks
 Ansible playbooks are in a subdirectory
 
+## Roles
+
+```
+ansible-galaxy install -p roles -r requirements.yaml -f
+```
+
 ### IntelliJ Run Configurations
 Subdirectory `.run`
 

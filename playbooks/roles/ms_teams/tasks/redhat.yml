@@ -1,0 +1,11 @@
+---
+- name: YUM repository added
+  yum_repository:
+    baseurl: "{{ teams_yum_repo }}"
+    name: "{{ teams_repo_name }}"
+    description: "{{ teams_repo_name }}"
+    gpgkey: "{{ teams_packages_gpg_key }}"
+    enabled: yes
+    keepcache: 0
+    state: present
+  become: yes
