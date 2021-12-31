@@ -80,4 +80,4 @@
     - name: Favorites icons
       dconf:
         key: /org/gnome/shell/favorite-apps
-        value: "['org.gnome.Nautilus.desktop', 'jetbrains-idea-ce.desktop', 'google-chrome.desktop', 'slack_slack.desktop', 'org.gnome.Terminal.desktop', 'gnome-control-center.desktop', 'firefox.desktop', 'notepadqq.desktop']"
+        value: "['org.gnome.Nautilus.desktop', 'jetbrains-idea-ce.desktop', 'google-chrome.desktop', 'slack_slack.desktop', 'org.gnome.Terminal.desktop', 'gnome-control-center.desktop', 'notepadqq.desktop']"
