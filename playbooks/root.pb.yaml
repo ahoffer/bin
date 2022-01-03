@@ -31,6 +31,7 @@
           - notepadqq
           - python3-pip
           - vim
+          - vlc
         state: present
 
     - name: PKCS 11 libs
