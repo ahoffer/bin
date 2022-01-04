@@ -81,3 +81,13 @@
       dconf:
         key: /org/gnome/shell/favorite-apps
         value: "['org.gnome.Nautilus.desktop', 'jetbrains-idea-ce.desktop', 'google-chrome.desktop', 'slack_slack.desktop', 'org.gnome.Terminal.desktop', 'gnome-control-center.desktop', 'notepadqq.desktop']"
+
+    - name: Turn off update notices
+      dconf:
+        key: /com/ubuntu/update-notifier/regular-auto-launch-interval
+        value: 0
+
+    - name: Turn off upgrade notices
+      dconf:
+        key: /com/ubuntu/update-notifier/release-check-time
+        value: 0

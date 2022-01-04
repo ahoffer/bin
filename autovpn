@@ -10,7 +10,7 @@
 
 
 # Keep a log.
-#exec &> >(tee -a "$HOME/autovpn.log")
+exec &> >(tee -a "$HOME/autovpn.log")
 
 # Enter all your VPN servers' UUID values here.
 # Use "nmcli c show --active" command to learn UUID's of active VPN connections.
