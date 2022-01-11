@@ -9,6 +9,20 @@
     - global-vars.yaml
 
   tasks:
+    - name: Accept virtualbox-ext-pack seen license
+      debconf:
+        name: virtualbox-ext-pack
+        question: virtualbox-ext-pack/license
+        value: 'true'
+        vtype: seen
+
+    - name: Accept virtualbox-ext-pack select license
+      debconf:
+        name: virtualbox-ext-pack
+        question: virtualbox-ext-pack/license
+        value: 'true'
+        vtype: select
+
     - name: Update apt cache
       apt: update_cache=yes
 
@@ -34,6 +48,7 @@
           - python3-pip
           - vim
           - virtualbox
+          - virtualbox-ext-pack
           - vlc
         state: present
 
