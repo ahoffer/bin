@@ -11,8 +11,6 @@
       shell: "nmcli connection | grep vpn"
       register: vpn_exists
 
-
-
       # Grep return a 0 if it finds a match
     - name: Import VPN file
       command: "nmcli connection import type openvpn file /home/aaron/cxvpn1.ovpn"

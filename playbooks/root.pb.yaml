@@ -31,6 +31,7 @@
           - notepadqq
           - python3-pip
           - vim
+          - virtualbox
           - vlc
         state: present
 
