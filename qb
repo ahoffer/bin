@@ -1,5 +1,4 @@
 #! /bin/bash
 
-mvn clean spotless:apply install -Dcheckstyle.skip -DskipTests -Pno-feature-verification -T1C $@
-tput bell
+mvn clean initialize spotless:apply install -Dcheckstyle.skip -DskipTests -Pno-feature-verification -T1C $@
 

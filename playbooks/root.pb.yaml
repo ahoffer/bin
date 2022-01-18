@@ -2,9 +2,6 @@
   hosts: localhost
   connection: local
   become: yes
-  roles:
-    - adoptopenjdk_role
-    - ms_teams
   vars_files:
     - global-vars.yaml
 
@@ -23,6 +20,16 @@
         value: 'true'
         vtype: select
 
+    - name: Add an hashicorps key by id
+      ansible.builtin.apt_key:
+        keyserver: https://apt.releases.hashicorp.com/gpg
+        id: E8A032E094D8EB4EA189D270DA418C88A3219F7B
+
+    - name: Add Hashicorp's vagrant repo into sources list
+      ansible.builtin.apt_repository:
+        repo: deb [arch=amd64] https://apt.releases.hashicorp.com focal main
+        state: present
+
     - name: Update apt cache
       apt: update_cache=yes
 
@@ -40,13 +47,18 @@
           - git
           - gnome-tweaks
           - htop
+          - iotop
           - locate
           - maven
           - notepadqq
           - p7zip-full
           - p7zip-rar
           - python3-pip
+          - qbittorrent
+          - sysstat
+          - transmission-cli
           - vim
+          - vagrant
           - virtualbox
           - virtualbox-ext-pack
           - vlc

@@ -7,6 +7,12 @@
     - global-vars.yaml
 
   tasks:
+    - name: Install Lazy Docker
+      shell: "curl https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh | bash"
+
+    - name: Install vagrant scp
+      shell: "vagrant plugin install vagrant-scp"
+
     - name: Determine if VPN entry already exists (this is brittle)
       shell: "nmcli connection | grep vpn"
       register: vpn_exists
