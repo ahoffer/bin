@@ -13,6 +13,9 @@
     - name: Install vagrant scp
       shell: "vagrant plugin install vagrant-scp"
 
+    - name: Install vagrant vbguest
+      shell: "vagrant plugin install vagrant-vbguest"
+
     - name: Determine if VPN entry already exists (this is brittle)
       shell: "nmcli connection | grep vpn"
       register: vpn_exists

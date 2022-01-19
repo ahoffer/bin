@@ -30,29 +30,32 @@
         repo: deb [arch=amd64] https://apt.releases.hashicorp.com focal main
         state: present
 
-    - name: Update apt cache
-      apt: update_cache=yes
-
     - name: Upgrade all apt packages
-      apt: upgrade=dist
+      apt:
+        upgrade: dist
+        update_cache: yes
 
     - name: Install Debian packages
       apt:
         name:
           - ansible-lint
+          - build-essential
           - clipit
           - baobab
           - default-jdk
+          - fd-find
           - flameshot
           - git
           - gnome-tweaks
           - htop
           - iotop
+          - libtool
           - locate
           - maven
           - notepadqq
           - p7zip-full
           - p7zip-rar
+          - pkg-config
           - python3-pip
           - qbittorrent
           - sysstat
