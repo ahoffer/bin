@@ -41,6 +41,7 @@
           - ansible-lint
           - build-essential
           - clipit
+          - cmake
           - baobab
           - default-jdk
           - fd-find
@@ -51,6 +52,7 @@
           - iotop
           - libtool
           - locate
+          - make
           - maven
           - notepadqq
           - p7zip-full
