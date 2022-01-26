@@ -1,0 +1,6 @@
+#! /usr/bin/python3
+import random, time
+while True:
+  print(chr(9585+random.randint(0,1)), end='', flush=True)
+  time.sleep(0.001)
+
