@@ -45,7 +45,6 @@
         name:
           - ansible-lint
           - build-essential
-          - clipit
           - cmake
           - baobab
           - default-jdk
