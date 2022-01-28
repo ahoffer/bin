@@ -7,6 +7,7 @@
 
 # TODO Check the external media is available before starting.
 
+# TODO Convert to python
 
 # This first argument becomes part of the output filename.
 # I used the words 'odd' for odd-numbered days, or 'even'

@@ -44,6 +44,7 @@
       apt:
         name:
           - ansible-lint
+          - arandr
           - build-essential
           - cmake
           - baobab
