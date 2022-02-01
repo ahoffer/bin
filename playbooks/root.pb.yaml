@@ -47,6 +47,7 @@
           - arandr
           - build-essential
           - cmake
+          - cmake-curses-gui
           - baobab
           - default-jdk
           - fd-find
@@ -55,6 +56,10 @@
           - gnome-tweaks
           - htop
           - iotop
+          - golang-go
+          - libjsoncpp-dev
+          - libqpid-proton11
+          - libssl-dev
           - libtool
           - locate
           - make
@@ -63,12 +68,16 @@
           - p7zip-full
           - p7zip-rar
           - pkg-config
+          - python3-dev
           - python3-pip
           - qbittorrent
           - rpm
+          - ruby-full
           - sysstat
+          - swig
           - terminator
           - transmission-cli
+          - uuid-dev
           - vim
           - vagrant
           - virtualbox
