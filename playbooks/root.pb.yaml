@@ -83,6 +83,10 @@
           - virtualbox
           - virtualbox-ext-pack
           - vlc
+          - intel-media-va-driver-non-free
+          - libva-drm2
+          - libva-x11-2
+          - mesa-va-drivers
         state: present
 
     - name: PKCS 11 libs
