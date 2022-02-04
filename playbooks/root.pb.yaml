@@ -53,17 +53,22 @@
           - fd-find
           - flameshot
           - git
+          - golang-go
           - gnome-tweaks
           - htop
+          - intel-media-va-driver-non-free
           - iotop
-          - golang-go
+          - kylin-video
           - libjsoncpp-dev
           - libqpid-proton11
           - libssl-dev
           - libtool
+          - libva-drm2
+          - libva-x11-2
           - locate
           - make
           - maven
+          - mesa-va-drivers
           - notepadqq
           - p7zip-full
           - p7zip-rar
@@ -71,6 +76,7 @@
           - python3-dev
           - python3-pip
           - qbittorrent
+          - redshift-gtk
           - rpm
           - ruby-full
           - sysstat
@@ -82,11 +88,6 @@
           - vagrant
           - virtualbox
           - virtualbox-ext-pack
-          - vlc
-          - intel-media-va-driver-non-free
-          - libva-drm2
-          - libva-x11-2
-          - mesa-va-drivers
         state: present
 
     - name: PKCS 11 libs
@@ -99,7 +100,23 @@
           - libnss3-tools
         state: present
 
-    # psutil upgrade was needed for Ubuntu 20.04
+    - name: Install OBS Studio and Media tools
+      community.general.snap:
+        name:
+          - obs-studio
+          - vlc
+
+    - name: Install OBS add-ons
+      shell: |
+        snap connect obs-studio:alsa \
+        && snap connect obs-studio:audio-record \
+        && snap connect obs-studio:avahi-control \
+        && snap connect obs-studio:camera \
+        && snap connect obs-studio:jack1 \
+        && snap connect obs-studio:removable-media \
+
+
+      # psutil upgrade was needed for Ubuntu 20.04
     - name: Update pip
       command: pip3 install --upgrade psutil
 
