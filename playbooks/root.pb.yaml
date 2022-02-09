@@ -149,3 +149,8 @@
         block: |
           alias ll='ls -alh'
           alias fd='fdfind -H'
+
+    - name: Make sure enough files can be created
+      lineinfile:
+        path: /etc/sysctl.conf
+        line: 'fs.inotify.max_user_watches = 524288'
