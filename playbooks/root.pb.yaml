@@ -55,6 +55,7 @@
           - git
           - golang-go
           - gnome-tweaks
+          - graphviz
           - htop
           - intel-media-va-driver-non-free
           - iotop
