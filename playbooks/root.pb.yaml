@@ -103,11 +103,13 @@
           - libnss3-tools
         state: present
 
-    - name: Install OBS Studio and Media tools
+    - name: Install Snaps
       community.general.snap:
         name:
           - obs-studio
           - vlc
+          - aws-cli
+        classic: yes
 
     - name: Install OBS add-ons
       shell: |
