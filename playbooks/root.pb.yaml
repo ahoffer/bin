@@ -50,6 +50,8 @@
           - cmake-curses-gui
           - baobab
           - default-jdk
+          - openjdk-11-source
+          - openjdk-11-dbg
           - fd-find
           - flameshot
           - git
