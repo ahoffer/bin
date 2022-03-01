@@ -27,12 +27,12 @@
 
     - name: Add Hashicorp's vagrant repo into sources list
       apt_repository:
-        repo: deb [arch=amd64] https://apt.releases.hashicorp.com focal main
+        repo: deb [arch=amd64] https://apt.releases.hashicorp.com {{release}} main
         state: present
 
     - name: Add ppa for Terminator
       apt_repository:
-        repo: deb http://ppa.launchpad.net/mattrose/terminator/ubuntu focal main
+        repo: deb http://ppa.launchpad.net/mattrose/terminator/ubuntu {{release}} main
         state: present
 
     - name: Upgrade all apt packages
@@ -45,10 +45,11 @@
         name:
           - ansible-lint
           - arandr
+          - baobab
           - build-essential
           - cmake
           - cmake-curses-gui
-          - baobab
+          - curl
           - default-jdk
           - openjdk-11-source
           - openjdk-11-dbg
@@ -56,6 +57,7 @@
           - flameshot
           - git
           - golang-go
+          - gnupg
           - gnome-tweaks
           - graphviz
           - htop
@@ -82,9 +84,11 @@
           - redshift-gtk
           - rpm
           - ruby-full
+          - software-properties-common
           - sysstat
           - swig
           - terminator
+          - terraform
           - transmission-cli
           - uuid-dev
           - vim
