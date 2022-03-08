@@ -1,0 +1,12 @@
+#! /usr/bin/bash
+
+regex=$1
+shift
+container_id=$(docker ps | grep $regex | cut -f1 -d ' ')
+if test -z "$container_id"
+then
+  echo "Not matching container for $regex"
+else
+  docker exec -it "$@" $container_id bash
+fi
+
