@@ -19,7 +19,7 @@ exec &> >(tee -a "$HOME/autovpn.log")
 #   vpn=("........-....-....-....-............"
 #   "........-....-....-....-............"
 #   "........-....-....-....-............")
-vpn=("f1e435bd-93e8-4fe3-996a-86471451e1f9")
+vpn=("42b8b8db-bf4e-45f1-9ad3-9ea14b57f8cb")
 
 # Optional: You may enter server locations or names here.
 # They are used in log file and command output.

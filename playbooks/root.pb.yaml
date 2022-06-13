@@ -4,36 +4,35 @@
   become: yes
   vars_files:
     - global-vars.yaml
-
   tasks:
-    - name: Accept virtualbox-ext-pack seen license
-      debconf:
-        name: virtualbox-ext-pack
-        question: virtualbox-ext-pack/license
-        value: 'true'
-        vtype: seen
+#    - name: Accept virtualbox-ext-pack seen license
+#      debconf:
+#        name: virtualbox-ext-pack
+#        question: virtualbox-ext-pack/license
+#        value: 'true'
+#        vtype: seen
+#
+#    - name: Accept virtualbox-ext-pack select license
+#      debconf:
+#        name: virtualbox-ext-pack
+#        question: virtualbox-ext-pack/license
+#        value: 'true'
+#        vtype: select
 
-    - name: Accept virtualbox-ext-pack select license
-      debconf:
-        name: virtualbox-ext-pack
-        question: virtualbox-ext-pack/license
-        value: 'true'
-        vtype: select
-
-    - name: Add an hashicorps key by id
-      ansible.builtin.apt_key:
-        keyserver: https://apt.releases.hashicorp.com/gpg
-        id: E8A032E094D8EB4EA189D270DA418C88A3219F7B
-
-    - name: Add Hashicorp's vagrant repo into sources list
-      apt_repository:
-        repo: deb [arch=amd64] https://apt.releases.hashicorp.com {{release}} main
-        state: present
-
-    - name: Add ppa for Terminator
-      apt_repository:
-        repo: deb http://ppa.launchpad.net/mattrose/terminator/ubuntu {{release}} main
-        state: present
+#    - name: Add an hashicorps key by id
+#      ansible.builtin.apt_key:
+#        keyserver: https://apt.releases.hashicorp.com/gpg
+#        id: E8A032E094D8EB4EA189D270DA418C88A3219F7B
+#
+#    - name: Add Hashicorp's vagrant repo into sources list
+#      apt_repository:
+#        repo: deb [arch=amd64] https://apt.releases.hashicorp.com {{release}} main
+#        state: present
+#
+#    - name: Add ppa for Terminator
+#      apt_repository:
+#        repo: deb http://ppa.launchpad.net/mattrose/terminator/ubuntu {{release}} main
+#        state: present
 
     - name: Upgrade all apt packages
       apt:
@@ -41,7 +40,7 @@
         update_cache: yes
 
     - name: Install Debian packages
-      apt:
+      dnf:
         name:
           - ansible-lint
           - arandr
@@ -108,7 +107,7 @@
         state: present
 
     - name: Install Snaps
-      community.general.snap:
+      community.general.flatpak:
         name:
           - obs-studio
           - vlc
