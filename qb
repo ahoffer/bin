@@ -1,4 +1,4 @@
 #! /bin/bash
 
-mvn clean initialize spotless:apply install -Dcheckstyle.skip -DskipTests -Pno-feature-verification -T1C $@
+mvn clean initialize spotless:apply install -DskipStatic -DskipTests -DskipDocker -T1C $@
 

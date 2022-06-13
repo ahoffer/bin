@@ -1,4 +1,4 @@
 #! /bin/bash
 
-mvn clean install -DskipTests -Pno-feature-verification -T1C -P buildDocker $@
+mvn clean initialize spotless:apply install -DskipStatic -DskipTests -DskipAttachTars -DskipDocker=false -T1C $@
 
