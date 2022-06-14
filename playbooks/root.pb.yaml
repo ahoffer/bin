@@ -5,42 +5,16 @@
   vars_files:
     - global-vars.yaml
   tasks:
-#    - name: Accept virtualbox-ext-pack seen license
-#      debconf:
-#        name: virtualbox-ext-pack
-#        question: virtualbox-ext-pack/license
-#        value: 'true'
-#        vtype: seen
-#
-#    - name: Accept virtualbox-ext-pack select license
-#      debconf:
-#        name: virtualbox-ext-pack
-#        question: virtualbox-ext-pack/license
-#        value: 'true'
-#        vtype: select
-
-#    - name: Add an hashicorps key by id
-#      ansible.builtin.apt_key:
-#        keyserver: https://apt.releases.hashicorp.com/gpg
-#        id: E8A032E094D8EB4EA189D270DA418C88A3219F7B
-#
-#    - name: Add Hashicorp's vagrant repo into sources list
-#      apt_repository:
-#        repo: deb [arch=amd64] https://apt.releases.hashicorp.com {{release}} main
-#        state: present
-#
-#    - name: Add ppa for Terminator
-#      apt_repository:
-#        repo: deb http://ppa.launchpad.net/mattrose/terminator/ubuntu {{release}} main
-#        state: present
-
     - name: Upgrade all apt packages
-      apt:
-        upgrade: dist
-        update_cache: yes
-
+      apt: update_cache=yes force_apt_get=yes cache_valid_time=3600
+      
+    - name: Add the flathub flatpak repository remote to the user installation
+      community.general.flatpak_remote:
+        name: flathub
+        flatpakrepo_url: https://flathub.org/repo/flathub.flatpakrepo
+        
     - name: Install Debian packages
-      dnf:
+      apt:
         name:
           - ansible-lint
           - arandr
@@ -54,6 +28,7 @@
           - openjdk-11-dbg
           - fd-find
           - flameshot
+          - flatpak
           - git
           - golang-go
           - gnupg
@@ -86,14 +61,12 @@
           - software-properties-common
           - sysstat
           - swig
-          - terminator
-          - terraform
           - transmission-cli
           - uuid-dev
           - vim
           - vagrant
-          - virtualbox
-          - virtualbox-ext-pack
+#          - virtualbox
+#          - virtualbox-ext-pack
         state: present
 
     - name: PKCS 11 libs
@@ -106,34 +79,33 @@
           - libnss3-tools
         state: present
 
-    - name: Install Snaps
-      community.general.flatpak:
-        name:
-          - obs-studio
-          - vlc
-          - aws-cli
-        classic: yes
+#    - name: Install Snaps
+#      community.general.flatpak:
+#        name:
+#          - obs-studio
+#          - vlc
+#          - aws-cli
 
-    - name: Install OBS add-ons
-      shell: |
-        snap connect obs-studio:alsa \
-        && snap connect obs-studio:audio-record \
-        && snap connect obs-studio:avahi-control \
-        && snap connect obs-studio:camera \
-        && snap connect obs-studio:jack1 \
-        && snap connect obs-studio:removable-media \
+
+#    - name: Install OBS add-ons
+#      shell: |
+#        snap connect obs-studio:alsa \
+#        && snap connect obs-studio:audio-record \
+#        && snap connect obs-studio:avahi-control \
+#        && snap connect obs-studio:camera \
+#        && snap connect obs-studio:jack1 \
+#        && snap connect obs-studio:removable-media \
 
 
       # psutil upgrade was needed for Ubuntu 20.04
     - name: Update pip
       command: pip3 install --upgrade psutil
 
-    - name: Slack
+    - name: Snaps
       snap:
         name:
           - slack
           - gimp
-        classic: yes
 
     - name: Create projects dir
       file:
@@ -162,3 +134,8 @@
       lineinfile:
         path: /etc/sysctl.conf
         line: 'fs.inotify.max_user_watches = 524288'
+
+# Install signal
+- hosts: localhost
+  roles:
+    - role: staticdev.signal
