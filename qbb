@@ -1,4 +1,4 @@
 #! /bin/bash
 
-mvn clean initialize spotless:apply install -DskipStatic -DskipTests -DskipAttachTars -DskipDocker=false -T1C $@
+qb -DskipDocker=false -DskipAttachTars $@
 
