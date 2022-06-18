@@ -1,5 +1,9 @@
 #! /bin/bash
 
+# Exit on error
+set -e
+
+
 # TODO Use pigz to enable multithreaded compression. 
 # Update the restore file to do the same.
 # gz:   tar -I pigz -cf tarball.tgz files
@@ -30,10 +34,11 @@ PASSWORD=`cat /home/aaron/password`
 # Save the scripts that handle the backup and restore. 
 mkdir -p /media/aaron/HOFFER_BACKUP/scripts && cp /home/aaron/.local/bin/{backup,restore} /media/aaron/HOFFER_BACKUP/scripts
 
+
 echo ...Backing up $BACKINGUP to $TAR_FILENAME
 
 # The option "C" tells tar to change directory so the package content will be unpacked there
-tar cz -C $CHANGE_TO -f $TAR_FILENAME --exclude='.m2/repository' --exclude='.cache' --exclude='.local/share/Trash' $BACKINGUP  #2> /dev/null
+tar cz --verbose -C $CHANGE_TO -f $TAR_FILENAME --exclude='.m2/repository' --exclude='.cache' --exclude='.local/share/Trash' $BACKINGUP
 
 if [ $? -eq 2 ]; then
 	echo Tar command failed. Exiting now.
@@ -48,6 +53,7 @@ if [ $? -ne 0 ]; then
 	exit 2
 fi
 
+#TODO Use rsync instead of copy because it is resumable.
 # Change move to copy. It's nice to have the latest on the local drive in case an ext drive is not handy
 echo ...Copy $ENCRYPT_FILENAME to $EXT_FOLDER
 cp -f $ENCRYPT_FILENAME $EXT_FOLDER

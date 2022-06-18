@@ -1,0 +1,3 @@
+#! /usr/bin/bash
+
+export NM_OPENVPN_USER="" && export NM_OPENVPN_GROUP="" && systemctl restart NetworkManager
