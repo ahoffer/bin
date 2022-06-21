@@ -1,4 +1,4 @@
 #! /bin/bash
 
-qb -DskipDocker=false -DskipAttachTars $@
+qb -DskipDocker=false -DskipAttachDockerTars $@
 

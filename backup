@@ -1,7 +1,14 @@
 #! /bin/bash
 
-# Exit on error
-set -e
+#! /bin/bash 
+
+
+# TODO: Make sure aescrypt is installed BEFORE starting!!!!
+
+
+# TODO: Exclude Microsoft and Slacks' shitty hidden cache
+# .config/Microsoft/Microsoft Teams/Service Worker/CacheStorage/
+#  ./snap/slack/62/.config/Slack/Service Worker/CacheStorage
 
 
 # TODO Use pigz to enable multithreaded compression. 
@@ -17,6 +24,14 @@ set -e
 # I used the words 'odd' for odd-numbered days, or 'even'
 # or 'monthy' or 'quarterly', depending on when chron runs
 # the backup job.
+
+if [ -z "$1" ]
+then
+	NAME="now"
+else
+	NAME="$1"
+fi
+echo Setting backup name to $NAME
 
 TAR_FILENAME=/tmp/backup-$1.tar.gz
 CHANGE_TO=/home/aaron
@@ -38,12 +53,13 @@ mkdir -p /media/aaron/HOFFER_BACKUP/scripts && cp /home/aaron/.local/bin/{backup
 echo ...Backing up $BACKINGUP to $TAR_FILENAME
 
 # The option "C" tells tar to change directory so the package content will be unpacked there
-tar cz --verbose -C $CHANGE_TO -f $TAR_FILENAME --exclude='.m2/repository' --exclude='.cache' --exclude='.local/share/Trash' $BACKINGUP
+tar cz --verbose -C $CHANGE_TO -f $TAR_FILENAME --exclude='.m2/repository' --exclude='.cache' --exclude='.local/share/Trash'  --exclude='VirtualBox VMs' $BACKINGUP
 
 if [ $? -eq 2 ]; then
 	echo Tar command failed. Exiting now.
 	exit 1
 fi
+
 echo ...Created `ls -sh $TAR_FILENAME` ...
 
 echo ...Encrypting file as $ENCRYPT_FILENAME
