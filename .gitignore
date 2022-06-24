@@ -27,3 +27,16 @@ __pycache__
 /pyproject-build
 /tqdm
 /twine
+/ansible
+/ansible-community
+/ansible-config
+/ansible-connection
+/ansible-console
+/ansible-doc
+/ansible-galaxy
+/ansible-generate
+/ansible-inventory
+/ansible-playbook
+/ansible-pull
+/ansible-test
+/ansible-vault

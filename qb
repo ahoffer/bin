@@ -1,5 +1,10 @@
 #! /bin/bash
+QUICK_OPTS="-DskipStatic -DskipTests -DskipDocker"
+BLD_OPTS="$QUICK_OPTS -T1C $*"
+echo "Using $BLD_OPTS"
 
-mvn clean
-mvn initialize spotless:apply
-mvn install -DskipStatic -DskipTests -DskipDocker -T1C $@
+# I don't understand why I have to use eval, but if I don't, it doesn't
+# pick up the build options.
+eval "mvn clean $QUICK_OPTS"
+eval "mvn initialize spotless:apply install $BLD_OPTS"
+
