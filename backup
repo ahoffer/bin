@@ -1,23 +1,14 @@
 #! /bin/bash
 
-#! /bin/bash 
-
-
 # TODO: Make sure aescrypt is installed BEFORE starting!!!!
-
-
 # TODO: Exclude Microsoft and Slacks' shitty hidden cache
 # .config/Microsoft/Microsoft Teams/Service Worker/CacheStorage/
 #  ./snap/slack/62/.config/Slack/Service Worker/CacheStorage
-
-
 # TODO Use pigz to enable multithreaded compression. 
 # Update the restore file to do the same.
 # gz:   tar -I pigz -cf tarball.tgz files
 # https://www.peterdavehello.org/2015/02/use-multi-threads-to-compress-files-when-taring-something/
-
 # TODO Check the external media is available before starting.
-
 # TODO Convert to python
 
 # This first argument becomes part of the output filename.
