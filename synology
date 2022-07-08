@@ -1,16 +1,16 @@
 # Mount synology volumes
 # Lightly tested and probably misses error conditions. 
 # Blame Aaron Hoffer
-# REM AF_DCGS-Controlled
+# REM "AF_DCGS-Controlled"
 
 # Example 1 mounts "software" to /home/{user}/synology/software and looks for the credentials file at /home/{user}/.synology
 #
 # $ synology software
 #
 #
-# Example 2 mounts "software" and "AFDCGS"
+# Example 2 mounts "software" and "AF_DCGS-Controlled"
 #
-# $ synology software AFDCGS
+# $ synology software AF_DCGS-Controlled
 #
 #
 # Example 3 provides the path to the credentials file.
@@ -101,5 +101,9 @@ shift $((OPTIND - 1))
 test_connection
 set_vars
 check_args $#
+
+# Don't forget the drivers
+sudo apt install -y cifs-utils samba-client
+
 mount_all "$@"
 
