@@ -6,6 +6,7 @@
 # 2021.21.31 - Aaron Hoffer
 # Changed logging to work on local machine.
 # Implemented a few suggestions from a linter.
+# And then hacked it up almost beyond recognition. ¯\_(ツ)_/¯
 
 if test -z "$1"; then
   echo "No command line arguments. Attempting to locate VPN UUID"
@@ -34,29 +35,19 @@ echo "VPN UUID=$vpn"
 # Keep a log.
 exec &> >(tee -a "$HOME/autovpn.log")
 
-# This defines maximum attempt number to prevent infinite connection failure.
-# Connection failure to all defined VPN servers counts only 1 attempt in this regard.
-max_attempt=20
-
-# Implementation begins.
-
 printf "\nVPN auto connection script started at $(date +"%F %T").\nLog file is located at ${HOME}/autovpn.log\nIt will only report when no connection is found.\n"
 
-for ((m = 1; m < max_attempt; m++)); do
-  #printf "\n$(date +"%F %T") Waiting for 10 seconds before VPN connection check.\n"
+while true
+do
   sleep 5
   active_vpn=$(nmcli c show --active | grep tun0)
   if [ "$active_vpn" = "" ]; then
     printf "\n$(date +"%F %T") : VPN connection is not active!\n"
     printf "\n*** Connecting to ${vpn_name}... ***\n"
+    # This is the command that start the VPN connection
     nmcli c up "${vpn}"
     if [ $? -eq 0 ]; then
       printf "\n*** Connected to ${vpn_name}! ***\n\nIt will be periodically checked to see if it is still connected.\n"
-      break
     fi
-
-  else
-    m=$((m - 1))
   fi
-  sleep 5
 done
