@@ -8,6 +8,13 @@
 # Implemented a few suggestions from a linter.
 # And then hacked it up almost beyond recognition. ¯\_(ツ)_/¯
 
+# TODO: Fix the weird GNOME-or-someone-kills-my-VPN
+# The symptom is that all DNS (and I think IP) dies.
+# To fix it manually, run "nmcli c show" and look for an entry like this:
+#     tun0                 5bd91f09-812a-45c0-afb9-f45770fcd80b  tun       tun0
+# then run:
+#     sudo NM_OPENVPN_USER="" NM_OPENVPN_GROUP="" VPN_ID="5bd91f09-812a-45c0-afb9-f45770fcd80b" nmcli c up $VPN_ID
+
 if test -z "$1"; then
   echo "No command line arguments. Attempting to locate VPN UUID"
   VPN_ENTRY=$(nmcli c show | grep vpn | tr -s " ")
@@ -31,6 +38,10 @@ else
 fi
 
 echo "VPN UUID=$vpn"
+
+echo "Fixing GNOME VPN issue"
+sudo NM_OPENVPN_USER="" NM_OPENVPN_GROUP="" nmcli c up $vpn
+
 
 # Keep a log.
 exec &> >(tee -a "$HOME/autovpn.log")
