@@ -1,0 +1,18 @@
+#! /bin/bash
+# Example
+# sudo gojava 11
+# sudo gojava 17
+
+JAVA_VER=$1
+
+re='^[0-9]+$'
+if ! [[ $JAVA_VER =~ $re ]]; then
+  echo "$JAVA_VER is not a number. Use a java version like "11" or "17" " >&2
+  exit 1
+fi
+
+echo "Switching to Java version $JAVA_VER"
+sudo update-alternatives --set java $(update-alternatives --list java | grep java-$JAVA_VER)
+sudo update-alternatives --set javac $(update-alternatives --list javac | grep java-$JAVA_VER)
+echo "export JAVA_HOME=/usr/lib/jvm/java-$1-openjdk-amd64" >~/javahome
+echo "Don't forget to source ~/.profile"
