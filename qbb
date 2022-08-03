@@ -1,5 +1,5 @@
 #! /bin/bash
-QUICK_OPTS="-DskipStatic -DskipTests -DskipAttachDockerTars"
+QUICK_OPTS="-DskipStatic -DskipTests"
 BLD_OPTS="$QUICK_OPTS -T1C $*"
 echo "Using $BLD_OPTS"
 
