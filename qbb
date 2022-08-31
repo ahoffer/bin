@@ -1,4 +1,8 @@
 #! /bin/bash
+
+# To include the docker image tar files add
+# -DattachDockerTars=true
+
 QUICK_OPTS="-DskipStatic -DskipTests"
 BLD_OPTS="$QUICK_OPTS -T1C $*"
 echo "Using $BLD_OPTS"
