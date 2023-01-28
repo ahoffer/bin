@@ -1,0 +1,15 @@
+#! /bin/bash
+
+PAUSE=0.8
+
+sleep $PAUSE
+vzoom 100
+sleep $PAUSE
+vzoom 200
+sleep $PAUSE
+vzoom 300
+sleep $PAUSE
+vzoom 400
+sleep 2
+vzoom 100
+
