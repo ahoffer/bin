@@ -4,7 +4,7 @@
 # -DattachDockerTars=true
 
 QUICK_OPTS="-DskipStatic -DskipTests"
-BLD_OPTS="$QUICK_OPTS -T1C $*"
+BLD_OPTS="$QUICK_OPTS -T1C -nsu $*"
 echo "Using $BLD_OPTS"
 
 # I don't understand why I have to use eval, but if I don't, it doesn't
