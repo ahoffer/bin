@@ -1,0 +1,10 @@
+#! /bin/bash
+
+# To include the docker image tar files add
+# -DattachDockerTars=true
+
+QUICK_OPTS="-DskipStatic -DskipTests -DskipRequiredRoutes -pl \!com.connexta.reflex.test:test -pl \!com.connexta.reflex.test.itests:test-containers-end-to-end"
+BLD_OPTS="$QUICK_OPTS -T1C -nsu $*"
+CMD="mvn initialize spotless:apply clean install $BLD_OPTS"
+echo $CMD
+eval $CMD

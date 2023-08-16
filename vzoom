@@ -1,5 +1,11 @@
 #! /bin/bash
 # A value of 175 is average
 
+# If no arguments are provided, display help message and exit
+if [ $# -eq 0 ]; then
+    echo "Specifiy a zoom factor. A value of 175 is average"
+    exit 1
+fi
+
 v4l2-ctl -d /dev/video0 --set-ctrl=zoom_absolute=$1
 

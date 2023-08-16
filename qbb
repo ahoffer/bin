@@ -2,12 +2,9 @@
 
 # To include the docker image tar files add
 # -DattachDockerTars=true
-
-QUICK_OPTS="-DskipStatic -DskipTests"
+echo "** NO CLEAN **"
+QUICK_OPTS="-DskipStatic -DskipTests -DskipRequiredRoutes -pl \!com.connexta.reflex.test:test \!test-containers-end-to-end"
 BLD_OPTS="$QUICK_OPTS -T1C -nsu $*"
-echo "Using $BLD_OPTS"
-
-# I don't understand why I have to use eval, but if I don't, it doesn't
-# pick up the build options.
-eval "mvn clean $QUICK_OPTS"
-eval "mvn initialize spotless:apply install $BLD_OPTS"
+CMD="mvn initialize spotless:apply install $BLD_OPTS"
+echo $CMD
+eval $CMD

@@ -1,5 +1,5 @@
 #! /bin/bash
 
-# Source this file to set the environment to Java 17
+# Source this file to set the environment Java environment
 export JAVA_HOME=/usr/lib/jvm/open-jdk-11
 echo $JAVA_HOME

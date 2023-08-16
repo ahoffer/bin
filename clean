@@ -1,0 +1,4 @@
+#! /bin/bash
+
+sudo rm -rf /projects/reflex/distribution/test/test-containers/target \
+ /projects/reflex/distribution/test/test-containers-end-to-end/target
