@@ -3,8 +3,8 @@
 # To include the docker image tar files add
 # -DattachDockerTars=true
 echo "** NO CLEAN **"
-QUICK_OPTS="-DskipStatic -DskipTests -DskipRequiredRoutes -pl \!com.connexta.reflex.test:test \!test-containers-end-to-end"
-BLD_OPTS="$QUICK_OPTS -T1C -nsu $*"
+QUICK_OPTS="-DskipStatic -DskipTests"
+BLD_OPTS="$QUICK_OPTS -T3 -nsu $*"
 CMD="mvn initialize spotless:apply install $BLD_OPTS"
 echo $CMD
 eval $CMD

@@ -1,0 +1,44 @@
+#!/bin/bash
+
+# The main Docker image tar file
+rootfile="$1"
+
+# Check if the file name is provided
+if [ -z "$rootfile" ]; then
+  echo "Please provide the Docker image tar file."
+  exit 1
+fi
+
+# Function to extract tar.gz files
+extract() {
+  local tarzip="$1"
+  local extract_dir="${tarzip%.tar.gz}"
+  echo "Creating dir $extract_dir"
+  mkdir -p "$extract_dir"
+  tar -zxf "$tarzip" -C "$extract_dir"
+}
+
+# Function to compute base directory name
+base_name() {
+  local file="$1"
+  if [[ $file == *.tar.gz ]]; then
+    echo "$(dirname "$file")/$(basename "$file" .tar.gz)"
+  else
+    echo "$(dirname "$file")/$(basename "$file" .tar)"
+  fi
+}
+
+# Compute and create the base directory
+dir=$(base_name "$rootfile")
+mkdir -p "$dir"
+tar -xf "$rootfile" -C "$dir"
+
+# Navigate to the extracted directory
+cd "$dir" || exit
+
+# Find and extract each layer
+for tarzip in *.tar.gz; do
+  echo "Extracting layer: $tarzip"
+  extract "$tarzip"
+  rm "$tarzip" # Remove the archive after extracting
+done
