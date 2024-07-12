@@ -12,7 +12,15 @@ if ! [[ $JAVA_VER =~ $re ]]; then
 fi
 
 echo "Switching to Java version $JAVA_VER"
-sudo update-alternatives --set java $(update-alternatives --list java | grep java-$JAVA_VER)
-sudo update-alternatives --set javac $(update-alternatives --list javac | grep java-$JAVA_VER)
-echo "export JAVA_HOME=/usr/lib/jvm/java-$1-openjdk-amd64" >~/javahome
-echo "Don't forget to source ~/.profile"
+JAVA_TARGET=$(update-alternatives --list java | grep "\-$JAVA_VER")
+JAVAC_TARGET=$(update-alternatives --list javac | grep "\-$JAVA_VER")
+echo Found java=$JAVA_TARGET
+echo Found javac=$JAVAC_TARGET
+echo Updating java...
+sudo update-alternatives --set java "$JAVA_TARGET"
+echo Updating javac...
+sudo update-alternatives --set javac "$JAVAC_TARGET"
+jhome=$(dirname "$(dirname "$JAVA_TARGET")")
+echo "export JAVA_HOME=$jhome" >javahome
+echo 'source javahome' to set JAVA_HOME=$jhome
+

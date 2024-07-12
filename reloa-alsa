@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# Stop PulseAudio
+echo "Stopping PulseAudio..."
+pulseaudio -k
+
+# Reload ALSA drivers
+echo "Reloading ALSA drivers..."
+sudo alsa force-reload
+
+# Restart PulseAudio
+echo "Starting PulseAudio..."
+pulseaudio --start
+
+echo "ALSA drivers reloaded and PulseAudio restarted."
+

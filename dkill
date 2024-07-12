@@ -2,5 +2,4 @@
 
 docker container stop $(docker container ps -q) 2> /dev/null
 docker container rm $(docker ps -aq) 2> /dev/null
-
-
+docker volume prune -a -f

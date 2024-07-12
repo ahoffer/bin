@@ -5,6 +5,8 @@
 echo "** NO CLEAN **"
 QUICK_OPTS="-DskipStatic -DskipTests"
 BLD_OPTS="$QUICK_OPTS -T3 -nsu $*"
-CMD="mvn initialize spotless:apply install $BLD_OPTS"
+#CMD="mvn initialize spotless:apply install $BLD_OPTS"
+CMD="mvn clean  fmt:format  install -Dfindbugs.skip=true -Dpmd.skip=true  -DskipTestScope=true -DskipProvidedScope=true -DskipRuntimeScope=true -DskipTests=true -Djacoco.skip=true $*"
+date
 echo $CMD
 eval $CMD

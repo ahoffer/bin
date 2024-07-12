@@ -13,7 +13,6 @@ fi
 extract() {
   local tarzip="$1"
   local extract_dir="${tarzip%.tar.gz}"
-  echo "Creating dir $extract_dir"
   mkdir -p "$extract_dir"
   tar -zxf "$tarzip" -C "$extract_dir"
 }
@@ -30,6 +29,7 @@ base_name() {
 
 # Compute and create the base directory
 dir=$(base_name "$rootfile")
+echo "Creating dir $dir"
 mkdir -p "$dir"
 tar -xf "$rootfile" -C "$dir"
 

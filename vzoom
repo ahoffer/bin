@@ -7,5 +7,6 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-v4l2-ctl -d /dev/video0 --set-ctrl=zoom_absolute=$1
-
+DEVICE=$(v4l2-ctl --list-devices | grep -A 1 Brio | tail -n 1 | tr -d "\t")
+echo Found $DEVICE
+v4l2-ctl -d $DEVICE --set-ctrl=zoom_absolute=$1
