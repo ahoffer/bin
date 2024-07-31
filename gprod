@@ -1,4 +1,0 @@
-#! /usr/bin/env bash
-
-cd /projects/reflex/distribution/docker/compose/src/main/resources
-make prod

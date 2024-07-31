@@ -1,5 +1,0 @@
-#!/bin/bash
-# Created by matthew.bates@connexta.com
-
-export DOCKER_API_VERSION=1.23
-env DOCKER_API_VERSION=1.23 docker -H tcp://swarm.phx.connexta.com:2375 $@
