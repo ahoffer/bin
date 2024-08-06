@@ -1,7 +1,8 @@
 #! /bin/bash
 # Example
-# sudo gojava 11
-# sudo gojava 17
+# gojava 11
+# gojava 17
+# gojava 8
 
 JAVA_VER=$1
 
