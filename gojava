@@ -8,20 +8,41 @@ JAVA_VER=$1
 
 re='^[0-9]+$'
 if ! [[ $JAVA_VER =~ $re ]]; then
-  echo "$JAVA_VER is not a number. Use a java version like "11" or "17" " >&2
+  echo "$JAVA_VER is not a number. Use a Java version like "11" or "17"" >&2
   exit 1
 fi
 
 echo "Switching to Java version $JAVA_VER"
 JAVA_TARGET=$(update-alternatives --list java | grep "\-$JAVA_VER")
 JAVAC_TARGET=$(update-alternatives --list javac | grep "\-$JAVA_VER")
+
+if [ -z "$JAVA_TARGET" ]; then
+  echo "Java version $JAVA_VER not found." >&2
+  exit 1
+fi
+
+if [ -z "$JAVAC_TARGET" ]; then
+  echo "Javac version $JAVA_VER not found." >&2
+  exit 1
+fi
+
 echo Found java=$JAVA_TARGET
 echo Found javac=$JAVAC_TARGET
+
 echo Updating java...
 sudo update-alternatives --set java "$JAVA_TARGET"
+if [ $? -ne 0 ]; then
+  echo "Failed to update java." >&2
+  exit 1
+fi
+
 echo Updating javac...
 sudo update-alternatives --set javac "$JAVAC_TARGET"
-jhome=$(dirname "$(dirname "$JAVA_TARGET")")
-echo "export JAVA_HOME=$jhome" >javahome
-echo 'source javahome' to set JAVA_HOME=$jhome
+if [ $? -ne 0 ]; then
+  echo "Failed to update javac." >&2
+  exit 1
+fi
 
+jhome=$(dirname "$(dirname "$JAVA_TARGET")")
+echo "export JAVA_HOME=\"$jhome\"" > "$HOME/.javahome"
+echo 'source javahome' to set JAVA_HOME="$jhome"

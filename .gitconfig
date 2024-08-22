@@ -1,0 +1,47 @@
+[user]
+    name = Aaron Hoffer
+    email = github@hoffer.org
+
+[core]
+    editor = vim
+    excludesfile = ~/.gitignore_global
+
+[alias]
+    st = status
+    co = checkout
+    br = branch
+    ci = commit
+    amend = commit --amend
+    lg = log --graph --oneline --decorate --all
+    last = log -1 HEAD
+    df = diff
+    dc = diff --cached
+    cp = cherry-pick
+    rb = rebase
+    rbi = rebase -i
+    rv = remote -v
+    sp = stash pop
+    ss = stash save
+    unstage = reset HEAD --
+    amend-noedit = commit --amend --no-edit
+    ls = ls-files
+    clone-deep = clone --depth 1
+    cob = checkout -b
+    undo = reset --soft HEAD^
+    wip = !git add -A && git commit -m "WIP"
+
+[push]
+    default = simple
+
+[color]
+    ui = auto
+
+[fetch]
+    prune = true
+
+[merge]
+    ff = only
+
+[rerere]
+    enabled = true
+
