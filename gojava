@@ -16,33 +16,39 @@ echo "Switching to Java version $JAVA_VER"
 JAVA_TARGET=$(update-alternatives --list java | grep "\-$JAVA_VER")
 JAVAC_TARGET=$(update-alternatives --list javac | grep "\-$JAVA_VER")
 
-if [ -z "$JAVA_TARGET" ]; then
+# Handle Java 8 specifically
+if [ -z "$JAVA_TARGET" ] && [ "$JAVA_VER" == 8 ]; then
+  JAVA_TARGET=$(update-alternatives --list java | grep "\-1.8")
+  JAVAC_TARGET=$(update-alternatives --list javac | grep "\-1.8")
+fi
+
+# Ensure both JAVA_TARGET and JAVAC_TARGET are set
+if [ -z "$JAVA_TARGET" ] || [ -z "$JAVAC_TARGET" ]; then
   echo "Java version $JAVA_VER not found." >&2
   exit 1
 fi
 
-if [ -z "$JAVAC_TARGET" ]; then
-  echo "Javac version $JAVA_VER not found." >&2
-  exit 1
-fi
+echo "Found java=$JAVA_TARGET"
+echo "Found javac=$JAVAC_TARGET"
 
-echo Found java=$JAVA_TARGET
-echo Found javac=$JAVAC_TARGET
-
-echo Updating java...
+# Updating java
+echo "Updating java..."
 sudo update-alternatives --set java "$JAVA_TARGET"
 if [ $? -ne 0 ]; then
   echo "Failed to update java." >&2
   exit 1
 fi
 
-echo Updating javac...
+# Updating javac
+echo "Updating javac..."
 sudo update-alternatives --set javac "$JAVAC_TARGET"
 if [ $? -ne 0 ]; then
   echo "Failed to update javac." >&2
   exit 1
 fi
 
+# Set JAVA_HOME
 jhome=$(dirname "$(dirname "$JAVA_TARGET")")
-echo "export JAVA_HOME=\"$jhome\"" > "$HOME/.javahome"
-echo 'source javahome' to set JAVA_HOME="$jhome"
+echo "export JAVA_HOME=\"$jhome\"" >"$HOME/.javahome"
+echo ""
+echo 'IMPORTANT: source ~/.javahome' to set JAVA_HOME="$jhome"
