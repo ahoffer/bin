@@ -1,0 +1,33 @@
+#!/usr/bin/bash
+
+interface=$(ip -4 addr show | grep 'inet.*dynamic' | awk '{print $NF}')
+ip_info=$(ip addr show dev $interface | grep 'inet ' | awk '{print $2}')
+ip_addr=$(echo $ip_info | cut -d/ -f1)
+cidr=$(echo $ip_info | cut -d/ -f2)
+gateway=$(ip route show default | grep $interface | awk '{print $3}')
+
+# Function to convert CIDR to netmask
+cidr_to_netmask() {
+  local i mask=""
+  local full_octets=$(($1/8))
+  local part_octet=$(($1%8))
+  
+  for ((i=0; i<4; i++)); do
+    if [ $i -lt $full_octets ]; then
+      mask+=255
+    elif [ $i -eq $full_octets ]; then
+      mask+=$((256 - 2**(8-$part_octet)))
+    else
+      mask+=0
+    fi
+    [ $i -lt 3 ] && mask+=.
+  done
+  echo $mask
+}
+
+netmask=$(cidr_to_netmask $cidr)
+
+echo "IP Address: $ip_addr"
+echo "Network Mask: $netmask"
+echo "Gateway: $gateway"
+

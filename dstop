@@ -1,0 +1,3 @@
+#! /bin/bash
+
+docker container stop $(docker container ps -q) 2> /dev/null
