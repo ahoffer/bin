@@ -1,0 +1,4 @@
+#!/bin/bash
+# usage: ls | copy
+xclip -selection clipboard
+
