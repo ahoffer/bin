@@ -1,0 +1,76 @@
+#!/bin/bash
+
+set -e  # Exit on error
+
+# GCC version that supports the required flags
+GCC_VERSION="13.2.0"
+
+echo "Building GCC ${GCC_VERSION} for CUDA compatibility..."
+
+# Install prerequisites
+sudo apt-get update
+sudo apt-get install -y \
+    build-essential \
+    wget \
+    flex \
+    bison \
+    gawk \
+    texinfo \
+    libgmp-dev \
+    libmpfr-dev \
+    libmpc-dev \
+    libzstd-dev
+
+# Create build directory
+BUILD_DIR=$(mktemp -d)
+cd "$BUILD_DIR"
+
+# Download GCC
+echo "Downloading GCC ${GCC_VERSION}..."
+wget "https://ftp.gnu.org/gnu/gcc/gcc-${GCC_VERSION}/gcc-${GCC_VERSION}.tar.xz"
+tar xf "gcc-${GCC_VERSION}.tar.xz"
+
+# Download prerequisites
+cd "gcc-${GCC_VERSION}"
+./contrib/download_prerequisites
+
+# Create build directory
+mkdir build
+cd build
+
+# Configure GCC build
+../configure \
+    --prefix=/usr/local/gcc-${GCC_VERSION} \
+    --enable-languages=c,c++ \
+    --disable-multilib \
+    --with-system-zlib \
+    --program-suffix=-${GCC_VERSION}
+
+# Build GCC (using number of CPU cores)
+echo "Building GCC (this may take a while)..."
+make -j$(nproc)
+
+# Install
+echo "Installing GCC..."
+sudo make install
+
+# Create version-specific symlinks
+sudo update-alternatives --install /usr/bin/gcc gcc /usr/local/gcc-${GCC_VERSION}/bin/gcc-${GCC_VERSION} 100
+sudo update-alternatives --install /usr/bin/g++ g++ /usr/local/gcc-${GCC_VERSION}/bin/g++-${GCC_VERSION} 100
+
+# Add the new GCC to DKMS configuration
+sudo tee /etc/dkms/gcc.conf > /dev/null << EOF
+export CC=/usr/local/gcc-${GCC_VERSION}/bin/gcc-${GCC_VERSION}
+export CXX=/usr/local/gcc-${GCC_VERSION}/bin/g++-${GCC_VERSION}
+EOF
+
+# Clean up
+cd
+rm -rf "$BUILD_DIR"
+
+echo "GCC ${GCC_VERSION} installation completed."
+echo "Testing new GCC version:"
+gcc --version
+
+echo "Now you can proceed with CUDA installation."
+

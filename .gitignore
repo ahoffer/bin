@@ -40,3 +40,6 @@ __pycache__
 /ansible-pull
 /ansible-test
 /ansible-vault
+/java
+/javac
+
