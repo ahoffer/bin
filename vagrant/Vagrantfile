@@ -1,0 +1,75 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# Method to get Docker installation script
+def shell_script
+  return <<-SHELL
+    # Install Docker using the official repository
+    sudo apt update
+    sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    sudo apt-get update
+    sudo apt install -y docker-ce
+
+    # Add vagrant user to docker group
+    sudo usermod -aG docker vagrant
+
+    # Start and enable Docker service
+    sudo systemctl enable --now docker
+  SHELL
+end
+
+# Method to define VMs with incrementing IPs and VM names, and add /etc/hosts entries
+def create_vms(config, total_vms)
+  # Validate input
+  raise ArgumentError, "Number of VMs must be positive" if total_vms <= 0
+
+  # Generate the hosts entries for all VMs
+  config_data = (1..total_vms).map do |i|
+    ip = "192.168.56.#{i+1}"
+    hostname = "vm#{i}"
+    [ip, hostname, "#{ip} #{hostname}"]
+  end.transpose
+
+  ips, host_names, host_file_entries = config_data
+  host_file_content = host_file_entries.join("\n")
+
+  # Create each VM
+  (0...total_vms).each do |i|
+    config.vm.define host_names[i] do |vm|
+      vm.vm.box = "ubuntu/jammy64"
+      vm.vm.hostname = host_names[i]
+      vm.vm.network "private_network", ip: ips[i]
+
+      # Forward HTTP and HTTPS ports with unique host ports
+      vm.vm.network "forwarded_port", guest: 80, host: 8080 + i + 1
+      vm.vm.network "forwarded_port", guest: 443, host: 8443 + i + 1
+
+      # Add VM resource configuration
+      vm.vm.provider "virtualbox" do |vb|
+        vb.memory = "8096"
+        vb.cpus = 8
+      end
+
+      vm.vm.provision "shell", inline: <<-SHELL
+        # Poor man's DNS
+        echo "#{host_file_content}" | sudo tee -a /etc/hosts
+
+        #{shell_script}
+      SHELL
+    end
+  end
+end
+
+# Main Vagrant configuration
+Vagrant.configure("2") do |config|
+  # Set default SSH username
+  config.ssh.username = "vagrant"
+
+  # Enable SSH agent forwarding
+  config.ssh.forward_agent = true
+
+  # Call the create_vms method with desired number of VMs
+  create_vms(config, 2) # Replace 2 with desired number of VMs
+end

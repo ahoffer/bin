@@ -42,4 +42,4 @@ __pycache__
 /ansible-vault
 /java
 /javac
-
+vagrant/.vagrant/

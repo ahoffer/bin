@@ -62,13 +62,12 @@ fi
 export JAVA_HOME="$selected_java"
 export PATH="$HOME/bin:$PATH"
 
-echo "Java version switched successfully to $selected_name"
-echo "JAVA_HOME set to $selected_java"
-echo "Changes applied to your user account only"
-echo "Please run 'source ~/.profile' or start a new terminal for changes to take effect"
-
 # Verify current version
-echo -e "\nCurrent Java version:"
-"$HOME/bin/java" -version
-echo -e "\nCurrent JavaC version:"
-"$HOME/bin/javac" -version
+echo ""
+java -version
+javac -version
+
+echo ""
+echo "Run 'source ~/.profile' or start a new terminal for changes to take effect"
+
+
