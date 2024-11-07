@@ -1,7 +1,6 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
-# Method to get Docker installation script
 def shell_script
   return <<-SHELL
     # Install Docker using the official repository
@@ -21,9 +20,8 @@ def shell_script
   SHELL
 end
 
-# Method to define VMs with incrementing IPs and VM names, and add /etc/hosts entries
+# Define VMs with incrementing IPs and VM names, and add /etc/hosts entries
 def create_vms(config, total_vms)
-  # Validate input
   raise ArgumentError, "Number of VMs must be positive" if total_vms <= 0
 
   # Generate the hosts entries for all VMs
@@ -49,7 +47,7 @@ def create_vms(config, total_vms)
 
       # Add VM resource configuration
       vm.vm.provider "virtualbox" do |vb|
-        vb.memory = 20 * 1024 # Set memory size to GB
+        vb.memory = 20 * 1024 #Set memory size to GB
         vb.cpus = 8
       end
 
