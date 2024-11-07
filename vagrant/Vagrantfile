@@ -3,10 +3,11 @@
 
 def shell_script
   return <<-SHELL
-    # Install Docker using the official repository
+    export DEBIAN_FRONTEND=noninteractive  #Suppress warnings
     sudo apt update
+    sudo apt upgrade -y
     sudo apt install -y apt-transport-https ca-certificates curl software-properties-common unzip
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor --batch -o /usr/share/keyrings/docker-archive-keyring.gpg
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
     sudo apt update
     sudo apt install -y docker-ce
@@ -37,13 +38,12 @@ def create_vms(config, total_vms)
   # Create each VM
   (0...total_vms).each do |i|
     config.vm.define host_names[i] do |vm|
-      vm.vm.box = "ubuntu/jammy64"
       vm.vm.hostname = host_names[i]
       vm.vm.network "private_network", ip: ips[i]
 
       # Forward HTTP and HTTPS ports with unique host ports
-      vm.vm.network "forwarded_port", guest: 80, host: 8080 + i
-      vm.vm.network "forwarded_port", guest: 443, host: 8443 + i
+      vm.vm.network "forwarded_port", guest: 80, host: 9080 + i
+      vm.vm.network "forwarded_port", guest: 443, host: 9443 + i
 
       # Add VM resource configuration
       vm.vm.provider "virtualbox" do |vb|
@@ -63,6 +63,10 @@ end
 
 # Main Vagrant configuration
 Vagrant.configure("2") do |config|
+  # VM "box" to use
+  # config.vm.box = "ubuntu/jammy64"
+  config.vm.box = "cxedge"
+
   # Set default SSH username
   config.ssh.username = "vagrant"
 
