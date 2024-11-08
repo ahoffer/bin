@@ -22,6 +22,18 @@ def shell_script(host_file_content)
 
     # Start and enable Docker service
     sudo systemctl enable --now docker
+
+    # Create dkill script
+    cat << 'EOF' | sudo tee /usr/local/bin/dkill > /dev/null
+#! /bin/bash
+docker container stop $(docker container ps -q) 2> /dev/null
+docker container rm $(docker ps -aq) 2> /dev/null
+docker volume prune -a -f
+EOF
+
+    # Make the script executable
+    sudo chmod +x /usr/local/bin/dkill
+
   SHELL
 end
 
