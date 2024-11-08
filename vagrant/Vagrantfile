@@ -59,8 +59,7 @@ def create_vms(config, total_vms)
       vm.vm.network "private_network", ip: ips[i]
 
       # Forward HTTP and HTTPS ports with unique host ports
-      vm.vm.network "forwarded_port", guest: 80, host: 9080 + i
-      vm.vm.network "forwarded_port", guest: 443, host: 9443 + i
+      vm.vm.network "forwarded_port", guest: 5005, host: 6005 + i
 
       # Add VM resource configuration
       vm.vm.provider "virtualbox" do |vb|

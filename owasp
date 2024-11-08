@@ -1,53 +1,87 @@
-#!/bin/sh
-# This script runs the OWASP Dependency Checker in a Docker container.
-# Run the script without flags in the root directory of the project.
+#!/bin/bash
+set -euo pipefail
 
-# BEFORE running this script, BUILD THE PROJECT.
-# Build the project to create the JAR files and
-# node_modules directories. These will be scanned. If the project
-# is not built, there is nothing for the tool to scan.
-# By default, all Dependency Check analyzers are on. The tool
-# will scan Java, NPM, Python, and potentially others.
+# Run OWASP Dependency Checker in Docker.
+# Execute from project root after running yarn install.
 
-# The tool creates a report, and provides it in many formats.
-# The reports are written to the PWD. The names of the files
-# match the pattern "dependency-check-report.*"
-# The tool also creates an "odc-reports" directory, but it is empty.
+readonly NODE_EXCLUDES="**/node_modules,**/npm-packages-offline-cache,**/.yarn/cache"
+readonly DEFAULT_EXCLUDES="${NODE_EXCLUDES},/src/docs,/src/tests"
+DOCKER_TAG="11.1.0"
+SCAN_DIR="${PWD}"
+OUTPUT_DIR="${PWD}"
+DATA_DIR="${HOME}/owasp_data/data"
+SUPPRESSION_FILE="" # Initialize as empty
+EXCLUDE_DIRS="${DEFAULT_EXCLUDES}"
+NVD_API_KEY="e1e67587-3def-498c-b4cb-d44f123cf018"
 
-# Working files and cached data are stored under this directory
-DC_DIRECTORY=$HOME/OWASP-Dependency-Check
-DATA_DIRECTORY="$DC_DIRECTORY/data"
-CACHE_DIRECTORY="$DC_DIRECTORY/data/cache"
-# By default, start the scan in the present working directory
-DC_PROJECT="dependency-check scan: $(pwd)"
-DC_VERSION="latest"
+usage() {
+  echo "Usage: $(basename "$0") [OPTIONS]"
+  echo "Options:"
+  echo "  -h  Show help"
+  echo "  -t  docker tag"
+  echo "  -s  Suppression file"
+  echo "  -e  Additional exclude dirs (comma-separated)"
+  echo "  -k  NVD API key"
+  echo "  -d  Scan directory (default: pwd)"
+  echo "  -o  Output directory (default: pwd)"
+  exit 0
+}
 
-if [ ! -d "$DATA_DIRECTORY" ]; then
-  echo "Initially creating persistent directory: $DATA_DIRECTORY"
-  mkdir -p "$DATA_DIRECTORY"
-fi
-if [ ! -d "$CACHE_DIRECTORY" ]; then
-  echo "Initially creating persistent directory: $CACHE_DIRECTORY"
-  mkdir -p "$CACHE_DIRECTORY"
-fi
+# Process arguments
+while getopts "hv:s:e:k:cd:o:" opt; do
+  case "$opt" in
+  h) usage ;;
+  t) DOCKER_TAG="$OPTARG" ;;
+  s) SUPPRESSION_FILE="$OPTARG" ;;
+  e) EXCLUDE_DIRS="${EXCLUDE_DIRS},${OPTARG}" ;;
+  k) NVD_API_KEY="$OPTARG" ;;
+  d) SCAN_DIR="$OPTARG" ;;
+  o) OUTPUT_DIR="$OPTARG" ;;
+  *) usage ;;
+  esac
+done
 
-# Make sure we are using the latest version
-docker pull owasp/dependency-check:$DC_VERSION
+# Validate directories
+[[ -d "${SCAN_DIR}" ]] || {
+  echo "Error: Invalid scan directory: ${SCAN_DIR}" >&2
+  exit 1
+}
+mkdir -p "${OUTPUT_DIR}" "${DATA_DIR}"
 
-time docker run --rm \
-  -e user=$USER \
+# Build base Docker command
+DOCKER_CMD="docker run --rm \
+  -e user=${USER} \
   -u $(id -u):$(id -g) \
-  --volume $(pwd):/src:z \
-  --volume "$DATA_DIRECTORY":/usr/share/dependency-check/data:z \
-  owasp/dependency-check:$DC_VERSION \
-  --exclude "/src/docs" \
+  --volume ${SCAN_DIR}:/src:z \
+  --volume ${DATA_DIR}:/usr/share/dependency-check/data:z \
+  --volume ${OUTPUT_DIR}:/report:z \
+  owasp/dependency-check:${DOCKER_TAG} \
   --scan /src \
-  --format "ALL" \
-  --project "$DC_PROJECT" \
-  --nvdApiKey "e1e67587-3def-498c-b4cb-d44f123cf018" \
-  --hostedSuppressionsValidForHours 72 \
-  --prettyPrint
+  --out /report \
+  --format ALL \
+  --project 'dependency-check scan: ${SCAN_DIR}' \
+  --nvdApiKey '${NVD_API_KEY}' \
+  --nvdValidForHours 72 \
+  --enableExperimental \
+  --nodeAuditSkipDevDependencies \
+  --prettyPrint"
 
-# Use suppression like this: (where /src == $pwd)
-# --suppression "/src/security/dependency-check-suppression.xml"
+# Add suppression file only if it exists
+if [[ -n "${SUPPRESSION_FILE}" ]] && [[ -f "${SUPPRESSION_FILE}" ]]; then
+  RELATIVE_SUPPRESSION_PATH="$(realpath --relative-to="${SCAN_DIR}" "${SUPPRESSION_FILE}")"
+  DOCKER_CMD+=" --suppression \"/src/${RELATIVE_SUPPRESSION_PATH}\""
+fi
 
+# Add exclude dirs if specified
+if [[ -n "${EXCLUDE_DIRS}" ]]; then
+  DOCKER_CMD+=" --exclude \"${EXCLUDE_DIRS}\""
+fi
+
+# Execute the command
+eval "${DOCKER_CMD}" || {
+  echo "Scan failed" >&2
+  exit 1
+}
+
+echo "Scan completed successfully! Reports saved in: ${OUTPUT_DIR}/dependency-check-report.*"
+echo "Run the findings script to print a report"

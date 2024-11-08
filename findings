@@ -1,0 +1,60 @@
+#!/bin/bash
+set -euo pipefail
+
+# Parse OWASP Dependency Check JSON report
+# Usage: ./parse-findings.sh [report.json]
+
+REPORT_PATH="${1:-dependency-check-report.json}"
+
+sort_severity() {
+  awk 'BEGIN {
+    order["CRITICAL"] = 1;
+    order["HIGH"] = 2;
+    order["MEDIUM"] = 3;
+    order["LOW"] = 6;
+    order["MODERATE"] = 5;
+    order["UNKNOWN"] = 4;
+  }
+  {
+    if ($2 in order) {
+      print order[$2], $0;
+    } else {
+      print 7, $0;  # For any unexpected severity levels
+    }
+  }' |
+    sort -n |
+    cut -d' ' -f2-
+}
+
+# Check if the report file exists
+[[ -f "${REPORT_PATH}" ]] || {
+  echo "Report not found: ${REPORT_PATH}" >&2
+  exit 1
+}
+
+# Check if jq is installed and provide an installation suggestion if not
+command -v jq >/dev/null 2>&1 || {
+  echo "jq required but not installed. Please install it using: sudo apt install jq" >&2
+  exit 1
+}
+
+# Print detailed findings
+# Use gsub to replace newlines and multiple spaces with single space
+jq -r '.dependencies[] |
+  select(.vulnerabilities != null) |
+  . as $dep |
+  .vulnerabilities[] |
+  "[\(.severity // "UNKNOWN")] \($dep.filePath // $dep.fileName // "[unknown]")\n  CVE: \(.name // "[no-id]")\n  Base Score: \(.cvssv3?.baseScore // .cvssv2?.score // 0)\n  Impact Score: \(.cvssv3?.impactScore // "N/A")\n  Exploitability Score: \(.cvssv3?.exploitabilityScore // "N/A")\n  \(.description // "[no-description]" | gsub("\n+";" ") | gsub("\\s+";" "))\n"' "${REPORT_PATH}"
+
+# Print summary with severity counts in order
+echo -e "\n=== Summary ==="
+jq -r '.dependencies[] |
+  select(.vulnerabilities != null) |
+  .vulnerabilities[] |
+  .severity // "UNKNOWN"' "${REPORT_PATH}" |
+  tr '[:lower:]' '[:upper:]' |
+  sort |
+  uniq -c |
+  sed 's/^[ ]*//' | # Remove leading spaces
+  sed 's/[ ]*$//' | # Remove trailing spaces
+  sort_severity
