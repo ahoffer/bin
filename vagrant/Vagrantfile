@@ -1,9 +1,13 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
-def shell_script
+def shell_script(host_file_content)
   return <<-SHELL
     export DEBIAN_FRONTEND=noninteractive  #Suppress warnings
+
+    # Write new hosts file with localhost and VM entries
+    echo "#{host_file_content}" | sudo tee /etc/hosts
+
     sudo apt update
     sudo apt upgrade -y
     sudo apt install -y apt-transport-https ca-certificates curl software-properties-common unzip
@@ -33,7 +37,8 @@ def create_vms(config, total_vms)
   end.transpose
 
   ips, host_names, host_file_entries = config_data
-  host_file_content = host_file_entries.join("\n")
+  # Prepend localhost entry to host file content
+  host_file_content = "127.0.0.1\tlocalhost\n#{host_file_entries.join("\n")}"
 
   # Create each VM
   (0...total_vms).each do |i|
@@ -51,12 +56,8 @@ def create_vms(config, total_vms)
         vb.cpus = 8
       end
 
-      vm.vm.provision "shell", inline: <<-SHELL
-        # Poor man's DNS
-        echo "#{host_file_content}" | sudo tee -a /etc/hosts
-
-        #{shell_script}
-      SHELL
+      # Pass the host_file_content to shell_script
+      vm.vm.provision "shell", inline: shell_script(host_file_content)
     end
   end
 end
