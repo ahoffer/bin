@@ -2,4 +2,9 @@
 
 docker container stop $(docker container ps -q) 2> /dev/null
 docker container rm $(docker ps -aq) 2> /dev/null
-docker volume prune -a -f
+volumes_to_remove=$(docker volume ls -q | grep -iv "aitr")
+if [ ! -z "$volumes_to_remove" ]; then
+    echo "$volumes_to_remove" | while read volume; do
+        docker volume rm "$volume"
+    done
+fi

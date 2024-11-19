@@ -1,0 +1,56 @@
+#!/bin/bash
+
+# Print information about the remote branches, optionally filtering by minimum age in weeks
+#
+# Usage: ./script.sh [min_weeks]
+#   min_weeks: Optional. Minimum age in weeks to include in the output
+
+# Function to convert a timestamp to weeks ago
+get_weeks_ago() {
+    local timestamp=$1
+    local current_time=$(date +%s)
+    local diff=$((current_time - timestamp))
+    echo $((diff / 604800)) # 604800 is seconds in a week
+}
+
+# Get the minimum weeks filter if provided
+min_weeks=${1:-0}
+
+# Create an array to hold the output
+output=()
+
+# Loop through all remote branches
+for branch in $(git for-each-ref --format='%(refname:short)' refs/remotes/); do
+    # Get the author of the last commit in the branch
+    last_commit_author=$(git log -1 --format='%an' "$branch")
+    # Get the age of the last commit in the branch
+    last_commit_age=$(git log -1 --format='%ar' "$branch")
+    last_commit_timestamp=$(git log -1 --format='%at' "$branch")
+    
+    # Calculate weeks ago
+    weeks_ago=$(get_weeks_ago "$last_commit_timestamp")
+    
+    # Only add to output if it meets the minimum age requirement
+    if [ "$weeks_ago" -ge "$min_weeks" ]; then
+        # Add the author, timestamp, age, and branch to the array, using a delimiter (|)
+        output+=("$last_commit_author|$last_commit_timestamp|$last_commit_age|$branch")
+    fi
+done
+
+# If no results found after filtering
+if [ ${#output[@]} -eq 0 ]; then
+    echo "No branches found older than $min_weeks weeks"
+    exit 0
+fi
+
+# Sort the output first by author lexically, then by the commit timestamp
+sorted_output=$(printf "%s\n" "${output[@]}" | sort -t '|' -k1,1 -k2,2nr)
+
+# Print the headers
+printf "%-25s %-20s %-50s\n" "Last Commit" "Commit Age" "Branch"
+printf "%-25s %-20s %-50s\n" "-----------" "----------" "------"
+
+# Format and print the output
+echo "$sorted_output" | while IFS='|' read -r author timestamp age branch; do
+    printf "%-25s %-20s %-50s\n" "$author" "$age" "$branch"
+done
