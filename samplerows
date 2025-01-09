@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# Check if the correct number of arguments is provided
+if [ "$#" -ne 3 ]; then
+    echo "Usage: $0 <file> <start_row> <num_rows>"
+    exit 1
+fi
+
+# Assign command-line arguments to variables
+FILE="$1"
+START_ROW="$2"
+NUM_ROWS="$3"
+
+# Validate that start_row and num_rows are positive integers
+if ! [[ "$START_ROW" =~ ^[0-9]+$ ]] || ! [[ "$NUM_ROWS" =~ ^[0-9]+$ ]]; then
+    echo "Error: <start_row> and <num_rows> must be positive integers."
+    exit 1
+fi
+
+# Ensure the file exists
+if [ ! -f "$FILE" ]; then
+    echo "Error: File '$FILE' not found."
+    exit 1
+fi
+
+# Extract lines starting from START_ROW, shuffle, and select NUM_ROWS
+awk "NR >= $START_ROW" "$FILE" | shuf -n "$NUM_ROWS"

@@ -1,0 +1,76 @@
+#!/bin/bash
+
+# Function to display help
+show_help() {
+    echo "Usage: $0 <csv_file> [header_row_number] [--show-rows]"
+    echo ""
+    echo "Scans a CSV file for missing values and reports the count of missing values for every column."
+    echo ""
+    echo "Arguments:"
+    echo "  <csv_file>           Path to the CSV file to scan."
+    echo "  [header_row_number]  Optional. Line number of the header row. Defaults to 1 if not provided."
+    echo "  --show-rows          Optional. Print the row number of the first row with a missing value for each column."
+    echo ""
+    echo "Example:"
+    echo "  $0 data.csv          # Assumes headers are on the first row"
+    echo "  $0 data.csv 9        # Specifies headers are on the ninth row"
+    echo "  $0 data.csv 9 --show-rows  # Show row numbers of first missing values"
+    exit 0
+}
+
+# Display help if requested
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    show_help
+fi
+
+# Check arguments
+if [ "$#" -lt 1 ] || [ "$#" -gt 3 ]; then
+    echo "Invalid usage. Use -h or --help for instructions."
+    exit 1
+fi
+
+# Assign arguments to variables
+csv_file="$1"
+header_row="${2:-1}" # Default to 1 if not provided
+show_rows=false
+if [[ "$3" == "--show-rows" ]]; then
+    show_rows=true
+fi
+
+# Validate file existence
+if [ ! -f "$csv_file" ]; then
+    echo "Error: File '$csv_file' not found."
+    exit 1
+fi
+
+# Main processing logic
+awk -v HEADER_ROW="$header_row" -v SHOW_ROWS="$show_rows" -F, '
+NR == HEADER_ROW {
+    for (i = 1; i <= NF; i++) {
+        header[i] = $i
+    }
+    column_count = NF
+    next
+}
+NR > HEADER_ROW {
+    data_row_number = NR - HEADER_ROW
+    for (i = 1; i <= column_count; i++) {
+        if ($i == "" || $i ~ /^[[:space:]]*$/) {
+            missing[i]++
+            if (!first_missing_row[i]) {
+                first_missing_row[i] = data_row_number
+            }
+        }
+    }
+}
+END {
+    for (i = 1; i <= column_count; i++) {
+        printf "Column Index: %03d Header: \"%s\" has %d missing values", i-1, header[i], (missing[i] ? missing[i] : 0)
+        if (SHOW_ROWS == "true" && first_missing_row[i]) {
+            printf " (First missing value at data row %d)", first_missing_row[i]
+        }
+        print ""
+    }
+}
+' "$csv_file"
+

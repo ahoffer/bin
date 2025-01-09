@@ -1,2 +1,8 @@
 #!/usr/bin/bash
-docker volume rm $(docker volume ls -q)
+#volumes_to_remove=$(docker volume ls -q | grep -iv "aitr" | grep -iv "semantic")
+volumes_to_remove=$(docker volume ls -q)
+if [ ! -z "$volumes_to_remove" ]; then
+    echo "$volumes_to_remove" | while read volume; do
+        docker volume rm "$volume"
+    done
+fi
