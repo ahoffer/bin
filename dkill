@@ -1,4 +1,15 @@
-#! /bin/bash
+#!/bin/bash
 
-docker container stop $(docker container ps -q) 2> /dev/null
-docker container rm $(docker ps -aq) 2> /dev/null
+# Stop all running containers except "my-container"
+docker container stop $(
+  docker container ps --format '{{.ID}} {{.Names}}' \
+    | grep -v "bambustudio" \
+    | awk '{print $1}'
+) 2>/dev/null
+
+# Remove all containers except "my-container"
+docker container rm $(
+  docker container ps -a --format '{{.ID}} {{.Names}}' \
+    | grep -v "bambustudio" \
+    | awk '{print $1}'
+) 2>/dev/null

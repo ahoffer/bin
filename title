@@ -1,0 +1,20 @@
+#!/bin/bash
+# change_title.sh
+# Usage: source change_title.sh "My New Title"
+#
+# This script updates your bash prompt to include a custom title.
+# It uses your existing prompt layout, replacing the title part.
+
+if [ -z "$1" ]; then
+    echo "Usage: source change_title.sh \"My New Title\""
+    return 1 2>/dev/null || exit 1
+fi
+
+NEW_TITLE="$1"
+
+# Redefine PS1 to change the terminal title.
+# The escape sequence \[\e]0;...\a\] sets the terminal title.
+PS1="\[\e]0;$NEW_TITLE\a\]${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "
+
+export PS1
+
