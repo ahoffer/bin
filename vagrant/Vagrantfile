@@ -1,65 +1,106 @@
-# Two VMs with static IPs 
-# Modified etc/hosts 
-# Reach inet through host
-# Host can reach the IPs
+# Helper to generate dynamic /etc/hosts script
+def generate_hosts_script(vm_map)
+  vm_map.map do |name, ip|
+    <<-EOS
+      sudo sed -i.bak '/\\s#{name}$/d' /etc/hosts
+      echo "#{ip} #{name}" | sudo tee -a /etc/hosts > /dev/null
+    EOS
+  end.join("\n")
+end
 
+# Shared Docker install script
+DOCKER_SETUP_SCRIPT = <<-SHELL
+  export DEBIAN_FRONTEND=noninteractive
+  sudo apt-get update
+  sudo apt-get install -y \
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release
+  sudo mkdir -p /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
+  echo \
+    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+    $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+  sudo apt-get update
+  sudo apt-get install -y docker-ce docker-ce-cli containerd.io unzip
+  sudo usermod -aG docker vagrant
+SHELL
+
+# VM definition helper
+def define_vm(config, name, ip, vm_map)
+  config.vm.define name do |hyperv|
+    hyperv.vm.hostname = name
+    
+    # Configure network with explicit adapter and type
+    hyperv.vm.network "private_network", 
+                      ip: ip, 
+                      netmask: "255.255.255.0",
+                      adapter: 2,
+                      name: "vboxnet0"
+                      
+    # Add port forwarding for common services (optional - the private_network should allow all ports)
+    hyperv.vm.network "forwarded_port", guest: 22, host: 2200 + vm_map.keys.find_index(name), id: "ssh"
+    
+    hyperv.vm.provider "virtualbox" do |vb|
+      vb.name = name.upcase
+      vb.memory = 1024 * 12
+      vb.cpus = 8
+      
+      # Ensure VM has internet access through host
+      vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+      vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
+      
+      # Explicitly allow all traffic (promiscuous mode)
+      vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
+      
+      # Ensure all ports are open and accessible
+      vb.customize ["modifyvm", :id, "--natpf2", "delete", "ssh"]  # Remove auto SSH rule to avoid conflicts
+    end
+    
+    # Disable UFW completely and ensure all network traffic is allowed
+    hyperv.vm.provision "shell", inline: <<-SHELL
+      # Disable UFW completely
+      sudo systemctl stop ufw
+      sudo systemctl disable ufw
+      sudo ufw --force disable
+      
+      # Ensure IP forwarding is enabled for better connectivity
+      echo "net.ipv4.ip_forward=1" | sudo tee -a /etc/sysctl.conf
+      sudo sysctl -p
+    SHELL
+    
+    hyperv.vm.provision "shell", inline: DOCKER_SETUP_SCRIPT
+    hyperv.vm.provision "shell", inline: generate_hosts_script(vm_map)
+    hyperv.vm.synced_folder(
+      "./", "/home/vagrant/share",
+      owner: "vagrant", group: "vagrant",
+      mount_options: ["dmode=775,fmode=664"]
+    )
+  end
+end
+
+# Vagrant configuration block
 Vagrant.configure("2") do |config|
   config.vm.box = "ubuntu/jammy64"
   
-  # Helper to generate dynamic /etc/hosts script
-  def generate_hosts_script(vm_map)
-    vm_map.map do |name, ip|
-      <<-EOS
-        sudo sed -i.bak '/\\s#{name}$/d' /etc/hosts
-        echo "#{ip} #{name}" | sudo tee -a /etc/hosts > /dev/null
-      EOS
-    end.join("\n")
-  end
-  
-  # Shared Docker install script
-  $docker_setup = <<-SHELL
-    export DEBIAN_FRONTEND=noninteractive
-    sudo apt-get update
-    sudo apt-get install -y \
-      ca-certificates \
-      curl \
-      gnupg \
-      lsb-release
-    sudo mkdir -p /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
-    echo \
-      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-      $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-    sudo apt-get update
-    sudo apt-get install -y docker-ce docker-ce-cli containerd.io unzip
-    sudo usermod -aG docker vagrant
-  SHELL
-  
-  # VM definition helper
-  def define_vm(config, name, ip, vm_map)
-    config.vm.define name do |vm|
-      vm.vm.hostname = name
-      vm.vm.network "private_network", ip: ip
-      vm.vm.provider "virtualbox" do |vb|
-        vb.name = name.upcase
-        vb.memory = 1024*16
-        vb.cpus = 8
-        
-        # Ensure VM has internet access through host
-        vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
-        vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
-      end
-      vm.vm.provision "shell", inline: $docker_setup
-      vm.vm.provision "shell", inline: generate_hosts_script(vm_map)
-    end
-  end
   # Define VM IP mapping
   vm_ips = {
     "vm1" => "192.168.56.11",
     "vm2" => "192.168.56.12"
   }
+  
   # Create the VMs
   vm_ips.each do |name, ip|
     define_vm(config, name, ip, vm_ips)
+  end
+  
+  # Auto-create host-only network if it doesn't exist
+  config.trigger.before :up do |trigger|
+    trigger.info = "Creating host-only network adapter"
+    trigger.ruby do
+      system('VBoxManage hostonlyif create') unless system('VBoxManage list hostonlyifs | grep -q vboxnet0')
+      system('VBoxManage hostonlyif ipconfig vboxnet0 --ip 192.168.56.1 --netmask 255.255.255.0')
+    end
   end
 end
