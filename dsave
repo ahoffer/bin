@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+# Kill all child processes on Ctrl+C
+trap 'echo "Interrupted. Killing all jobs..."; kill 0; exit 1' SIGINT
+
+
+# Use current directory for tarballs
+WORKDIR="."
+ZIPFILE="docker-images-$(date +%Y%m%d%H%M%S).zip"
+
+# Function to get image for a specific container
+get_image_for_container() {
+  docker inspect --format '{{.Config.Image}}' "$1"
+}
+
+# Determine list of images
+if [[ "$#" -gt 0 ]]; then
+  echo "Using images from specified containers: $*"
+  mapfile -t IMAGES < <(
+    for container in "$@"; do
+      if docker ps --format '{{.Names}}' | grep -qx "$container"; then
+        get_image_for_container "$container"
+      else
+        echo "Warning: container '$container' is not running or doesn't exist" >&2
+      fi
+    done | sort -u
+  )
+else
+  echo "No container names provided. Using all running containers."
+  mapfile -t CONTAINERS < <(docker ps --format '{{.Names}}')
+  if [[ ${#CONTAINERS[@]} -eq 0 ]]; then
+    echo "No running containers found. Exiting."
+    exit 0
+  fi
+  mapfile -t IMAGES < <(
+    for container in "${CONTAINERS[@]}"; do
+      get_image_for_container "$container"
+    done | sort -u
+  )
+fi
+
+if [[ ${#IMAGES[@]} -eq 0 ]]; then
+  echo "No images to save. Exiting."
+  exit 0
+fi
+
+echo "Found ${#IMAGES[@]} unique images to save."
+
+# Function to save a single image
+save_image() {
+  local image="$1"
+  local safe_name
+  safe_name=$(echo "$image" | tr '/:@' '_' | tr -c '[:alnum:]_-' '_')
+  local tar_path="$WORKDIR/$safe_name.tar"
+  echo "Saving $image to $tar_path"
+  docker image save "$image" -o "$tar_path"
+}
+
+export -f save_image
+export WORKDIR
+
+# Try to save images using GNU parallel if available
+if command -v parallel &>/dev/null; then
+  printf "%s\n" "${IMAGES[@]}" | parallel --will-cite save_image {}
+else
+  echo "Warning: GNU parallel not found. Falling back to sequential execution." >&2
+  for image in "${IMAGES[@]}"; do
+    save_image "$image"
+  done
+fi
+
+# Zip the tar files
+if command -v pigz &>/dev/null; then
+  echo "Using pigz for multithreaded compression..."
+  ZIPFILE="${ZIPFILE%.zip}.tar.gz"
+  tar -cf - ./*.tar | pigz -p "$(nproc)" > "$ZIPFILE"
+  echo "Done! Images archived into $ZIPFILE"
+else
+  echo "Warning: pigz not found. Falling back to single-threaded zip." >&2
+  zip "$ZIPFILE" ./*.tar
+  echo "Done! Images archived into $ZIPFILE"
+fi
+
+echo "Done! Images saved and zipped into $ZIPFILE"
+
