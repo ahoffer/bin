@@ -1,0 +1,94 @@
+#!/bin/bash
+
+# Format and print header
+printf "%-15s %-20s %-20s %s\n" "CONTAINER ID" "IMAGE" "TAG" "PORTS"
+printf "%-15s %-20s %-20s %s\n" "------------" "-----" "---" "-----"
+
+# Process each container
+docker ps -q | while read -r container_id; do
+  # Get the short container ID (12 chars)
+  CID=$(echo "$container_id" | cut -c1-12)
+  
+  # Get the full image name
+  FULL_IMG=$(docker inspect -f "{{.Config.Image}}" "$container_id")
+  
+  # Strip the registry and path, keeping only the final component and tag
+  IMG_WITH_TAG=$(echo "$FULL_IMG" | sed -E 's|.*/([^/]+)$|\1|')
+  
+  # Split the image name and tag
+  IMG=$(echo "$IMG_WITH_TAG" | sed -E 's|(.+):.*|\1|')
+  TAG=$(echo "$IMG_WITH_TAG" | grep ":" | sed -E 's|.+:(.*)|\1|')
+  
+  # If there's no tag, set it as "latest"
+  if [ "$IMG" = "$IMG_WITH_TAG" ]; then
+    TAG="latest"
+  fi
+  
+  # Get the internal ports without duplicates, separating TCP and UDP ports
+  if command -v jq &> /dev/null; then
+    # If jq is available, use it for more precise extraction
+    TCP_PORTS_RAW=$(docker inspect "$container_id" | jq -r '.[0].Config.ExposedPorts | keys | map(select(endswith("/tcp")) | split("/")[0]) | sort_by(tonumber) | join(" ")')
+    UDP_PORTS_RAW=$(docker inspect "$container_id" | jq -r '.[0].Config.ExposedPorts | keys | map(select(endswith("/udp")) | split("/")[0]) | sort_by(tonumber) | join(" ")')
+  else
+    # Fallback for systems without jq
+    TCP_PORTS_RAW=$(docker inspect "$container_id" | grep -o '"[0-9]\+/tcp"' | sed 's|"||g' | sed 's|/tcp||g' | sort -n | tr '\n' ' ')
+    UDP_PORTS_RAW=$(docker inspect "$container_id" | grep -o '"[0-9]\+/udp"' | sed 's|"||g' | sed 's|/udp||g' | sort -n | tr '\n' ' ')
+  fi
+  
+  # Function to convert list of ports to ranges with comma separation
+  convert_to_ranges() {
+    local ports=($1)
+    local result=""
+    local range_start=""
+    local range_end=""
+    
+    for ((i=0; i<${#ports[@]}; i++)); do
+      current=${ports[i]}
+      
+      if [ -z "$range_start" ]; then
+        # Start a new range
+        range_start=$current
+        range_end=$current
+      elif [ "$((current - range_end))" -eq 1 ]; then
+        # Continue the current range
+        range_end=$current
+      else
+        # End the current range and start a new one
+        if [ "$range_start" = "$range_end" ]; then
+          result+="${range_start},"
+        else
+          result+="${range_start}:${range_end},"
+        fi
+        range_start=$current
+        range_end=$current
+      fi
+    done
+    
+    # Add the last range
+    if [ -n "$range_start" ]; then
+      if [ "$range_start" = "$range_end" ]; then
+        result+="${range_start}"
+      else
+        result+="${range_start}:${range_end}"
+      fi
+    fi
+    
+    # Remove trailing comma if present
+    result=$(echo "$result" | sed 's|,$||')
+    echo "$result"
+  }
+  
+  # Convert ports to ranges
+  TCP_PORTS=$(convert_to_ranges "$TCP_PORTS_RAW")
+  UDP_PORTS=$(convert_to_ranges "$UDP_PORTS_RAW")
+  
+  # Combine TCP and UDP ports
+  if [ -n "$TCP_PORTS" ] && [ -n "$UDP_PORTS" ]; then
+    PORTS="${TCP_PORTS} / ${UDP_PORTS}"
+  else
+    PORTS="${TCP_PORTS}${UDP_PORTS}"
+  fi
+  
+  # Print the formatted output
+  printf "%-15s %-20s %-20s %s\n" "$CID" "$IMG" "$TAG" "$PORTS"
+done
