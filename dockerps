@@ -1,94 +1,118 @@
-#!/bin/bash
+#!/usr/bin/env python3
 
-# Format and print header
-printf "%-15s %-20s %-20s %s\n" "CONTAINER ID" "IMAGE" "TAG" "PORTS"
-printf "%-15s %-20s %-20s %s\n" "------------" "-----" "---" "-----"
+import json
+import subprocess
+import re
 
-# Process each container
-docker ps -q | while read -r container_id; do
-  # Get the short container ID (12 chars)
-  CID=$(echo "$container_id" | cut -c1-12)
-  
-  # Get the full image name
-  FULL_IMG=$(docker inspect -f "{{.Config.Image}}" "$container_id")
-  
-  # Strip the registry and path, keeping only the final component and tag
-  IMG_WITH_TAG=$(echo "$FULL_IMG" | sed -E 's|.*/([^/]+)$|\1|')
-  
-  # Split the image name and tag
-  IMG=$(echo "$IMG_WITH_TAG" | sed -E 's|(.+):.*|\1|')
-  TAG=$(echo "$IMG_WITH_TAG" | grep ":" | sed -E 's|.+:(.*)|\1|')
-  
-  # If there's no tag, set it as "latest"
-  if [ "$IMG" = "$IMG_WITH_TAG" ]; then
-    TAG="latest"
-  fi
-  
-  # Get the internal ports without duplicates, separating TCP and UDP ports
-  if command -v jq &> /dev/null; then
-    # If jq is available, use it for more precise extraction
-    TCP_PORTS_RAW=$(docker inspect "$container_id" | jq -r '.[0].Config.ExposedPorts | keys | map(select(endswith("/tcp")) | split("/")[0]) | sort_by(tonumber) | join(" ")')
-    UDP_PORTS_RAW=$(docker inspect "$container_id" | jq -r '.[0].Config.ExposedPorts | keys | map(select(endswith("/udp")) | split("/")[0]) | sort_by(tonumber) | join(" ")')
-  else
-    # Fallback for systems without jq
-    TCP_PORTS_RAW=$(docker inspect "$container_id" | grep -o '"[0-9]\+/tcp"' | sed 's|"||g' | sed 's|/tcp||g' | sort -n | tr '\n' ' ')
-    UDP_PORTS_RAW=$(docker inspect "$container_id" | grep -o '"[0-9]\+/udp"' | sed 's|"||g' | sed 's|/udp||g' | sort -n | tr '\n' ' ')
-  fi
-  
-  # Function to convert list of ports to ranges with comma separation
-  convert_to_ranges() {
-    local ports=($1)
-    local result=""
-    local range_start=""
-    local range_end=""
+def get_container_ids():
+    """Get IDs of all running containers"""
+    result = subprocess.run(['docker', 'ps', '-q'], capture_output=True, text=True)
+    return result.stdout.strip().split('\n')
+
+def format_ports(tcp_ports, udp_ports):
+    """Format port lists with ranges and proper separation"""
     
-    for ((i=0; i<${#ports[@]}; i++)); do
-      current=${ports[i]}
-      
-      if [ -z "$range_start" ]; then
-        # Start a new range
-        range_start=$current
-        range_end=$current
-      elif [ "$((current - range_end))" -eq 1 ]; then
-        # Continue the current range
-        range_end=$current
-      else
-        # End the current range and start a new one
-        if [ "$range_start" = "$range_end" ]; then
-          result+="${range_start},"
-        else
-          result+="${range_start}:${range_end},"
-        fi
-        range_start=$current
-        range_end=$current
-      fi
-    done
+    def create_port_ranges(ports):
+        if not ports:
+            return ""
+            
+        # Convert to integers and sort
+        ports = sorted([int(p) for p in ports])
+        
+        ranges = []
+        range_start = None
+        range_end = None
+        
+        for port in ports:
+            if range_start is None:
+                range_start = range_end = port
+            elif port == range_end + 1:
+                range_end = port
+            else:
+                # End current range
+                if range_start == range_end:
+                    ranges.append(str(range_start))
+                else:
+                    ranges.append(f"{range_start}:{range_end}")
+                range_start = range_end = port
+        
+        # Add the last range
+        if range_start is not None:
+            if range_start == range_end:
+                ranges.append(str(range_start))
+            else:
+                ranges.append(f"{range_start}:{range_end}")
+        
+        return ','.join(ranges)
     
-    # Add the last range
-    if [ -n "$range_start" ]; then
-      if [ "$range_start" = "$range_end" ]; then
-        result+="${range_start}"
-      else
-        result+="${range_start}:${range_end}"
-      fi
-    fi
+    tcp_formatted = create_port_ranges(tcp_ports)
+    udp_formatted = create_port_ranges(udp_ports)
     
-    # Remove trailing comma if present
-    result=$(echo "$result" | sed 's|,$||')
-    echo "$result"
-  }
-  
-  # Convert ports to ranges
-  TCP_PORTS=$(convert_to_ranges "$TCP_PORTS_RAW")
-  UDP_PORTS=$(convert_to_ranges "$UDP_PORTS_RAW")
-  
-  # Combine TCP and UDP ports
-  if [ -n "$TCP_PORTS" ] && [ -n "$UDP_PORTS" ]; then
-    PORTS="${TCP_PORTS} / ${UDP_PORTS}"
-  else
-    PORTS="${TCP_PORTS}${UDP_PORTS}"
-  fi
-  
-  # Print the formatted output
-  printf "%-15s %-20s %-20s %s\n" "$CID" "$IMG" "$TAG" "$PORTS"
-done
+    if tcp_formatted and udp_formatted:
+        return f"{tcp_formatted} / {udp_formatted}"
+    else:
+        return tcp_formatted or udp_formatted
+
+def main():
+    # Create a list to hold all container data for sorting
+    container_data = []
+    
+    # Process each container
+    for container_id in get_container_ids():
+        if not container_id:
+            continue
+            
+        # Get short container ID
+        short_id = container_id[:12]
+        
+        # Get container details
+        inspect_cmd = ['docker', 'inspect', container_id]
+        result = subprocess.run(inspect_cmd, capture_output=True, text=True)
+        container_info = json.loads(result.stdout)[0]
+        
+        # Get image name and tag
+        full_image = container_info['Config']['Image']
+        # Strip registry and path
+        image_with_tag = re.sub(r'.*/([^/]+)$', r'\1', full_image)
+        
+        # Split image and tag
+        if ':' in image_with_tag:
+            image, tag = image_with_tag.split(':', 1)
+        else:
+            image, tag = image_with_tag, "latest"
+        
+        # Get exposed ports
+        exposed_ports = container_info['Config'].get('ExposedPorts', {})
+        tcp_ports = []
+        udp_ports = []
+        
+        for port_proto in exposed_ports:
+            port, proto = port_proto.split('/')
+            if proto == 'tcp':
+                tcp_ports.append(port)
+            elif proto == 'udp':
+                udp_ports.append(port)
+        
+        ports = format_ports(tcp_ports, udp_ports)
+        
+        # Add container info to our list
+        container_data.append({
+            'id': short_id,
+            'image': image,
+            'tag': tag,
+            'ports': ports
+        })
+
+    # Sort containers alphabetically by image name (case insensitive)
+    container_data.sort(key=lambda x: x['image'].lower())
+    
+    # Print header
+    print(f"{'CONTAINER ID':<15} {'IMAGE':<20} {'TAG':<20} {'PORTS'}")
+    print(f"{'-'*12:<15} {'-'*5:<20} {'-'*3:<20} {'-'*5}")
+    
+    # Print sorted container info
+    for container in container_data:
+        print(f"{container['id']:<15} {container['image']:<20} {container['tag']:<20} {container['ports']}")
+
+if __name__ == "__main__":
+    main()

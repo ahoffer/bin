@@ -16,7 +16,9 @@ DOCKER_SETUP_SCRIPT = <<-SHELL
     ca-certificates \
     curl \
     gnupg \
-    lsb-release
+    lsb-release \
+    parallel \
+    pigz
   sudo mkdir -p /etc/apt/keyrings
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
   echo \
@@ -27,20 +29,36 @@ DOCKER_SETUP_SCRIPT = <<-SHELL
   sudo usermod -aG docker vagrant
 SHELL
 
+# Network configuration script
+NETWORK_SETUP_SCRIPT = <<-SHELL
+  # Disable firewall completely
+  sudo systemctl stop ufw || true
+  sudo systemctl disable ufw || true
+  sudo ufw --force disable || true
+  
+  # Enable IP forwarding for better connectivity
+  echo "net.ipv4.ip_forward=1" | sudo tee -a /etc/sysctl.conf
+  sudo sysctl -p
+  
+  # Verify network connectivity
+  echo "===== Network Configuration ====="
+  ip addr
+  echo "===== Testing Internet Access ====="
+  ping -c 3 8.8.8.8 || echo "Warning: Internet access may not be working properly"
+SHELL
+
 # VM definition helper
 def define_vm(config, name, ip, vm_map)
   config.vm.define name do |hyperv|
     hyperv.vm.hostname = name
     
-    # Configure network with explicit adapter and type
+    # First adapter: NAT for internet access (automatically created)
+    
+    # Second adapter: Host-only network for host-to-VM and VM-to-VM communication
     hyperv.vm.network "private_network", 
                       ip: ip, 
                       netmask: "255.255.255.0",
-                      adapter: 2,
-                      name: "vboxnet0"
-                      
-    # Add port forwarding for common services (optional - the private_network should allow all ports)
-    hyperv.vm.network "forwarded_port", guest: 22, host: 2200 + vm_map.keys.find_index(name), id: "ssh"
+                      adapter: 2
     
     hyperv.vm.provider "virtualbox" do |vb|
       vb.name = name.upcase
@@ -51,37 +69,31 @@ def define_vm(config, name, ip, vm_map)
       vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
       vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
       
-      # Explicitly allow all traffic (promiscuous mode)
+      # Allow all traffic on the host-only interface
       vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
-      
-      # Ensure all ports are open and accessible
-      vb.customize ["modifyvm", :id, "--natpf2", "delete", "ssh"]  # Remove auto SSH rule to avoid conflicts
     end
     
-    # Disable UFW completely and ensure all network traffic is allowed
-    hyperv.vm.provision "shell", inline: <<-SHELL
-      # Disable UFW completely
-      sudo systemctl stop ufw
-      sudo systemctl disable ufw
-      sudo ufw --force disable
-      
-      # Ensure IP forwarding is enabled for better connectivity
-      echo "net.ipv4.ip_forward=1" | sudo tee -a /etc/sysctl.conf
-      sudo sysctl -p
-    SHELL
+    # Configure network and remove firewall
+    hyperv.vm.provision "shell", inline: NETWORK_SETUP_SCRIPT
     
+    # Install Docker
     hyperv.vm.provision "shell", inline: DOCKER_SETUP_SCRIPT
+    
+    # Set up hosts file for VM-to-VM communication
     hyperv.vm.provision "shell", inline: generate_hosts_script(vm_map)
+    
+    # Configure shared folder
     hyperv.vm.synced_folder(
       "./", "/home/vagrant/share",
       owner: "vagrant", group: "vagrant",
-      mount_options: ["dmode=775,fmode=664"]
+      mount_options: ["dmode=775,fmode=775"]
     )
   end
 end
 
 # Vagrant configuration block
 Vagrant.configure("2") do |config|
+  config.disksize.size = '250GB'
   config.vm.box = "ubuntu/jammy64"
   
   # Define VM IP mapping
@@ -95,11 +107,18 @@ Vagrant.configure("2") do |config|
     define_vm(config, name, ip, vm_ips)
   end
   
-  # Auto-create host-only network if it doesn't exist
+  # Ensure host-only network exists with correct IP
   config.trigger.before :up do |trigger|
-    trigger.info = "Creating host-only network adapter"
+    trigger.info = "Ensuring host-only network is configured"
     trigger.ruby do
-      system('VBoxManage hostonlyif create') unless system('VBoxManage list hostonlyifs | grep -q vboxnet0')
+      # Create vboxnet0 if it doesn't exist
+      unless system('VBoxManage list hostonlyifs | grep -q vboxnet0')
+        puts "Creating vboxnet0 interface"
+        system('VBoxManage hostonlyif create')
+      end
+      
+      # Configure host-side IP (use 192.168.56.1)
+      puts "Setting vboxnet0 IP to 192.168.56.1"
       system('VBoxManage hostonlyif ipconfig vboxnet0 --ip 192.168.56.1 --netmask 255.255.255.0')
     end
   end

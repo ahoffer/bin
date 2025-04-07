@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+TAR_DIR="${1:-docker-tars}"
+ARCHIVE_NAME="docker-images-$(date +%Y%m%d%H%M%S)"
+
+if [[ ! -d "$TAR_DIR" ]]; then
+  echo "Directory '$TAR_DIR' not found!"
+  exit 1
+fi
+
+cd "$TAR_DIR"
+
+if comp=$(command -v pigz); then
+  echo "Using pigz for multithreaded compression..."
+  tar -cf - ./*.tar | pigz -p "$(nproc)" > "../${ARCHIVE_NAME}.tar.gz"
+  echo "Archive created: ${ARCHIVE_NAME}.tar.gz"
+else
+  echo "pigz not found. Falling back to zip..."
+  zip "../${ARCHIVE_NAME}.zip" ./*.tar
+  echo "Archive created: ${ARCHIVE_NAME}.zip"
+fi
+

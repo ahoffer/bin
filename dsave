@@ -1,20 +1,17 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
-# Kill all child processes on Ctrl+C
 trap 'echo "Interrupted. Killing all jobs..."; kill 0; exit 1' SIGINT
 
+WORKDIR="docker-tars"
+mkdir -p "$WORKDIR"
 
-# Use current directory for tarballs
-WORKDIR="."
-ZIPFILE="docker-images-$(date +%Y%m%d%H%M%S).zip"
-
-# Function to get image for a specific container
+# Get image for container
 get_image_for_container() {
   docker inspect --format '{{.Config.Image}}' "$1"
 }
 
-# Determine list of images
+# Determine image list
 if [[ "$#" -gt 0 ]]; then
   echo "Using images from specified containers: $*"
   mapfile -t IMAGES < <(
@@ -22,7 +19,7 @@ if [[ "$#" -gt 0 ]]; then
       if docker ps --format '{{.Names}}' | grep -qx "$container"; then
         get_image_for_container "$container"
       else
-        echo "Warning: container '$container' is not running or doesn't exist" >&2
+        echo "Warning: container '$container' not found or not running" >&2
       fi
     done | sort -u
   )
@@ -45,9 +42,8 @@ if [[ ${#IMAGES[@]} -eq 0 ]]; then
   exit 0
 fi
 
-echo "Found ${#IMAGES[@]} unique images to save."
+echo "Saving ${#IMAGES[@]} unique images to $WORKDIR..."
 
-# Function to save a single image
 save_image() {
   local image="$1"
   local safe_name
@@ -60,7 +56,6 @@ save_image() {
 export -f save_image
 export WORKDIR
 
-# Try to save images using GNU parallel if available
 if command -v parallel &>/dev/null; then
   printf "%s\n" "${IMAGES[@]}" | parallel --will-cite save_image {}
 else
@@ -70,17 +65,5 @@ else
   done
 fi
 
-# Zip the tar files
-if command -v pigz &>/dev/null; then
-  echo "Using pigz for multithreaded compression..."
-  ZIPFILE="${ZIPFILE%.zip}.tar.gz"
-  tar -cf - ./*.tar | pigz -p "$(nproc)" > "$ZIPFILE"
-  echo "Done! Images archived into $ZIPFILE"
-else
-  echo "Warning: pigz not found. Falling back to single-threaded zip." >&2
-  zip "$ZIPFILE" ./*.tar
-  echo "Done! Images archived into $ZIPFILE"
-fi
-
-echo "Done! Images saved and zipped into $ZIPFILE"
+echo "Image tars saved in $WORKDIR"
 

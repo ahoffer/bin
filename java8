@@ -1,5 +1,0 @@
-#! /bin/bash
-
-# Source this file to set the Java environment. Maven will pick it up.
-export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
-echo $JAVA_HOME

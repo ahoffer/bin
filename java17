@@ -1,6 +1,0 @@
-#! /bin/bash
-
-# Source this file to set the Java environment
-export JAVA_HOME=/usr/lib/jvm//java-17-openjdk-amd64
-mvn --version
-
