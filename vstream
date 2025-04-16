@@ -1,0 +1,89 @@
+#!/bin/bash
+
+# Default port value
+DEFAULT_PORT=1234
+
+# Help function
+show_help() {
+    echo "Usage: $0 [file] [options]"
+    echo "   or: $0 -f <file> [options]"
+    echo
+    echo "Options:"
+    echo "  -f, --file    Transport stream file to stream"
+    echo "  -p, --port    UDP port to stream to (default: $DEFAULT_PORT)"
+    echo "  -h, --help    Show this help message"
+    echo
+    echo "Examples:"
+    echo "  $0 ferry.ts"
+    echo "  $0 ferry.ts -p 5000"
+    echo "  $0 -f ferry.ts -p 5000"
+    exit 1
+}
+
+# Check if no arguments were provided
+if [ $# -eq 0 ]; then
+    show_help
+fi
+
+# Parse command line arguments
+PORT=$DEFAULT_PORT
+FILE=""
+POSITIONAL_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -f|--file)
+            if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+                FILE="$2"
+                shift 2
+            else
+                echo "Error: Argument for $1 is missing" >&2
+                show_help
+            fi
+            ;;
+        -p|--port)
+            if [ -n "$2" ] && [ ${2:0:1} != "-" ]; then
+                PORT="$2"
+                shift 2
+            else
+                echo "Error: Argument for $1 is missing" >&2
+                show_help
+            fi
+            ;;
+        -h|--help)
+            show_help
+            ;;
+        -*|--*)
+            echo "Error: Unknown option $1" >&2
+            show_help
+            ;;
+        *)
+            POSITIONAL_ARGS+=("$1") # save positional arg
+            shift
+            ;;
+    esac
+done
+
+# Restore positional parameters
+set -- "${POSITIONAL_ARGS[@]}"
+
+# If first positional parameter exists and FILE wasn't set with -f, use it as FILE
+if [ $# -gt 0 ] && [ -z "$FILE" ]; then
+    FILE="$1"
+fi
+
+# Check if file was provided
+if [ -z "$FILE" ]; then
+    echo "Error: You must specify a file (either as first argument or with -f option)"
+    show_help
+fi
+
+# Check if file exists
+if [ ! -f "$FILE" ]; then
+    echo "Error: File '$FILE' not found"
+    exit 1
+fi
+
+# Execute the ffmpeg command
+echo "Streaming $FILE to UDP port $PORT with KLV data preserved..."
+ffmpeg -re -stream_loop -1 -i "$FILE" -c copy -map 0 -f mpegts udp://127.0.0.1:$PORT

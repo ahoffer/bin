@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# Check if a filename was provided as the first argument
+if [[ ! -f "$1" ]]; then
+  echo "Usage: $0 <input-file>"
+  exit 1
+fi
+
+# Use Perl to clean the file:
+# - Remove ANSI escape codes (e.g., terminal color codes)
+# - Remove carriage return characters (\r)
+perl -pe '
+  # Strip ANSI escape sequences like \e[31m or \e[1;34m
+  s/\e\[[0-9;]*[a-zA-Z]//g;
+
+  # Remove carriage return characters (often from Windows logs)
+  s/\r//g;
+' "$1"
+
