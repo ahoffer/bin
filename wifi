@@ -1,0 +1,5 @@
+#!/bin/bash
+# Dump information about networks picked up by wifi adpater.
+
+nmcli -f in-use,ssid,freq,bssid,signal,rate,bars  dev wifi
+

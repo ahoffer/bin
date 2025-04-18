@@ -1,4 +1,4 @@
-#! /bin/bash
+#!/bin/bash
 set -e  # Exit on any error
 
 mvn com.spotify.fmt:fmt-maven-plugin:format -T1C
@@ -9,5 +9,28 @@ if ! yarn -v | grep -q '4.5.1'; then
     corepack prepare yarn@4.5.1 --activate
 fi
 
-mvn clean install -DskipTests "$@"
+# Assume clean unless --dirty is passed
+RUN_CLEAN=true
+
+# Scan for --dirty flag without modifying "$@"
+for arg in "$@"; do
+  if [[ "$arg" == "--dirty" ]]; then
+    RUN_CLEAN=false
+    break
+  fi
+done
+
+# Filter out --dirty when calling Maven
+MAVEN_ARGS=()
+for arg in "$@"; do
+  if [[ "$arg" != "--dirty" ]]; then
+    MAVEN_ARGS+=("$arg")
+  fi
+done
+
+if $RUN_CLEAN; then
+  mvn clean install -DskipTests "${MAVEN_ARGS[@]}"
+else
+  mvn install -DskipTests "${MAVEN_ARGS[@]}"
+fi
 

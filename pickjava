@@ -1,0 +1,93 @@
+#!/bin/bash
+# Directory containing Java installations
+JVM_DIR="/usr/lib/jvm"
+# Check if directory exists
+if [ ! -d "$JVM_DIR" ]; then
+    echo "Error: $JVM_DIR directory not found"
+    exit 1
+fi
+
+# Get list of Java installations without duplicates
+# We'll resolve symlinks and only show unique installations
+echo "Scanning for unique Java installations..."
+declare -A unique_java_paths
+for java_path in $(ls -d $JVM_DIR/* | grep -v "/\.\|/default"); do
+    # Resolve symbolic links to get real path
+    real_path=$(readlink -f "$java_path")
+    # Use the real path as key but display the original name
+    version_name=$(basename "$java_path")
+    # Store with path as key, original name as value
+    unique_java_paths["$real_path"]="$version_name"
+done
+
+# Convert to array for menu display
+java_versions=()
+java_names=()
+for real_path in "${!unique_java_paths[@]}"; do
+    java_versions+=("$real_path")
+    java_names+=("${unique_java_paths[$real_path]}")
+done
+
+# Check if any Java versions were found
+if [ ${#java_versions[@]} -eq 0 ]; then
+    echo "No Java installations found in $JVM_DIR"
+    exit 1
+fi
+
+# Display menu with more information
+echo "Available Java versions:"
+echo "----------------------"
+for i in "${!java_versions[@]}"; do
+    # Try to get version details if possible
+    if [ -x "${java_versions[$i]}/bin/java" ]; then
+        version_info=$("${java_versions[$i]}/bin/java" -version 2>&1 | head -n 1)
+    else
+        version_info="(version info unavailable)"
+    fi
+    echo "[$i] ${java_names[$i]} - $version_info"
+done
+
+# Get user selection
+read -p "Select Java version (0-$((${#java_versions[@]}-1))): " selection
+
+# Validate input
+if ! [[ "$selection" =~ ^[0-9]+$ ]] || [ "$selection" -ge "${#java_versions[@]}" ]; then
+    echo "Invalid selection"
+    exit 1
+fi
+
+selected_java="${java_versions[$selection]}"
+selected_name="${java_names[$selection]}"
+
+# Create a bin directory in user's home if it doesn't exist
+mkdir -p "$HOME/bin"
+
+# Create symbolic links in user's bin directory
+ln -sf "$selected_java/bin/java" "$HOME/bin/java"
+ln -sf "$selected_java/bin/javac" "$HOME/bin/javac"
+
+# Update PATH in .bashrc if needed
+if ! grep -q "PATH=\"\$HOME/bin:\$PATH\"" "$HOME/.bashrc"; then
+    echo 'export PATH="$HOME/bin:$PATH"' >> "$HOME/.bashrc"
+fi
+
+# Update JAVA_HOME in .profile
+if grep -q "export JAVA_HOME=" "$HOME/.profile"; then
+    sed -i "s#export JAVA_HOME=.*#export JAVA_HOME=\"$selected_java\"#g" "$HOME/.profile"
+else
+    echo "export JAVA_HOME=\"$selected_java\"" >> "$HOME/.profile"
+fi
+
+# Update current session
+export JAVA_HOME="$selected_java"
+export PATH="$HOME/bin:$PATH"
+
+# Verify current version
+echo ""
+echo "Selected: $selected_name"
+echo "Location: $selected_java"
+echo ""
+java -version
+javac -version
+echo ""
+echo "Run 'source ~/.profile' or start a new terminal for changes to take effect"
