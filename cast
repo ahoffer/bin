@@ -13,30 +13,35 @@ import socket
 import struct
 import re
 import glob
+import time
 
 def usage():
     print("""
 Usage:
-  icmp-cast <host:port> <file1> [file2 ... fileN]
+  icmp-cast <host:port> <file1> [file2 ... fileN] [--delay=SECONDS]
 
 Arguments:
-  <host:port>         Destination host/IP and UDP port
+  <host:port>         Destination host/IP and UDP port.
                       Host must be a multicast (224.0.0.0–239.255.255.255)
                       or broadcast address (e.g., 255.255.255.255).
 
   <file>              One or more files to send. Wildcards like *.xml are supported.
 
+  --delay=SECONDS     Optional delay (in seconds) between UDP packets.
+                      Defaults to 0.3 seconds.
+                      Useful if the receiver rate-limits fast senders.
+
 Examples:
   icmp-cast 239.2.3.1:6969 myfile.xml
-  icmp-cast 255.255.255.255:6969 *.xml
-  icmp-cast myhost.local:6969 myfile.xml
+  icmp-cast 255.255.255.255:6969 *.xml --delay=0.1
+  icmp-cast myhost.local:6969 event1.xml event2.xml --delay=0.5
 
 Wildcard Notes:
-  - Wildcards (e.g., ) are expanded by your shell before the script runs.
+  - Wildcards (e.g., `*.xml`) are expanded by your shell before the script runs.
   - To handle large batches or avoid "argument list too long" errors, use a loop:
 
       for f in *.xml; do
-          icmp-cast 239.2.3.1:6969 ""
+          icmp-cast 239.2.3.1:6969 "$f"
       done
 
   - Quoting wildcards (e.g., "*.xml") disables expansion and will likely cause errors
@@ -83,8 +88,25 @@ def main():
     if len(sys.argv) < 3:
         usage()
 
-    target = sys.argv[1]
-    raw_file_args = sys.argv[2:]
+    # Extract optional --delay argument
+    delay = 0.3 #default value
+    args = sys.argv[1:]
+    delay_args = [arg for arg in args if arg.startswith('--delay=')]
+    for darg in delay_args:
+        try:
+            delay = float(darg.split('=')[1])
+        except ValueError:
+            print(f"Error: Invalid delay value in {darg}")
+            sys.exit(1)
+
+    # Remove --delay from file args
+    args = [a for a in args if not a.startswith('--delay=')]
+
+    if len(args) < 2:
+        usage()
+
+    target = args[0]
+    raw_file_args = args[1:]
 
     ip, port = parse_target(target)
 
@@ -121,6 +143,7 @@ def main():
         for file_path in files:
             if os.path.isfile(file_path):
                 send_file(file_path, sock, ip, port, mode)
+                time.sleep(delay)  # <-- Delay between each file
             else:
                 print(f"Skipping non-file: {file_path}")
 
