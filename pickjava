@@ -71,11 +71,11 @@ if ! grep -q "PATH=\"\$HOME/bin:\$PATH\"" "$HOME/.bashrc"; then
     echo 'export PATH="$HOME/bin:$PATH"' >> "$HOME/.bashrc"
 fi
 
-# Update JAVA_HOME in .profile
-if grep -q "export JAVA_HOME=" "$HOME/.profile"; then
-    sed -i "s#export JAVA_HOME=.*#export JAVA_HOME=\"$selected_java\"#g" "$HOME/.profile"
+# Update JAVA_HOME in .bashrc
+if grep -q "export JAVA_HOME=" "$HOME/.bashrc"; then
+    sed -i "s#export JAVA_HOME=.*#export JAVA_HOME=\"$selected_java\"#g" "$HOME/.bashrc"
 else
-    echo "export JAVA_HOME=\"$selected_java\"" >> "$HOME/.profile"
+    echo "export JAVA_HOME=\"$selected_java\"" >> "$HOME/.bashrc"
 fi
 
 # Update current session
@@ -90,4 +90,5 @@ echo ""
 java -version
 javac -version
 echo ""
-echo "Run 'source ~/.profile' or start a new terminal for changes to take effect"
+echo "Source .bashrc start a new terminal for changes to take effect"
+echo . ~/.bashrc
