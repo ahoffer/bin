@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# Restart PipeWire and related services
+systemctl --user restart pipewire pipewire-pulse wireplumber
+
+# Reload ALSA modules
+sudo alsa force-reload
+
+echo "PipeWire and ALSA restarted."
+
