@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# 1) Update package lists
+sudo apt update
+
+# 2) Ensure build tools are present (for native addons)
+sudo apt install -y build-essential
+
+# 3) Install nvm
+#    (assumes curl is already installed)
+curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.4/install.sh | bash
+
+# 4) Load nvm into this shell session
+export NVM_DIR="$HOME/.nvm"
+# shellcheck source=/dev/null
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+# 5) Install & use Node.js 18, set it as default
+nvm install 18
+nvm alias default 18
+nvm use default
+
+# 6) Enable Corepack and activate the stable Yarn
+corepack enable
+corepack prepare yarn@stable --activate
+
+# 7) Verification
+echo "Node: $(node --version)"
+echo "npm : $(npm --version)"
+echo "Yarn: $(yarn --version)"
+
+echo "✓ All set! Enjoy Node 18 + Yarn 🚀"
+

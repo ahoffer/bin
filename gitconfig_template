@@ -1,0 +1,50 @@
+[user]
+    name = Aaron Hoffer
+    email = aaron@hoffer.org
+
+[core]
+    editor = vim
+    autocrlf = input
+    pager = less -FRSX
+    # on commit: convert CRLF → LF; on checkout: leave line‐endings as LF
+    autocrlf = input
+    # warn if someone is about to commit a CRLF that can’t be cleanly fixed
+    safecrlf = true
+    # make Git display diffs with LF endings
+    eol = lf
+
+[color]
+    ui = auto
+
+[alias]
+    st       = status
+    co       = checkout
+    br       = branch
+    ci       = commit
+    df       = diff
+    dc       = diff --cached
+    lg       = log --graph --decorate --all --oneline
+    l        = log --oneline
+    unstage  = reset HEAD --
+    amend    = commit --amend --no-edit
+    rb       = rebase
+    s        = "!git status -s"
+
+[fetch]
+    prune = true
+
+[pull]
+    rebase = true
+
+[push]
+    default = simple
+
+[credential]
+    helper = cache --timeout=3600
+
+[merge]
+    tool = vimdiff
+
+[diff]
+    tool = vimdiff
+

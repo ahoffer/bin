@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# -----------------------------------------------------------------------------
+# setup-cac.sh
+# A minimal, idempotent script to install and configure a USB CAC reader
+# on Ubuntu 24.04 for use with Google Chrome.
+# v1.0.0
+# -----------------------------------------------------------------------------
+
+# 1) Check and install required packages quietly
+REQUIRED=(pcscd pcsc-tools libccid opensc opensc-pkcs11 libnss3-tools)
+MISSING=()
+for pkg in "${REQUIRED[@]}"; do
+  if ! dpkg -s "$pkg" &>/dev/null; then
+    MISSING+=("$pkg")
+  fi
+done
+
+if [ "${#MISSING[@]}" -gt 0 ]; then
+  echo "=== 1) Installing missing packages: ${MISSING[*]} ==="
+  sudo apt-get update -qq
+  sudo apt-get install -y "${MISSING[@]}" >/dev/null 2>&1
+else
+  echo "✓ All required packages already installed"
+fi
+
+# 2) Enable & start the PC/SC daemon if not already
+if ! systemctl is-enabled pcscd &>/dev/null; then
+  echo "=== 2) Enabling & starting pcscd ==="
+  sudo systemctl enable --now pcscd >/dev/null 2>&1
+else
+  echo "✓ pcscd service already enabled & running"
+fi
+
+# 3) Test PKCS#11 (prompts for PIN)
+echo "=== 3) Listing CAC certificates (will prompt for PIN) ==="
+pkcs11-tool --login --show-info 
+
+# 4) Register OpenSC PKCS#11 with Chrome’s NSS DB
+echo "=== 4) Registering PKCS#11 module with Chrome NSS DB ==="
+PKCS11_MOD=/usr/lib/x86_64-linux-gnu/pkcs11/opensc-pkcs11.so
+DBDIR="sql:$HOME/.pki/nssdb"
+MODNAME="OpenSC CAC"
+
+# Ensure module file exists
+if [ ! -f "$PKCS11_MOD" ]; then
+  echo "✗ ERROR: opensc-pkcs11.so not found at $PKCS11_MOD."
+  exit 1
+fi
+
+# Prepare NSS DB directory
+mkdir -p "$HOME/.pki/nssdb"
+
+# Initialize NSS DB only if empty
+if ! modutil -dbdir "$DBDIR" -list &>/dev/null; then
+  echo "→ Initializing NSS DB at $DBDIR"
+  printf '\n' | certutil -N -d "$DBDIR"
+fi
+
+# Add module if missing
+if modutil -dbdir "$DBDIR" -list | grep -qF "$MODNAME"; then
+  echo "✓ $MODNAME already registered; skipping"
+else
+  echo "→ Adding $MODNAME to NSS DB"
+  if modutil -dbdir "$DBDIR" -add "$MODNAME" -libfile "$PKCS11_MOD"; then
+    echo "✓ Module added successfully"
+  else
+    echo "✗ ERROR: Failed to add $MODNAME"
+    exit 1
+  fi
+fi
+
+echo "Setup complete"
+
