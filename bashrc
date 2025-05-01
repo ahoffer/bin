@@ -5,6 +5,9 @@
 #  source "${HOME}/bin/bashrc"
 #fi
 
+HISTSIZE=50
+HISTFILESIZE=2000
+
 alias e='gnome-text-editor'
 
 # Do not set JAVA_HOME here. It gets written and re-written in ~/.bashrc
