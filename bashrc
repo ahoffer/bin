@@ -18,3 +18,8 @@ export YAMLLINT_CONFIG_FILE=/home/aaron/bin/.yamllint
 # This alias is trick. If you use it, you don't have to source anthing after you update JAVA_HOME
 alias pickjava="source ~/bin/pickjava"
 
+export PATH=$PATH:$(go env GOPATH)/bin
+
+#Log into registries and such
+docker login "$RUNSHIFT_REGISTRY" -u $RUNSHIFT_USER -p "$RUNSHIFT_TOKEN"
+helm registry login $NEXUS_REGISTRY -u $NEXUS_USER -p "$NEXUS_TOKEN"
