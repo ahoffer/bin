@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
+
+# Ensure script is run as root
+if [[ $EUID -ne 0 ]]; then
+  echo "Please run as root (or via sudo)." >&2
+  exit 1
+fi
+
+# Determine real user’s home (for cloning into ~/bin)
+if [[ -n "${SUDO_USER:-}" ]]; then
+  USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+  TARGET_USER=$SUDO_USER
+else
+  USER_HOME="$HOME"
+  TARGET_USER=$(whoami)
+fi
+
+# Paths for repo/key files
+MICROSOFT_KEY="/usr/share/keyrings/microsoft-archive-keyring.gpg"
+MICROSOFT_LIST="/etc/apt/sources.list.d/microsoft-prod.list"
+DOCKER_KEY="/etc/apt/keyrings/docker.gpg"
+DOCKER_LIST="/etc/apt/sources.list.d/docker.list"
+
+############################
+# 1) Base prerequisites
+############################
+echo "1) Installing base packages…"
+apt update
+apt install -y \
+  ca-certificates \
+  curl \
+  gnupg \
+  lsb-release \
+  apt-transport-https
+
+############################
+# 2) Java, Maven & tools
+############################
+echo "Installing development tools…"
+apt install -y \
+  git \
+  vim \
+  maven \
+  build-essential \
+  openjdk-11-jdk \
+  openjdk-17-jdk \
+  openjdk-21-jdk \
+  gnome-shell-extension-manager \
+  flameshot \
+  python3-pip \
+  python3-venv
+  jq \
+  yamlformat \
+  autoconf \
+  autotools-dev
+
+############################
+# 3) Microsoft package repo
+############################
+if [[ ! -f "$MICROSOFT_KEY" ]]; then
+  echo "Adding Microsoft GPG key…"
+  curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+    | gpg --dearmor > "$MICROSOFT_KEY"
+else
+  echo "Microsoft GPG key already in place; skipping."
+fi
+
+MS_DEB="deb [arch=amd64 signed-by=${MICROSOFT_KEY}] \
+https://packages.microsoft.com/ubuntu/$(lsb_release -rs)/prod \
+$(lsb_release -cs) main"
+if ! grep -Fxq "$MS_DEB" "$MICROSOFT_LIST" 2>/dev/null; then
+  echo "Configuring Microsoft apt repository…"
+  tee "$MICROSOFT_LIST" >/dev/null <<EOF
+$MS_DEB
+EOF
+else
+  echo "Microsoft repository already configured; skipping."
+fi
+
+############################
+# 4) Intune portal
+############################
+apt update
+if ! dpkg -s intune-portal >/dev/null 2>&1; then
+  echo "Installing Intune Portal…"
+  apt install -y intune-portal
+else
+  echo "intune-portal is already installed; skipping."
+fi
+
+############################
+# 5) Google Chrome
+############################
+if ! command -v google-chrome >/dev/null 2>&1; then
+  echo "Downloading & installing Google Chrome…"
+  TMPDEB=$(mktemp --suffix .deb)
+  curl -fsSL \
+    https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+    -o "$TMPDEB"
+  apt install -y "$TMPDEB"
+  rm -f "$TMPDEB"
+else
+  echo "Google Chrome already installed; skipping."
+fi
+
+############################
+# 6) Clone personal scripts
+############################
+if [[ ! -d "${USER_HOME}/bin" ]]; then
+  echo "Cloning ~/bin from GitHub…"
+  sudo -u "$TARGET_USER" git clone git@github.com:ahoffer/bin.git \
+    "${USER_HOME}/bin"
+else
+  echo "${USER_HOME}/bin exists; skipping clone."
+fi
+
+############################
+# 7) Docker CE & Docker Compose
+############################
+if [[ ! -f "$DOCKER_KEY" ]]; then
+  echo "Adding Docker’s GPG key…"
+  mkdir -p /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+    | gpg --dearmor > "$DOCKER_KEY"
+else
+  echo "Docker GPG key already in place; skipping."
+fi
+
+DOCKER_DEB="deb [arch=$(dpkg --print-architecture) signed-by=${DOCKER_KEY}] \
+https://download.docker.com/linux/ubuntu \
+$(lsb_release -cs) stable"
+if ! grep -Fxq "$DOCKER_DEB" "$DOCKER_LIST" 2>/dev/null; then
+  echo "Configuring Docker apt repository…"
+  tee "$DOCKER_LIST" >/dev/null <<<"$DOCKER_DEB"
+else
+  echo "Docker repository already configured; skipping."
+fi
+
+apt update
+apt install -y \
+  docker-ce \
+  docker-ce-cli \
+  containerd.io \
+  docker-compose-plugin
+
+# Enable & start Docker
+systemctl is-enabled docker >/dev/null 2>&1 || systemctl enable docker
+systemctl is-active docker  >/dev/null 2>&1 || systemctl start  docker
+
+############################
+# 8) Add user to docker group
+############################
+if ! id -nG "$TARGET_USER" | grep -qw docker; then
+  echo "Adding $TARGET_USER to docker group…"
+  usermod -aG docker "$TARGET_USER"
+  echo "→ Run 'newgrp docker' or log out/in to apply."
+else
+  echo "$TARGET_USER already in docker group; skipping."
+fi
+
+############################
+# 9) Helm 3
+############################
+if ! command -v helm >/dev/null 2>&1; then
+  echo "Fetching latest Helm release…"
+  HELM_LATEST=$(curl -s https://api.github.com/repos/helm/helm/releases/latest \
+    | grep '"tag_name":' | head -n1 | cut -d\" -f4)
+  echo "Installing Helm ${HELM_LATEST}…"
+  curl -fsSL "https://get.helm.sh/helm-${HELM_LATEST}-linux-amd64.tar.gz" \
+    -o helm.tar.gz
+  tar -zxvf helm.tar.gz
+  mv linux-amd64/helm /usr/local/bin/helm
+  rm -rf linux-amd64 helm.tar.gz
+else
+  echo "Helm already installed; skipping."
+fi
+
+############################
+# 10) Cleanup & Verify
+############################
+echo "Cleaning up apt caches…"
+apt clean
+rm -rf /var/lib/apt/lists/*
+
+echo
+echo "Verification:"
+java -version        || echo "Java not found"
+mvn --version        || echo "Maven not found"
+git --version        || echo "Git not found"
+google-chrome --version 2>/dev/null && echo "Chrome OK" || echo "Chrome not installed"
+docker --version     || echo "Docker not found"
+helm version         || echo "Helm not found"
+
+
+# default file: ~/.git-credentials
+git config --global credential.helper store
+
+echo
+echo "All done! 🎉"
+

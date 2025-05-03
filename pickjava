@@ -1,24 +1,45 @@
-#!/bin/bash
-# Invoke with source - source java
+#!/usr/bin/env bash
+# source this script: it will update JAVA_HOME in ~/.bashrc and in your current shell.
 
-mapfile -t all < <(find /usr/lib/jvm \( -name "java" -o -name "javac" \) | xargs dirname | xargs dirname | sort -u)
+# 1) Gather all real (non-symlink) java or javac executables under /usr/lib/jvm
+mapfile -t all < <(
+  find /usr/lib/jvm \( -name java -o -name javac \) -type f \
+    | xargs dirname   \
+    | xargs dirname   \
+    | sort -u
+)
+
+# 2) Present the choices, tagging JDK vs JRE
 i=0
 for path in "${all[@]}"; do
-  if [[ $path =~ /(java-[0-9]+) ]]; then
-    printf "[%d] %s\n" "$i" "${BASH_REMATCH[1]}"
-    ((i++))
+  if [[ -x "$path/bin/javac" ]]; then
+    type="JDK"
+  elif [[ -x "$path/bin/java" ]]; then
+    type="JRE"
+  else
+    type="Unknown"
   fi
+  name=$(basename "$path")
+  printf "[%d] %s (%s)\n" "$i" "$name" "$type"
+  ((i++))
 done
 
-read -rp "Select Java version (0-$((i - 1))): " user_selection
-if ! [[ "$user_selection" =~ ^[0-9]+$ ]] || ((user_selection < 0 || user_selection >= i)); then
-  echo "Invalid selection" >&2
-  exit 1
+# 3) Read user’s choice
+read -rp "Select Java version (0-$((i - 1))): " selection
+if ! [[ "$selection" =~ ^[0-9]+$ ]] || ((selection < 0 || selection >= i)); then
+  echo "Invalid selection." >&2
+  return 1
 fi
-new_java_home=${all[user_selection]}
 
+selected_java_home="${all[selection]}"
+
+# 4) Update ~/.bashrc
 sed -i.bak '/^[[:space:]]*export JAVA_HOME=/d' "$HOME/.bashrc"
-echo "export JAVA_HOME=\"$new_java_home\"" >>"$HOME/.bashrc"
-export JAVA_HOME="$selected_java_path"
-source "$HOME/.bashrc"
-$JAVA_HOME/bin/java -version
+echo "export JAVA_HOME=\"$selected_java_home\"" >>"$HOME/.bashrc"
+
+# 5) Apply in current shell
+export JAVA_HOME="$selected_java_home"
+export PATH="$JAVA_HOME/bin:$PATH"
+
+echo "✅ JAVA_HOME set to $JAVA_HOME"
+java -version
