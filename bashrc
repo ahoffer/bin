@@ -6,6 +6,11 @@
 #  source "${HOME}/bin/bashrc"
 #fi
 
+export HISTCONTROL=ignoredups
+shopt -s histappend
+PROMPT_COMMAND='history -a'
+
+
 # THINGS TO DEFINE IN 	~/.bashrc
 # export SSF_NEXUS_HOST=
 # export SSF_NEXUS_USER=
