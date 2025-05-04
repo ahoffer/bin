@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Re-exec under sudo if not root
+[[ $EUID -eq 0 ]] || exec sudo bash "$0" "$@"
+
+VERSION=v1.33
+BASE_URL="https://pkgs.k8s.io/core:/stable:/${VERSION}/deb"
+KEYRING_DIR="/etc/apt/keyrings"
+KEYRING_FILE="${KEYRING_DIR}/kubernetes.gpg"
+REPO_FILE="/etc/apt/sources.list.d/kubernetes.list"
+REPO_LINE="deb [signed-by=${KEYRING_FILE}] ${BASE_URL}/ /"
+
+# 1) Ensure HTTPS transport + GPG support
+apt-get update -qq
+apt-get install -y apt-transport-https ca-certificates curl gnupg
+
+# 2) Install the Kubernetes signing key (once)
+install -d -m 755 "$KEYRING_DIR"
+if [[ ! -f "$KEYRING_FILE" ]]; then
+  curl -fsSL "${BASE_URL}/Release.key" \
+    | gpg --dearmor > "$KEYRING_FILE"
+  chmod 644 "$KEYRING_FILE"
+  echo "✔ Imported k8s GPG key for ${VERSION}"
+fi
+
+# 3) Configure the apt repo (idempotent)
+if ! grep -Fxq "$REPO_LINE" "$REPO_FILE" 2>/dev/null; then
+  printf '%s\n' "$REPO_LINE" > "$REPO_FILE"
+  chmod 644 "$REPO_FILE"
+  echo "✔ Added k8s apt repo for ${VERSION}"
+fi
+
+# 4) Refresh package lists
+apt-get update -qq
+
+# 5) Install & hold each Kubernetes component safely
+for pkg in kubelet kubeadm kubectl; do
+  if dpkg -s "$pkg" &>/dev/null; then
+    echo "✔ $pkg already installed & held."
+  else
+    apt-mark unhold "$pkg" 2>/dev/null || true
+    apt-get install -y "$pkg"
+    echo "→ Installed $pkg."
+    apt-mark hold "$pkg"
+    echo "→ Held $pkg."
+  fi
+done
+
+echo
+echo "✅ Kubernetes ${VERSION} (kubeadm, kubelet, kubectl) is installed and held."

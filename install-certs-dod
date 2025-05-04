@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+set -euo pipefail
+shopt -s nullglob
+
+# ── Ensure we’re root
+[[ $EUID -eq 0 ]] || exec sudo "$0" "$@"
+
+# ── Usage / input check
+usage(){ echo "Usage: $0 <DoD_cert_bundle.zip>"; exit 1; }
+[ $# -eq 1 ] || usage
+ZIP="$1"
+[ -f "$ZIP" ] || { echo "❗ '$ZIP' not found."; exit 1; }
+
+# ── Pre-flight: required tools
+for cmd in unzip openssl awk update-ca-certificates; do
+  command -v "$cmd" >/dev/null 2>&1 \
+    || { echo "❗ Required tool '$cmd' is missing."; exit 1; }
+done
+
+# ── Create temp dir & ensure it’s cleaned even on error
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
+# ── 1) Unzip only *.p7b (flattened) into temp
+echo "→ Unzipping .p7b files into $TMP"
+unzip -j -q "$ZIP" '*.p7b' -d "$TMP"
+
+# ── 2) Make sure we actually got some .p7b files
+p7bs=( "$TMP"/*.p7b )
+[ ${#p7bs[@]} -gt 0 ] || { echo "❗ No .p7b files found in $TMP"; exit 1; }
+
+# ── 3) Prepare (and clean) target dir
+TARGET=/usr/local/share/ca-certificates/dod
+echo "→ Cleaning old certs in $TARGET"
+rm -rf "$TARGET"
+mkdir -p "$TARGET"
+
+# ── 4) Convert each PKCS#7 into single-certificate PEM .crt files
+echo "→ Converting & splitting PKCS#7 → .crt"
+for p7b in "${p7bs[@]}"; do
+  base=$(basename "$p7b" .p7b)
+  inform=PEM
+  [[ "${p7b,,}" == *.der.p7b ]] && inform=DER
+
+  openssl pkcs7 -inform "$inform" -print_certs -in "$p7b" | \
+  awk -v tgt="$TARGET" -v b="$base" '
+    /-----BEGIN CERTIFICATE-----/ { fname = sprintf("%s/%s_%02d.crt", tgt, b, ++n) }
+    fname { print > fname }
+  '
+done
+
+# ── 4.5) Drop any cert that’s already expired
+echo "→ Dropping expired certificates"
+for crt in "$TARGET"/*.crt; do
+  # -checkend 0 exits non‑zero if cert expiry ≤ now
+  if ! openssl x509 -checkend 0 -noout -in "$crt"; then
+    echo "→ Removing expired cert: $(basename "$crt")"
+    rm -f "$crt"
+  fi
+done
+
+# ── 5) Update the system trust store
+echo "→ Updating system trust store"
+update-ca-certificates >/dev/null
+
+# ── 6) Verify that at least one hash symlink exists
+echo "→ Verifying symlinks in /etc/ssl/certs"
+found=false
+for crt in "$TARGET"/*.crt; do
+  hash=$(openssl x509 -noout -hash -in "$crt")
+  [ -e "/etc/ssl/certs/${hash}.0" ] && { found=true; break; }
+done
+$found || { echo "❗ No cert hash found; aborting."; exit 1; }
+
+# ── 7) Verify each cert, skipping pure expirations or revocations
+echo "→ Verifying each cert (skipping expired or revoked-only)"
+for crt in "$TARGET"/*.crt; do
+  out=$(openssl verify -CApath /etc/ssl/certs "$crt" 2>&1) || status=$?
+  if [ "${status:-0}" -ne 0 ]; then
+    # skip if the only error is expiration or revocation
+    if echo "$out" | grep -Eq "certificate has expired|certificate revoked"; then
+      echo "→ Skipping $(basename "$crt"): ${out##*: }"
+      continue
+    fi
+    echo "❗ Verification failed for $crt"
+    echo "$out"
+    exit 1
+  fi
+done
+
+echo "✅ DoD certificates installed and trusted (expired/revoked skipped)."

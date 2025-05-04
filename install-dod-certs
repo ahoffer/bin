@@ -1,121 +1,122 @@
-#!/bin/bash
-# version 1.0.0
-# Downloaded a zip file of certs from https://public.cyber.mil/announcement/new-dod-pki-cas-released/
-# The file was named unclass-certificates_pkcs7_DoD.zip
-# Tested this once or twice on Ubuntu 24
-# YMMV
+#!/usr/bin/env bash
+# version 1.0.1 — DoD PKI + Chrome/NSS importer for Ubuntu 24
 
-set +e
+set -euo pipefail
 
-ZIPFILE="$1"
-if [[ -z "$ZIPFILE" ]]; then
+# ——— 0) Args & prerequisites —————————————————————————————
+if [[ $# -ne 1 ]]; then
   echo "Usage: $0 <DoD_cert_bundle.zip>" >&2
   exit 1
 fi
+ZIPFILE="$1"
 if [[ ! -f "$ZIPFILE" ]]; then
   echo "ERROR: '$ZIPFILE' not found." >&2
   exit 1
 fi
 
-# 1) Unzip into a temp dir
-TEMPDIR=$(mktemp -d -t dod_certs.XXXX)
+# Ensure we have unzip, openssl, update-ca-certificates & certutil
+for cmd in unzip openssl update-ca-certificates certutil; do
+  if ! command -v "$cmd" &>/dev/null; then
+    echo "[*] Installing missing package for $cmd"
+    sudo apt-get update -qq
+    case "$cmd" in
+      unzip)               sudo apt-get install -y unzip              ;;
+      openssl)             sudo apt-get install -y openssl            ;;
+      update-ca-certificates) sudo apt-get install -y ca-certificates ;;
+      certutil)            sudo apt-get install -y libnss3-tools      ;;
+    esac
+  fi
+done
+
+# ——— 1) Unzip into temp dir ————————————————————————————————
+TEMPDIR=$(mktemp -d /tmp/dod_certs.XXXXXX)
 echo "[*] Extracting '$ZIPFILE' → $TEMPDIR"
-unzip -q "$ZIPFILE" -d "$TEMPDIR" || {
-  echo "ERROR: unzip failed" >&2
-  exit 1
-}
+unzip -q "$ZIPFILE" -d "$TEMPDIR"
 
-# 2) Find .p7b files
+# ——— 2) Locate the .p7b bundles —————————————————————————————
 mapfile -t P7B_FILES < <(find "$TEMPDIR" -type f -iname '*.p7b')
-echo "[*] Found ${#P7B_FILES[@]} .p7b files"
-if (( ${#P7B_FILES[@]} == 0 )); then
-  echo "ERROR: no .p7b files" >&2
-  exit 1
-fi
+echo "[*] Found ${#P7B_FILES[@]} P7B bundle(s)"
+(( ${#P7B_FILES[@]} )) || { echo "ERROR: no .p7b files" >&2; exit 1; }
 
-# 3) Prepare destination (system CA dir)
+# ——— 3) Prep system CA dir ————————————————————————————————
 DEST_DIR="/usr/local/share/ca-certificates/dod"
-echo "[*] Creating $DEST_DIR (requires sudo)"
-sudo mkdir -p "$DEST_DIR" || {
-  echo "ERROR: cannot mkdir $DEST_DIR" >&2
-  exit 1
-}
+echo "[*] Installing into $DEST_DIR"
+sudo mkdir -p "$DEST_DIR"
+sudo chmod 755 "$DEST_DIR"
 
-# 4) Convert & split
+# ——— 4) Convert & split each P7B → individual .crt —————————————————
 CERT_FILES=()
 for P7B in "${P7B_FILES[@]}"; do
   bn=$(basename "$P7B")
   echo "[*] Processing $bn"
-
-  if [[ ! -s "$P7B" ]]; then
-    echo "  WARN: $bn empty, skipping" >&2
-    continue
-  fi
+  [[ -s "$P7B" ]] || { echo "  WARN: $bn empty, skipping"; continue; }
 
   # detect DER vs PEM
-  if grep -q -- "-----BEGIN" "$P7B"; then
-    INFORM="PEM"
+  if grep -q '^-----BEGIN' "$P7B"; then
+    INFORM=PEM
   else
-    INFORM="DER"
+    INFORM=DER
   fi
-  echo "  → format: $INFORM"
 
   COMBINED="$TEMPDIR/${bn%.p7b}.pem"
-  echo "  → openssl pkcs7 -inform $INFORM"
-  openssl pkcs7 -print_certs -in "$P7B" -inform "$INFORM" \
-    -out "$COMBINED" 2>/dev/null || {
-    echo "  ERROR: openssl conversion failed for $bn" >&2
-    continue
-  }
+  openssl pkcs7 -print_certs -in "$P7B" -inform "$INFORM" -out "$COMBINED"
 
-  # split each cert
+  # split into N .crt files
   idx=0
-  while read -r line; do
+  while IFS= read -r line; do
     if [[ "$line" == "-----BEGIN CERTIFICATE-----" ]]; then
       ((idx++))
       out="$TEMPDIR/${bn%.p7b}_$idx.crt"
       CERT_FILES+=("$out")
-      echo "$line" > "$out"
+      printf '%s\n' "$line" > "$out"
     elif (( idx > 0 )); then
-      echo "$line" >> "$out"
+      printf '%s\n' "$line" >> "$out"
     fi
   done < "$COMBINED"
 
-  echo "  → extracted $idx cert(s) from $bn"
+  echo "  → extracted $idx cert(s)"
 done
 
-# 5) Install each .crt with sudo
-echo "[*] Installing ${#CERT_FILES[@]} certificates to $DEST_DIR"
-installed=0
+# ——— 5) Copy all .crt into system store ————————————————————————
+echo "[*] Copying ${#CERT_FILES[@]} cert(s) → $DEST_DIR"
 for crt in "${CERT_FILES[@]}"; do
-  base=$(basename "$crt")
-  echo "  → sudo cp $base"
-  sudo cp "$crt" "$DEST_DIR/" && ((installed++)) || {
-    echo "  ERROR: failed to copy $base" >&2
-  }
+  sudo install -m 644 "$crt" "$DEST_DIR/"
 done
 
-if (( installed == 0 )); then
-  echo "ERROR: no certs were installed" >&2
-  exit 1
-fi
+# ——— 6) Update the trust store —————————————————————————————
+echo "[*] update-ca-certificates"
+sudo update-ca-certificates
 
-# 6) Update trust store
-echo "[*] Running sudo update-ca-certificates"
-sudo update-ca-certificates || {
-  echo "ERROR: update-ca-certificates failed" >&2
-  exit 1
-}
-
-# 7) Verify with OpenSSL
-echo "[*] Verifying TLS to www.defense.gov"
-verify=$(echo | openssl s_client -connect www.defense.gov:443 -CApath /etc/ssl/certs 2>/dev/null \
-  | grep -c "Verify return code: 0")
-if (( verify > 0 )); then
-  echo "SUCCESS: DoD certs installed and trust verified"
-  exit 0
+# ——— 7) Quick live-site verify ————————————————————————————
+echo "[*] Verifying play-nice with www.defense.gov"
+if echo | openssl s_client -connect www.defense.gov:443 -CApath /etc/ssl/certs \
+     2>/dev/null | grep -q "Verify return code: 0"; then
+  echo "✓ System trust OK"
 else
-  echo "ERROR: TLS verification failed" >&2
+  echo "✗ System trust FAILED" >&2
   exit 1
 fi
 
+# ——— 8) Chrome/NSS DB import —————————————————————————————
+DBDIR="${HOME}/.pki/nssdb"
+mkdir -p "$DBDIR"
+if [[ ! -f "$DBDIR/cert9.db" ]]; then
+  echo "[*] Initializing NSS DB at $DBDIR"
+  printf '\n' | certutil -N -d "$DBDIR"
+else
+  echo "✓ NSS DB already exists"
+fi
+
+echo "[*] Importing into Chrome/NSS"
+for crt in "$DEST_DIR"/*.crt; do
+  name=$(basename "$crt" .crt)
+  if certutil -d "$DBDIR" -L | grep -qF "$name"; then
+    echo "  ✓ $name already in NSS DB"
+  else
+    certutil -d "$DBDIR" -A -n "$name" -t "CT,C,C" -i "$crt"
+    echo "  → Added $name"
+  fi
+done
+
+echo "SUCCESS: DoD PKI installed system-wide and in Chrome/NSS." 
+exit 0

@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+NSSDB="sql:$HOME/.pki/nssdb"
+DOD_DIR="/usr/local/share/ca-certificates/dod"
+
+for crt in "$DOD_DIR"/*.crt; do
+  nick=$(basename "$crt" .crt)
+
+  # Skip if already imported
+  if certutil -d "$NSSDB" -L -n "$nick" &>/dev/null; then
+    echo "✓ $nick already in NSS DB"
+    continue
+  fi
+
+  echo "→ Importing $nick into NSS DB…"
+  certutil -d "$NSSDB" \
+           -A -n "$nick" \
+           -t "CT,C,C" \
+           -i "$crt" \
+    && echo "  ✅ Imported $nick" \
+    || echo "  ❗ Failed to import $nick"
+done
+

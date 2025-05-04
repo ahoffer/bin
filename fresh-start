@@ -54,7 +54,13 @@ apt install -y \
   jq \
   yamlformat \
   autoconf \
-  autotools-dev
+  autotools-dev \
+  locate \
+  apt-transport-https \
+  ca-certificates \
+  curl \
+  gnupg \
+  tree
 
 ############################
 # 3) Microsoft package repo
@@ -196,6 +202,15 @@ helm version         || echo "Helm not found"
 
 # default file: ~/.git-credentials
 git config --global credential.helper store
+
+
+#K8s
+sudo curl -fsSL https://pkgs.k8s.io/debian/doc/apt-key.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/debian main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+sudo apt update
+sudo apt install -y kubeadm kubelet kubectl
+sudo apt-mark hold kubeadm kubelet kubectl
+
 
 echo
 echo "All done! 🎉"
