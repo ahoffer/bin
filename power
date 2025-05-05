@@ -1,0 +1,10 @@
+#! /bin/bash
+
+watch -n 1 '                                                                        
+  V=$(cat /sys/class/power_supply/BAT0/voltage_now)
+  C=$(cat /sys/class/power_supply/BAT0/current_now)
+  printf "Voltage: %.2f V\n" $(echo "$V / 1000000" | bc -l)
+  printf "Current: %.2f A\n" $(echo "$C / 1000000" | bc -l)
+  printf "Power:   %.2f W\n" $(echo "$V * $C / 1000000000000" | bc -l)
+'
+
