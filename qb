@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e  # Exit on any error
 
+mvn license:format
 mvn com.spotify.fmt:fmt-maven-plugin:format -T1C
 corepack enable
 

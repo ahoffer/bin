@@ -33,7 +33,8 @@ apt install -y \
   curl \
   gnupg \
   lsb-release \
-  apt-transport-https
+  apt-transport-https \
+  libfuse2t64
 
 ############################
 # 2) Java, Maven & tools
@@ -212,6 +213,35 @@ sudo apt install -y kubeadm kubelet kubectl
 sudo apt-mark hold kubeadm kubelet kubectl
 
 
+###### Add VS Code
+wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg
+sudo install -D -o root -g root -m 644 packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg
+echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" |sudo tee /etc/apt/sources.list.d/vscode.list > /dev/null
+rm -f packages.microsoft.gpg
+sudo apt update && sudo apt install -y code
+
+########### Signal
+# 1. Install our official public software signing key:
+wget -O- https://updates.signal.org/desktop/apt/keys.asc | gpg --dearmor > signal-desktop-keyring.gpg
+cat signal-desktop-keyring.gpg | sudo tee /usr/share/keyrings/signal-desktop-keyring.gpg > /dev/null
+# 2. Add our repository to your list of repositories:
+echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/signal-desktop-keyring.gpg] https://updates.signal.org/desktop/apt xenial main' |\
+  sudo tee /etc/apt/sources.list.d/signal-xenial.list
+# 3. Update your package database and install Signal:
+sudo apt update && sudo apt install signal-desktop
+
+
+# Enable the kernel’s user-namespace sandbox
+echo 'kernel.unprivileged_userns_clone = 1' | sudo tee /etc/sysctl.d/20-appimage-namespaces.conf
+# Allow unprivileged namespaces in AppArmor
+echo 'kernel.apparmor_restrict_unprivileged_userns = 0' | sudo tee /etc/sysctl.d/20-apparmor-unrestrict.conf
+# Apply immediately
+sudo sysctl --system
+
+
+
+
+
 echo
-echo "All done! 🎉"
+echo "All done!"
 
