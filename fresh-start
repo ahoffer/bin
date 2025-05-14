@@ -61,7 +61,11 @@ apt install -y \
   ca-certificates \
   curl \
   gnupg \
-  tree
+  tree \
+  graphviz \
+  v4l-utils \
+  obs-studio
+
 
 ############################
 # 3) Microsoft package repo
@@ -239,7 +243,8 @@ echo 'kernel.apparmor_restrict_unprivileged_userns = 0' | sudo tee /etc/sysctl.d
 sudo sysctl --system
 
 
-
+#### FF MPEG Snap 
+sudo snap install ffmpeg
 
 
 echo

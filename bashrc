@@ -39,6 +39,7 @@ HISTFILESIZE=2000
 alias e='gnome-text-editor'
 alias pickjava='source $HOME/bin/pickjava'  #no subshell so it can source a file
 alias install-node='source $HOME/bin/install-node'  #no subshell so it can source a file
+alias ll='ls -alh'
 
 
 # Do not set JAVA_HOME here. It gets written and re-written in ~/.bashrc

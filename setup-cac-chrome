@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# —— CONFIG ——
+DB_DIR="$HOME/.config/google-chrome/Default"
+MODULE="/usr/lib/x86_64-linux-gnu/opensc-pkcs11.so"
+CA_DIR="$HOME/DoD-CAs"
+LOCAL_STATE="$HOME/.config/google-chrome/Local State"
+
+# —— PRECHECKS ——
+if pgrep -x "chrome" >/dev/null; then
+  echo "⚠️  Please fully quit ALL Chrome processes before running this."
+  exit 1
+fi
+
+if [ ! -d "$DB_DIR" ]; then
+  echo "❌ Couldn’t find your Chrome profile at $DB_DIR"
+  exit 1
+fi
+
+# —— 1) Register the PKCS#11 module idempotently ——
+if ! modutil -dbdir "sql:$DB_DIR" -list \
+        | grep -qF "CAC OpenSC"; then
+  echo "🔑 Adding OpenSC PKCS#11 module to Chrome profile…"
+  modutil -dbdir "sql:$DB_DIR" \
+          -add "CAC OpenSC" \
+          -libfile "$MODULE" \
+          -force
+else
+  echo "🔑 OpenSC module already registered—skipping."
+fi
+
+# —— 2) Import DoD Root CAs idempotently ——
+echo "🛡️  Ensuring DoD Root CAs are in the NSS DB…"
+for cert in "$CA_DIR"/DoD-*.pem; do
+  [ -f "$cert" ] || continue
+  name=$(basename "$cert" .pem)
+  if ! certutil -d "sql:$DB_DIR" -L \
+         | grep -qF "$name"; then
+    echo "   → Importing $name"
+    certutil -d "sql:$DB_DIR" \
+             -A -n "$name" \
+             -t "C,," \
+             -i "$cert"
+  else
+    echo "   → $name already trusted—skipping."
+  fi
+done
+
+# —— 3) Enable “network-service-in-process” idempotently ——
+if command -v jq >/dev/null && [ -f "$LOCAL_STATE" ]; then
+  echo "⚙️  Toggling network-service-in-process in Local State…"
+  tmp=$(mktemp)
+  jq '
+    .browser.enabled_labs_experiments |=
+      (if type=="array" then . + ["network-service-in-process"]
+       else ["network-service-in-process"] end)
+    | .browser.enabled_labs_experiments |= unique
+  ' "$LOCAL_STATE" > "$tmp"
+  mv "$tmp" "$LOCAL_STATE"
+else
+  echo "⚠️  Skipped flag-tweak (jq or Local State missing)."
+  echo "   If needed, install jq or manually set chrome://flags/#network-service to Disabled."
+fi
+
+echo
+echo "✅  Done! From now on just run:"
+echo
+echo "    google-chrome"
+echo
