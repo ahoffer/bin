@@ -64,7 +64,9 @@ apt install -y \
   tree \
   graphviz \
   v4l-utils \
-  obs-studio
+  obs-studio \
+  gnome-online-accounts \
+  gvfs-backends
 
 
 ############################
