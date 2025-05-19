@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+#
+# ubuntu24-tune-inotify-nofile.sh
+# — permanently bump inotify watches + per-process nofile limit on Ubuntu 24+
+#
+# Usage:
+#   sudo ./ubuntu24-tune-inotify-nofile.sh [INOTIFY_WATCHES] [NOFILE_LIMIT]
+# Defaults: INOTIFY_WATCHES=524288, NOFILE_LIMIT=65536
+
+set -euo pipefail
+
+INOTIFY_WATCHES="${1:-524288}"
+NOFILE_LIMIT="${2:-65536}"
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "✋ Run me as root (sudo)."
+  exit 1
+fi
+
+echo "🔧 Setting fs.inotify.max_user_watches = $INOTIFY_WATCHES"
+cat > /etc/sysctl.d/99-custom-inotify.conf <<EOF
+# increase inotify watches for IDEs, file-watchers, etc.
+fs.inotify.max_user_watches = $INOTIFY_WATCHES
+EOF
+
+echo "▶️  Reloading all sysctl settings…"
+sysctl --system
+
+echo
+echo "🔍 Checking current open-file limit:"
+CUR_NOFILE="$(ulimit -n || echo 0)"
+echo "   ulimit -n => $CUR_NOFILE (target is $NOFILE_LIMIT)"
+
+if [ "$CUR_NOFILE" -lt "$NOFILE_LIMIT" ]; then
+  echo "🔧 Dropping in systemd override to set DefaultLimitNOFILE=$NOFILE_LIMIT"
+  mkdir -p /etc/systemd/system.conf.d
+  cat > /etc/systemd/system.conf.d/99-custom-nofile.conf <<EOF
+[Manager]
+# bump default per-process open-file limit for all services & user sessions
+DefaultLimitNOFILE=$NOFILE_LIMIT
+EOF
+
+  echo "▶️  Reloading systemd manager configuration…"
+  systemctl daemon-reload
+
+  echo
+  echo "✅ Done! Services you restart from here on will see the new limit."
+  echo "   For desktop sessions, you may need to log out and back in."
+else
+  echo "✔️  Current nofile limit ($CUR_NOFILE) ≥ target ($NOFILE_LIMIT). Skipping systemd override."
+fi
+
+echo
+echo "🎉 All set. To verify later, you can run:"
+echo "    sysctl fs.inotify.max_user_watches"
+echo "    ulimit -n"
+

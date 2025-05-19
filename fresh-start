@@ -66,7 +66,10 @@ apt install -y \
   v4l-utils \
   obs-studio \
   gnome-online-accounts \
-  gvfs-backends
+  gvfs-backends \
+  nautilus \
+  file-roller \
+  ninja-build
 
 
 ############################
@@ -248,6 +251,28 @@ sudo sysctl --system
 #### FF MPEG Snap 
 sudo snap install ffmpeg
 
+
+### Install k3d
+curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+
+
+### Download kubectl
+curl -Lo ~/bin/kubectl "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+chmod +x ~/bin/kubectl
+
+#### Register Geany as editor
+xdg-mime default geany.desktop text/plain
+## Or this. How are they different?
+gio mime text/plain geany.desktop
+
+#### Install the good OBS
+sudo add-apt-repository ppa:obsproject/obs-studio
+sudo apt update
+sudo apt install obs-studio
+
+
+#### Flameshot
+flatpak install -y flathub org.flameshot.Flameshot
 
 echo
 echo "All done!"
