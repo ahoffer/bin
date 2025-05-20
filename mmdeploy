@@ -1,0 +1,88 @@
+#! /usr/bin/bash
+set -euo pipefail
+
+# constants
+APOLLO_URL="https://mcs-octo-usgc-2.palantirgov.com/"
+VALUES_FILE="ssf-values.yaml"
+
+usage() {
+  cat <<EOF
+Usage: ${0##*/} <version>
+
+Pushes Helm chart and publishes Apollo manifest for the given version.
+
+Arguments:
+  version
+        The version suffix (e.g. 1.2.3) used to name marrs-<version>.tgz
+
+Environment variables (must be set):
+  SSF_NEXUS_USER       Nexus registry username
+  SSF_NEXUS_TOKEN      Nexus registry password
+  SSF_NEXUS_HOST       Nexus registry host (e.g. nexus.ssf.sclzdev.net)
+EOF
+}
+
+# handle help flag
+if [[ "${1:-}" =~ ^(-h|--help)$ ]]; then
+  usage
+  exit 0
+fi
+
+# require exactly one argument
+if [[ $# -ne 1 ]]; then
+  echo "Error: Missing version argument" >&2
+  exit 1
+fi
+
+VERSION="$1"
+CHART_PKG="marrs-$VERSION.tgz"
+
+# verify required environment variables
+for var in SSF_NEXUS_USER SSF_NEXUS_TOKEN SSF_NEXUS_HOST; do
+  if [[ -z "${!var:-}" ]]; then
+    echo "Error: Environment variable $var must be set" >&2
+    exit 1
+  fi
+done
+
+# verify required files exist
+if [[ ! -f "$CHART_PKG" ]]; then
+  echo "Error: '$CHART_PKG' not found in current directory." >&2
+  exit 1
+fi
+
+if [[ ! -f "$VALUES_FILE" ]]; then
+  echo "Error: '$VALUES_FILE' not found in current directory." >&2
+  exit 1
+fi
+
+# helm login & push
+helm registry login nexus.ssf.sclzdev.net \
+  --username "$SSF_NEXUS_USER" \
+  --password "$SSF_NEXUS_TOKEN"
+
+helm push "$CHART_PKG" "oci://$SSF_NEXUS_HOST/marrs-helm"
+
+# manifest creation
+apollo-cli manifest create helm-chart \
+  --chart-file "./$CHART_PKG" \
+  --helm-repository-url "oci://$SSF_NEXUS_HOST/marrs-helm/marrs" \
+  --maven-coordinate "com.ibm.octocx:marrs:$VERSION" \
+  --helm-values "$VALUES_FILE"
+
+echo
+
+# check if already authenticated
+if apollo-cli list-products --apollo-url "$APOLLO_URL" --quiet > /dev/null 2>&1; then
+  echo "Apollo CLI already authenticated"
+else
+  read -r -p "Paste your Apollo token and press [ENTER]: " APOLLO_TOKEN
+  apollo-cli configure \
+    --apollo-url "$APOLLO_URL" \
+    --apollo-token "$APOLLO_TOKEN" \
+    --apollo-token-provider static
+fi
+
+# publish manifest
+apollo-cli publish manifest --manifest-file ./manifest.yml
+
