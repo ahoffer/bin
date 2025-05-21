@@ -6,6 +6,12 @@
 #  source "${HOME}/bin/bashrc"
 #fi
 
+
+# set PATH so it includes user's private bin if it exists
+if [ -d "$HOME/bin" ] ; then
+    PATH="$HOME/bin:$PATH"
+fi
+
 export HISTCONTROL=ignoredups
 shopt -s histappend
 PROMPT_COMMAND='history -a'
@@ -30,7 +36,6 @@ PROMPT_COMMAND='history -a'
  
 # Only append if not already present
 grep -qxF 'export PATH="$HOME/bin:$PATH"' ~/.profile || echo 'export PATH="$HOME/bin:$PATH"' >> ~/.profile
-
 
 HISTSIZE=50
 HISTFILESIZE=2000
