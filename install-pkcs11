@@ -71,5 +71,7 @@ else
   fi
 fi
 
-echo "Setup complete"
-
+echo "Test card reader"
+echo "opensc-tool -n"
+echo "Test card"
+echo "pkcs15-tool --list-certificates"
