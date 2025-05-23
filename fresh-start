@@ -34,7 +34,8 @@ apt install -y \
   gnupg \
   lsb-release \
   apt-transport-https \
-  libfuse2t64
+  libfuse2t64 \
+  software-properties-common
 
 ############################
 # 2) Java, Maven & tools
@@ -53,13 +54,12 @@ apt install -y \
   python3-pip \
   python3-venv \
   jq \
-  yamlformat \
+  yq \
   autoconf \
   autotools-dev \
   locate \
   apt-transport-https \
   ca-certificates \
-  curl \
   gnupg \
   tree \
   graphviz \
@@ -226,12 +226,39 @@ helm version         || echo "Helm not found"
 git config --global credential.helper store
 
 
-#K8s
-sudo curl -fsSL https://pkgs.k8s.io/debian/doc/apt-key.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/debian main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
-sudo apt update
-sudo apt install -y kubeadm kubelet kubectl
-sudo apt-mark hold kubeadm kubelet kubectl
+############################
+# Register Kubernetes repo (community‐owned repo)
+############################
+K8S_KEYRING=/etc/apt/keyrings/kubernetes-archive-keyring.gpg
+K8S_LIST=/etc/apt/sources.list.d/kubernetes.list
+K8S_DEB="deb [signed-by=${K8S_KEYRING}] https://pkgs.k8s.io/core:/stable:/v1.33/deb/ /"
+
+echo "Configuring Kubernetes apt repo…"
+
+# 1) Import the key only if it doesn't already exist
+if [[ ! -f "$K8S_KEYRING" ]]; then
+  echo "→ Adding Kubernetes GPG key…"
+  mkdir -p /etc/apt/keyrings
+  curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.33/deb/Release.key \
+    | gpg --batch --yes --dearmor -o "$K8S_KEYRING"
+else
+  echo "→ Kubernetes keyring already present; skipping."
+fi
+
+# 2) Add the apt source only if it’s not already in place
+if ! grep -Fxq "$K8S_DEB" "$K8S_LIST" 2>/dev/null; then
+  echo "→ Writing Kubernetes apt source…"
+  tee "$K8S_LIST" >/dev/null <<EOF
+$K8S_DEB
+EOF
+else
+  echo "→ Kubernetes apt source already configured; skipping."
+fi
+
+# install & pin
+apt update
+apt install -y kubelet kubeadm kubectl
+apt-mark hold kubelet kubeadm kubectl
 
 
 ###### Add VS Code
@@ -268,19 +295,29 @@ sudo snap install ffmpeg
 curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
 
 
-### Download kubectl
-curl -Lo ~/bin/kubectl "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-chmod +x ~/bin/kubectl
+### Download kubectl to always get the latest “stable” release
+# Doesn't work as sudo
+#curl -Lo ~/bin/kubectl "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+#chmod +x ~/bin/kubectl
+apt install -y 
 
 #### Register Geany as editor
 xdg-mime default geany.desktop text/plain
 ## Or this. How are they different?
+apt install -y geany
 gio mime text/plain geany.desktop
 
 #### Install the good OBS
-sudo add-apt-repository ppa:obsproject/obs-studio
-sudo apt update
-sudo apt install obs-studio
+OBS_LIST=/etc/apt/sources.list.d/obs-studio-ppa.list
+if [[ ! -f "$OBS_LIST" ]]; then
+  echo "Adding OBS Studio PPA…"
+  # -y / --yes skips the ENTER prompt
+  add-apt-repository -y ppa:obsproject/obs-studio
+else
+  echo "OBS Studio PPA already configured; skipping."
+fi
+apt update
+apt install obs-studio
 
 
 #### Flameshot
@@ -288,4 +325,3 @@ flatpak install -y flathub org.flameshot.Flameshot
 
 echo
 echo "All done!"
-
