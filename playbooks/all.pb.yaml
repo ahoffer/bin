@@ -1,9 +1,0 @@
----
-- name: Runn all playbooks
-  hosts: localhost
-- import_playbook: root.pb.yaml
-- import_playbook: gnome.pb.yaml
-- import_playbook: git.pb.yaml
-- import_playbook: chrome.pb.yaml
-- import_playbook: steam.pb.yaml
-- import_playbook: docker.pb.yaml

@@ -1,5 +1,0 @@
----
-# vars file for ms-teams
-teams_packages_gpg_key: https://packages.microsoft.com/keys/microsoft.asc
-teams_repo_name: teams
-teams_yum_repo: https://packages.microsoft.com/yumrepos/ms-teams

@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# -----------------------------------------------------------------------------
+# setup-nssdb.sh — initialize & populate Chrome/NSS DB for CAC + DoD CAs
+# Idempotent: safe to re-run anytime.
+# -----------------------------------------------------------------------------
+
+# Directory and DB spec
+DB_ROOT="$HOME/.pki/nssdb"
+DBDIR="sql:$DB_ROOT"
+
+# PKCS#11 module
+PKCS11_MOD="/usr/lib/x86_64-linux-gnu/pkcs11/opensc-pkcs11.so"
+MODNAME="OpenSC CAC"
+
+# 1) Ensure NSS DB exists
+if [ ! -f "$DB_ROOT/cert9.db" ]; then
+  echo "→ Initializing NSS DB at $DB_ROOT"
+  mkdir -p "$DB_ROOT"
+  certutil -N -d "$DBDIR" --empty-password
+else
+  echo "✓ NSS DB already initialized at $DB_ROOT"
+fi
+
+# 2) Register PKCS#11 module
+if modutil -dbdir "$DBDIR" -list | grep -qF "$MODNAME"; then
+  echo "✓ PKCS#11 module '$MODNAME' already registered"
+else
+  echo "→ Adding PKCS#11 module '$MODNAME'"
+  modutil -dbdir "$DBDIR" -add "$MODNAME" -libfile "$PKCS11_MOD"
+  echo "✓ Module added"
+fi
