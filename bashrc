@@ -56,6 +56,7 @@ export YAMLLINT_CONFIG_FILE=/home/aaron/bin/.yamllint
 alias pickjava='. $HOME/bin/pickjava' #source trick
 
 
-export PATH=$PATH:$(go env GOPATH)/bin
+# Add Go binaries to PATH if Go is installed
+command -v go >/dev/null 2>&1 && export PATH="$PATH:$(go env GOPATH)/bin"
 
 
