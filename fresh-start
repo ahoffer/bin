@@ -51,7 +51,7 @@ apt install -y \
   gnome-shell-extension-manager \
   flameshot \
   python3-pip \
-  python3-venv
+  python3-venv \
   jq \
   yamlformat \
   autoconf \
