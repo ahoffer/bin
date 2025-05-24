@@ -46,6 +46,7 @@ apt install -y \
   vim \
   xclip \
   maven \
+  openssh-server \
   build-essential \
   openjdk-11-jdk \
   openjdk-17-jdk \
@@ -324,5 +325,9 @@ apt install obs-studio
 #### Flameshot
 flatpak install -y flathub org.flameshot.Flameshot
 
+#### Enable ssh server
+sudo systemctl enable --now ssh
+
 echo
 echo "All done!"
+
