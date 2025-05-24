@@ -78,7 +78,11 @@ apt install -y \
   gstreamer1.0-plugins-ugly \
   gstreamer1.0-libav \
   gstreamer1.0-tools \
-  pipx
+  pipx \
+  remmina \
+  remmina-plugin-rdp \
+  remmina-plugin-secret \
+  freerdp2-x11
 
 
 #### pipx - can use instead of pip to install global utilities like yamlformat
