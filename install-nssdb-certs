@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# -----------------------------------------------------------------------------
+# Import certs into existing NSS DB
+# Idempotent: skips already‐imported certs; errors if NSS DB missing.
+# Uses current directory for .crt files.
+# -----------------------------------------------------------------------------
+
+# 1) Use current directory for cert source
+CERT_SOURCE_DIR="."
+
+# 2) NSS DB directory spec
+NSSDB="sql:$HOME/.pki/nssdb"
+DB_PATH="$HOME/.pki/nssdb/cert9.db"
+
+# 3) Check that NSS DB exists and is initialized
+if [ ! -f "$DB_PATH" ]; then
+  echo "✗ ERROR: NSS DB not found or not initialized at $DB_PATH"
+  echo "  Please run setup-nssdb.sh first to create and initialize your NSS database."
+  exit 1
+fi
+
+# 4) Abort if no .crt files in current directory
+if ! compgen -G "$CERT_SOURCE_DIR"/*.crt > /dev/null; then
+  echo "✗ ERROR: No .crt files found in $(pwd)"
+  exit 1
+fi
+
+# 5) Count certificates before
+before_count=$(certutil -d "$NSSDB" -L | sed '1,2d' | wc -l)
+
+# 6) Loop through and import
+for crt in "$CERT_SOURCE_DIR"/*.crt; do
+  nick=$(basename "$crt" .crt)
+
+  if certutil -d "$NSSDB" -L -n "$nick" &>/dev/null; then
+    echo "✓ $nick already in NSS DB"
+    continue
+  fi
+
+  echo "→ Importing $nick into NSS DB"
+  if certutil -d "$NSSDB" -A -n "$nick" -t "CT,C,C" -i "$crt"; then
+    echo "  ✅ Imported $nick"
+  else
+    echo "  ❗ Failed to import $nick"
+  fi
+done
+
+# 7) Count certificates after
+after_count=$(certutil -d "$NSSDB" -L | sed '1,2d' | wc -l)
+
+# 8) Print summary
+added=$((after_count - before_count))
+echo
+echo "Certificates before import: $before_count"
+echo "Certificates after import:  $after_count"
+echo "New certificates added:    $added"
+
