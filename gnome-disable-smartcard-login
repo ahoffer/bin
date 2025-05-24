@@ -2,21 +2,29 @@
 set -euo pipefail
 
 #------------------------------------------------------------------------
-# Disables smartcard authentication in GDM and enforces password login
-# on Ubuntu 24.04 with GNOME 46. 
+# fix-gdm-smartcard.sh
+#
+# On Ubuntu 24.04 + GNOME 46 force GDM to stop requiring a smartcard
+# at the greeter while still keeping pcscd/NSS alive in-session.
 #------------------------------------------------------------------------
 
-# 1) Ensure sudo is working
-if ! command -v sudo &>/dev/null; then
-  echo "❌ sudo is required to run this script." >&2
+# 0) Must be run with sudo (you’ll be prompted once)
+if (( EUID != 0 )); then
+  echo "⚠️  Please run with sudo:  sudo $0"
   exit 1
 fi
 
-# 2) Create the GDM dconf override directory (if needed)
-sudo mkdir -p /etc/dconf/db/gdm.d
+# 1) Ensure the GDM dconf-profile exists
+cat > /etc/dconf/profile/gdm << 'EOF'
+user-db:user
+system-db:gdm
+EOF
 
-# 3) Write the override file
-sudo tee /etc/dconf/db/gdm.d/00-custom-login > /dev/null <<'EOF'
+# 2) Ensure the override directory
+mkdir -p /etc/dconf/db/gdm.d
+
+# 3) Write our login-screen override
+cat > /etc/dconf/db/gdm.d/00-custom-login << 'EOF'
 [org/gnome/login-screen]
 # disable the “Insert smart-card” UI
 enable-smartcard-authentication=false
@@ -25,6 +33,13 @@ enable-password-authentication=true
 EOF
 
 # 4) Rebuild the system dconf database
-sudo dconf update
+dconf update
 
-echo "Reboot for changes to take effect"
+# 5) Point GDM’s “gdm-smartcard” PAM link at the fallback (password) profile
+update-alternatives --set gdm-smartcard /etc/pam.d/gdm-smartcard-sssd-or-password
+
+# 6) Restart GDM so it picks everything up
+systemctl restart gdm
+
+echo "✅ Done! GDM will now show the password field only."
+
