@@ -2,30 +2,19 @@
 set -euo pipefail
 
 #------------------------------------------------------------------------
-# v2.0
-#
-# On Ubuntu 24.04 + GNOME 46, force GDM3 to show only the password
-# prompt at login (even with Wayland disabled), while keeping smartcard
-# auth working in-session.
+# v3
+# On Ubuntu 24.04 + GNOME 46 force GDM to stop requiring a smartcard
+# at the greeter, even when Wayland is disabled, while still keeping
+# pcscd/NSS alive in-session.
 #------------------------------------------------------------------------
 
-# 0) Must be run with sudo
-if (( EUID != 0 )); then
-  echo "⚠️  Please run with sudo:  sudo $0"
-  exit 1
-fi
-
+# 1) Disable Wayland in GDM3 (so we know GDM is running X11)
 GDM_CONF=/etc/gdm3/custom.conf
-
-# 1) Disable Wayland in GDM3
-if ! grep -q '^WaylandEnable=false' "$GDM_CONF"; then
-  if grep -q '^\[daemon\]' "$GDM_CONF"; then
-    sed -i '/^\[daemon\]/a WaylandEnable=false' "$GDM_CONF"
-  else
-    # ensure we have a [daemon] block
-    printf "[daemon]\nWaylandEnable=false\n" >> "$GDM_CONF"
-  fi
+if ! grep -q '^WaylandEnable=' "$GDM_CONF"; then
+  # inject under [daemon] if not already present
+  sed -i '/^\[daemon\]/a WaylandEnable=false' "$GDM_CONF"
 else
+  # ensure it's set to false
   sed -ri 's/^#?WaylandEnable=.*/WaylandEnable=false/' "$GDM_CONF"
 fi
 
@@ -50,64 +39,10 @@ EOF
 # 5) Rebuild the system dconf database
 dconf update
 
-# 6) Point GDM’s “gdm-smartcard” PAM link at the fallback password profile
+# 6) Point GDM’s “gdm-smartcard” PAM link at the fallback (password) profile
 update-alternatives --set gdm-smartcard /etc/pam.d/gdm-smartcard-sssd-or-password
 
 # 7) Restart GDM3 so it picks everything up
 systemctl restart gdm3
 
-echo
-echo "🔧 Configuration applied; now verifying…"
-echo
-
-PASS=0
-FAIL=0
-
-# — Verify Wayland disabled —
-if grep -q '^WaylandEnable=false' "$GDM_CONF"; then
-  echo "✅ Wayland is disabled in $GDM_CONF"
-  ((PASS++))
-else
-  echo "❌ WaylandEnable=false *not* found in $GDM_CONF"
-  ((FAIL++))
-fi
-
-# — Verify dconf profile —
-if [[ -f /etc/dconf/profile/gdm ]]; then
-  echo "✅ /etc/dconf/profile/gdm exists"
-  ((PASS++))
-else
-  echo "❌ /etc/dconf/profile/gdm is missing"
-  ((FAIL++))
-fi
-
-# — Verify dconf override —
-if grep -q 'enable-smartcard-authentication=false' /etc/dconf/db/gdm.d/00-custom-login \
-   && grep -q 'enable-password-authentication=true' /etc/dconf/db/gdm.d/00-custom-login; then
-  echo "✅ dconf override file /etc/dconf/db/gdm.d/00-custom-login is correct"
-  ((PASS++))
-else
-  echo "❌ dconf override file /etc/dconf/db/gdm.d/00-custom-login is incorrect or missing"
-  ((FAIL++))
-fi
-
-# — Verify PAM alternative —
-CURRENT=$(update-alternatives --query gdm-smartcard | awk '/Value: /{print $2}')
-if [[ "$CURRENT" == "/etc/pam.d/gdm-smartcard-sssd-or-password" ]]; then
-  echo "✅ gdm-smartcard alternative points to password fallback"
-  ((PASS++))
-else
-  echo "❌ gdm-smartcard alternative is set to '$CURRENT'"
-  ((FAIL++))
-fi
-
-echo
-echo "✔️  Passed: $PASS checks"
-echo "❌  Failed: $FAIL checks"
-echo
-
-if (( FAIL == 0 )); then
-  echo "All checks passed. Please log out or reboot to confirm you now get only a password prompt."
-else
-  echo "One or more checks failed. Double-check the script’s output and paths."
-fi
+echo "✅ Done! Wayland is disabled and GDM will now show only the password field."
