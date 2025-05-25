@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+(( EUID == 0 )) || { echo "ERROR: run as root"; exit 1; }
+
+CHANGED=0
+
+# 1) Disable & mask systemd-resolved
+if systemctl is-enabled systemd-resolved &>/dev/null; then
+  systemctl disable --now systemd-resolved
+  systemctl mask systemd-resolved
+  echo "[INFO] disabled & masked systemd-resolved"
+  CHANGED=1
+fi
+
+# 2) NM DNS → default
+CONF=/etc/NetworkManager/conf.d/99-no-resolved.conf
+if ! grep -q '^dns=default$' "$CONF" 2>/dev/null; then
+  mkdir -p "${CONF%/*}"
+  printf '[main]\ndns=default\n' > "$CONF"
+  echo "[INFO] set NM to use DHCP DNS"
+  CHANGED=1
+fi
+
+# 3) Symlink resolv.conf
+TARGET=/run/NetworkManager/resolv.conf
+if [[ "$(readlink -f /etc/resolv.conf 2>/dev/null)" != "$TARGET" ]]; then
+  ln -sf "$TARGET" /etc/resolv.conf
+  echo "[INFO] linked /etc/resolv.conf → $TARGET"
+  CHANGED=1
+fi
+
+# 4) Wrap up
+if (( CHANGED )); then
+  echo "[INFO] done—please reboot to apply DNS changes"
+else
+  echo "[INFO] already configured; no reboot needed"
+fi
+
