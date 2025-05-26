@@ -48,6 +48,7 @@ alias pickjava='source $HOME/bin/pickjava'  #no subshell so it can source a file
 alias install-node='source $HOME/bin/install-node'  #no subshell so it can source a file
 alias ll='ls -alh'
 alias k='kubectl -n octo-mcs'
+alias h='history'
 
 # Do not set JAVA_HOME here. It gets written and re-written in ~/.bashrc
 #export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"

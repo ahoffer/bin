@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # -----------------------------------------------------------------------------
-# setup-nssdb.sh — initialize & populate Chrome/NSS DB for CAC + DoD CAs
+# setup-nssdb.sh - initialize & populate Chrome/NSS DB for CAC + DoD CAs
 # Idempotent: safe to re-run anytime.
 # -----------------------------------------------------------------------------
 
@@ -14,20 +14,29 @@ DBDIR="sql:$DB_ROOT"
 PKCS11_MOD="/usr/lib/x86_64-linux-gnu/pkcs11/opensc-pkcs11.so"
 MODNAME="OpenSC CAC"
 
-# 1) Ensure NSS DB exists
-if [ ! -f "$DB_ROOT/cert9.db" ]; then
-  echo "→ Initializing NSS DB at $DB_ROOT"
-  mkdir -p "$DB_ROOT"
+# 1) Ensure NSS DB directory exists
+mkdir -p "$DB_ROOT"
+
+# 2) Initialize NSS DB if it isn't already
+if ! certutil -d "$DBDIR" -L >/dev/null 2>&1; then
+  echo "Initializing NSS DB at $DB_ROOT"
   certutil -N -d "$DBDIR" --empty-password
 else
-  echo "✓ NSS DB already initialized at $DB_ROOT"
+  echo "NSS DB already initialized at $DB_ROOT"
 fi
 
-# 2) Register PKCS#11 module
-if modutil -dbdir "$DBDIR" -list | grep -qF "$MODNAME"; then
-  echo "✓ PKCS#11 module '$MODNAME' already registered"
-else
-  echo "→ Adding PKCS#11 module '$MODNAME'"
-  modutil -dbdir "$DBDIR" -add "$MODNAME" -libfile "$PKCS11_MOD"
-  echo "✓ Module added"
+# 3) Verify PKCS#11 module file exists
+if [ ! -f "$PKCS11_MOD" ]; then
+  echo "Error: PKCS#11 module file '$PKCS11_MOD' not found"
+  exit 1
 fi
+
+# 4) Register PKCS#11 module if missing
+if modutil -dbdir "$DBDIR" -list | grep -qF "$MODNAME"; then
+  echo "PKCS#11 module '$MODNAME' already registered"
+else
+  echo "Adding PKCS#11 module '$MODNAME'"
+  modutil -dbdir "$DBDIR" -add "$MODNAME" -libfile "$PKCS11_MOD"
+  echo "Module added"
+fi
+
