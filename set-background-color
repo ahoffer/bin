@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# -----------------------------------------------------------------------------
+# set-bg-color.sh — Set GNOME background to a solid color on Ubuntu 24.04+
+# Usage: ./set-bg-color.sh "#4682B4"
+# -----------------------------------------------------------------------------
+
+if [[ $# -ne 1 ]]; then
+  echo "Usage: $0 \"#RRGGBB\""
+  exit 1
+fi
+
+COLOR="$1"
+
+# Validate color format
+if ! [[ "$COLOR" =~ ^#[0-9a-fA-F]{6}$ ]]; then
+  echo "Error: Color must be in hex format, like '#4682B4'"
+  exit 2
+fi
+
+echo "[INFO] Setting GNOME background color to $COLOR..."
+
+gsettings set org.gnome.desktop.background picture-uri ''
+gsettings set org.gnome.desktop.background primary-color "$COLOR"
+gsettings set org.gnome.desktop.background color-shading-type 'solid'
+
+echo "[SUCCESS] Background color set to $COLOR"
+
