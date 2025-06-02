@@ -49,6 +49,8 @@ alias install-node='source $HOME/bin/install-node'  #no subshell so it can sourc
 alias ll='ls -alh'
 alias k='kubectl -n octo-mcs'
 alias h='history'
+alias helmlogin='helm registry login $SSF_NEXUS_HOST --username $SSF_NEXUS_USER --password $SSF_NEXUS_TOKEN'
+alias sourceb='source ~/.bashrc'
 
 # Do not set JAVA_HOME here. It gets written and re-written in ~/.bashrc
 #export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"
@@ -62,4 +64,6 @@ alias pickjava='. $HOME/bin/pickjava' #source trick
 # Add Go binaries to PATH if Go is installed
 command -v go >/dev/null 2>&1 && export PATH="$PATH:$(go env GOPATH)/bin"
 
-
+# Append history lines immediately
+export PROMPT_COMMAND="history -a; history -n"
+shopt -s histappend

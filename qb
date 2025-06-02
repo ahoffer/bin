@@ -1,37 +1,33 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e  # Exit on any error
 
+# 1) Format licenses and code
 mvn license:format
 mvn com.spotify.fmt:fmt-maven-plugin:format -T1C
-corepack enable
 
-# Only prepare Yarn if it's not already the correct version
-if ! yarn -v | grep -q '4.5.1'; then
-    corepack prepare yarn@4.5.1 --activate
+# 2) Ensure Yarn 4.5.1 via Corepack
+corepack enable
+if ! yarn -v | grep -Eq '^v?4\.5\.1$'; then
+  corepack prepare yarn@4.5.1 --activate
 fi
 
-# Assume clean unless --dirty is passed
+# 3) Default: do a clean build, unless --dirty or -dirty is passed
 RUN_CLEAN=true
-
-# Scan for --dirty flag without modifying "$@"
 for arg in "$@"; do
-  if [[ "$arg" == "--dirty" ]]; then
+  if [[ "$arg" == "--dirty" || "$arg" == "-dirty" ]]; then
     RUN_CLEAN=false
     break
   fi
 done
 
-# Filter out --dirty when calling Maven
-MAVEN_ARGS=()
-for arg in "$@"; do
-  if [[ "$arg" != "--dirty" ]]; then
-    MAVEN_ARGS+=("$arg")
-  fi
-done
+# 4) (DELETED)
 
+# 5) Run Maven with or without clean, passing all original args (except "--dirty"/"-dirty")
 if $RUN_CLEAN; then
-  mvn clean install -DskipTests "${MAVEN_ARGS[@]}"
+  echo "→ Running: mvn clean install -DskipTests $*"
+  mvn clean install -DskipTests "$@"
 else
-  mvn install -DskipTests "${MAVEN_ARGS[@]}"
+  echo "→ Running: mvn install -DskipTests $*"
+  mvn install -DskipTests "$@"
 fi
 
