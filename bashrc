@@ -40,10 +40,9 @@ fi
 
 
 HISTSIZE=50
-HISTFILESIZE=2000
+HISTFILESIZE=20000
 
 
-alias e='geany'
 alias pickjava='source $HOME/bin/pickjava'  #no subshell so it can source a file
 alias install-node='source $HOME/bin/install-node'  #no subshell so it can source a file
 alias ll='ls -alh'
