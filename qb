@@ -1,33 +1,37 @@
 #!/usr/bin/env bash
-set -e  # Exit on any error
+# qb – quick build helper
+set -euo pipefail
+IFS=$'\n\t'
 
-# 1) Format licenses and code
+########################################
+# 1) Format code & licenses
+########################################
 mvn license:format
 mvn com.spotify.fmt:fmt-maven-plugin:format -T1C
 
-# 2) Ensure Yarn 4.5.1 via Corepack
+########################################
+# 2) Ensure Yarn 4.5.1 via Corepack
+########################################
 corepack enable
-if ! yarn -v | grep -Eq '^v?4\.5\.1$'; then
-  corepack prepare yarn@4.5.1 --activate
-fi
+yarn -v | grep -Eq '^v?4\.5\.1$' || corepack prepare yarn@4.5.1 --activate
 
-# 3) Default: do a clean build, unless --dirty or -dirty is passed
+########################################
+# 3) Parse flags
+########################################
 RUN_CLEAN=true
+ARGS=()
+
 for arg in "$@"; do
-  if [[ "$arg" == "--dirty" || "$arg" == "-dirty" ]]; then
-    RUN_CLEAN=false
-    break
-  fi
+  case "$arg" in
+    --dirty|-dirty) RUN_CLEAN=false ;;   # drop the flag
+    *)              ARGS+=("$arg")  ;;   # forward everything else
+  esac
 done
 
-# 4) (DELETED)
-
-# 5) Run Maven with or without clean, passing all original args (except "--dirty"/"-dirty")
-if $RUN_CLEAN; then
-  echo "→ Running: mvn clean install -DskipTests $*"
-  mvn clean install -DskipTests "$@"
-else
-  echo "→ Running: mvn install -DskipTests $*"
-  mvn install -DskipTests "$@"
-fi
+########################################
+# 4) Build with Maven
+########################################
+CMD=(mvn ${RUN_CLEAN:+clean} install -DskipTests "${ARGS[@]}")
+echo "→ ${CMD[*]}"
+"${CMD[@]}"
 
