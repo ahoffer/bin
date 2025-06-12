@@ -47,7 +47,6 @@ alias pickjava='source $HOME/bin/pickjava'  #no subshell so it can source a file
 alias install-node='source $HOME/bin/install-node'  #no subshell so it can source a file
 alias ll='ls -alh'
 alias k='kubectl -n octo-mcs'
-alias h='history'
 alias helmlogin='helm registry login $SSF_NEXUS_HOST --username $SSF_NEXUS_USER --password $SSF_NEXUS_TOKEN'
 alias sourceb='source ~/.bashrc'
 
