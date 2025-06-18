@@ -53,7 +53,7 @@ alias sourceb='source ~/.bashrc'
 # Do not set JAVA_HOME here. It gets written and re-written in ~/.bashrc
 #export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"
 
-export KUBECONFIG=~/.kube/config:~/.kube/mm-config
+export KUBECONFIG=~/.kube/config
 export YAMLLINT_CONFIG_FILE=/home/aaron/bin/.yamllint
 
 alias pickjava='. $HOME/bin/pickjava' #source trick
@@ -65,3 +65,12 @@ command -v go >/dev/null 2>&1 && export PATH="$PATH:$(go env GOPATH)/bin"
 # Append history lines immediately
 export PROMPT_COMMAND="history -a; history -n"
 shopt -s histappend
+
+
+#Tab completion for kubectl, if kubectl is available
+command -v kubectl &>/dev/null && source <(kubectl completion bash)
+
+#Tab completion for Helm, if helm is available
+command -v helm &>/dev/null && source <(helm completion bash)
+
+
