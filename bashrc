@@ -46,7 +46,8 @@ HISTFILESIZE=20000
 alias pickjava='source $HOME/bin/pickjava'  #no subshell so it can source a file
 alias install-node='source $HOME/bin/install-node'  #no subshell so it can source a file
 alias ll='ls -alh'
-alias k='kubectl -n octo-mcs'
+alias k='kubectl'
+complete -F __start_kubectl k
 alias helmlogin='helm registry login $SSF_NEXUS_HOST --username $SSF_NEXUS_USER --password $SSF_NEXUS_TOKEN'
 alias sourceb='source ~/.bashrc'
 
@@ -66,11 +67,15 @@ command -v go >/dev/null 2>&1 && export PATH="$PATH:$(go env GOPATH)/bin"
 export PROMPT_COMMAND="history -a; history -n"
 shopt -s histappend
 
-
 #Tab completion for kubectl, if kubectl is available
 command -v kubectl &>/dev/null && source <(kubectl completion bash)
 
 #Tab completion for Helm, if helm is available
 command -v helm &>/dev/null && source <(helm completion bash)
 
+#Tab completion for nerdctl, if it is available
+command -v nerdctl &>/dev/null && source <(nerdctl completion bash)
+
+#Set path to Container Network Interface
+export CNI_PATH=~/.local/libexec/cni
 

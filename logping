@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+##########################  CONFIG / OVERRIDES  #############################
+DEFAULT_HZ=2                    # default 2 Hz  (0.5 s interval)
+LOGDIR="${HOME}/pinglogs"       # export LOGDIR=/path/to/logs to override
+#############################################################################
+
+# ---- parse first arg as sample-rate (Hz) ----------------------------------
+SRATE=${1:-$DEFAULT_HZ}
+[[ $SRATE =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "sample-rate must be numeric" >&2; exit 1; }
+
+# ---- derive interval ------------------------------------------------------
+# awk avoids bc. prints with 3-decimals; keeps at least 1 ms
+INTERVAL=$(awk -v r="$SRATE" 'BEGIN{if(r==0){exit 1}; i=1/r; if(i<0.001)i=0.001; printf "%.3f", i}')
+
+# ---- timeout : 75 % of interval, min 100 ms, max 1 s ----------------------
+TIMEOUT=$(awk -v i="$INTERVAL" 'BEGIN{t=i*0.75; if(t<0.1)t=0.1; if(t>1)t=1; printf "%.0f", t*1000}')
+
+# ---- targets --------------------------------------------------------------
+if (( $# > 1 )); then
+  shift        # drop SRATE
+  TARGETS=("$@")
+else
+  GW=$(ip -4 route show default | awk '{print $3; exit}')
+  [[ -z "$GW" ]] && GW="127.0.0.1"
+  TARGETS=("$GW" 1.1.1.1)
+fi
+
+# ---- prepare log file -----------------------------------------------------
+mkdir -p "$LOGDIR"
+STAMP=$(date +%Y%m%d-%H%M%S)
+LOGFILE="${LOGDIR}/ping-${STAMP}.log"
+
+# Write header if file is new / empty
+if [[ ! -s "$LOGFILE" ]]; then
+    echo 'epoch_ms,target,status,rtt_ms' >"$LOGFILE"
+fi
+
+# ---- helper : current epoch in milliseconds -------------------------------
+now_ms() { date +%s%3N; }
+
+# ---- main loop ------------------------------------------------------------
+trap 'echo >&2 "terminating…"; exit 0' INT TERM HUP
+
+while :; do
+  for tgt in "${TARGETS[@]}"; do
+    TS=$(now_ms)
+    if out=$(ping -n -q -c1 -W"$TIMEOUT" "$tgt" 2>&1); then
+      RTT=$(printf '%s\n' "$out" | awk -F'/' '/^rtt/{print $5}')
+      printf '%s,%s,O,%s\n' "$TS" "$tgt" "$RTT" >>"$LOGFILE"
+    else
+      if grep -qE 'Unreachable' <<<"$out"; then
+        printf '%s,%s,U,\n' "$TS" "$tgt" >>"$LOGFILE"
+      else
+        printf '%s,%s,T,\n' "$TS" "$tgt" >>"$LOGFILE"
+      fi
+    fi
+    sleep "$INTERVAL"
+  done
+done
