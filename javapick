@@ -1,73 +1,69 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Simple Java picker for a single-user workstation
+# Aaron ©2025 – public domain / CC0
 
-# Directory containing Java installations
+set -euo pipefail
+
 JVM_DIR="/usr/lib/jvm"
+BASHRC="$HOME/.bashrc"
+BIN_DIR="$HOME/bin"
 
-# Check if directory exists
-if [ ! -d "$JVM_DIR" ]; then
-    echo "Error: $JVM_DIR directory not found"
-    exit 1
-fi
+################################################################################
+# 1. Gather candidates – only keep directories that contain an executable java
+################################################################################
+declare -a javas
+declare -A seen         # for deduping canonical paths
 
-# Get list of Java installations
-# Exclude directories starting with '.' and 'default'
-java_versions=($(ls -d $JVM_DIR/* | grep -v "/\.\|/default"))
-
-# Check if any Java versions were found
-if [ ${#java_versions[@]} -eq 0 ]; then
-    echo "No Java installations found in $JVM_DIR"
-    exit 1
-fi
-
-# Display menu
-echo "Available Java versions:"
-echo "----------------------"
-for i in "${!java_versions[@]}"; do
-    version_name=$(basename "${java_versions[$i]}")
-    echo "[$i] $version_name"
+for d in "$JVM_DIR"/*; do
+  [[ -d $d && -x $d/bin/java ]] || continue
+  canon=$(readlink -f "$d")
+  [[ -z ${seen[$canon]:-} ]] && { javas+=("$canon"); seen[$canon]=1; }
 done
 
-# Get user selection
-read -p "Select Java version (0-$((${#java_versions[@]}-1))): " selection
+[[ ${#javas[@]} -gt 0 ]] || { echo "No JDKs found in $JVM_DIR"; exit 1; }
 
-# Validate input
-if ! [[ "$selection" =~ ^[0-9]+$ ]] || [ "$selection" -ge "${#java_versions[@]}" ]; then
-    echo "Invalid selection"
-    exit 1
-fi
+################################################################################
+# 2. Prompt user
+################################################################################
+echo "Available Java installations:"
+for i in "${!javas[@]}"; do
+  printf " [%d] %s\n" "$i" "$(basename "${javas[$i]}")"
+done
+printf "Select Java version (0-%d): " "$(( ${#javas[@]} - 1 ))"
+read -r sel
 
-selected_java="${java_versions[$selection]}"
-selected_name=$(basename "$selected_java")
+[[ $sel =~ ^[0-9]+$ && $sel -lt ${#javas[@]} ]] || { echo "Invalid selection"; exit 1; }
+JAVA_HOME_CHOSEN=${javas[$sel]}
 
-# Create a bin directory in user's home if it doesn't exist
-mkdir -p "$HOME/bin"
+################################################################################
+# 3. User-space overrides
+################################################################################
+mkdir -p "$BIN_DIR"
+ln -sf "$JAVA_HOME_CHOSEN/bin/java"  "$BIN_DIR/java"
+ln -sf "$JAVA_HOME_CHOSEN/bin/javac" "$BIN_DIR/javac"
 
-# Create symbolic links in user's bin directory
-ln -sf "$selected_java/bin/java" "$HOME/bin/java"
-ln -sf "$selected_java/bin/javac" "$HOME/bin/javac"
+# Ensure ~/bin comes first once
+grep -qxF 'export PATH="$HOME/bin:$PATH"' "$BASHRC" 2>/dev/null \
+  || echo 'export PATH="$HOME/bin:$PATH"' >> "$BASHRC"
 
-# Update PATH in .bashrc if needed
-if ! grep -q "PATH=\"\$HOME/bin:\$PATH\"" "$HOME/.bashrc"; then
-    echo 'export PATH="$HOME/bin:$PATH"' >> "$HOME/.bashrc"
-fi
-
-# Update JAVA_HOME in .profile
-if grep -q "export JAVA_HOME=" "$HOME/.profile"; then
-    sed -i "s#export JAVA_HOME=.*#export JAVA_HOME=\"$selected_java\"#g" "$HOME/.profile"
+# Replace any existing JAVA_HOME line or append a new one
+if grep -q '^export JAVA_HOME=' "$BASHRC" 2>/dev/null; then
+  sed -i "s|^export JAVA_HOME=.*|export JAVA_HOME=\"$JAVA_HOME_CHOSEN\"|" "$BASHRC"
 else
-    echo "export JAVA_HOME=\"$selected_java\"" >> "$HOME/.profile"
+  echo "export JAVA_HOME=\"$JAVA_HOME_CHOSEN\"" >> "$BASHRC"
 fi
 
-# Update current session
-export JAVA_HOME="$selected_java"
+# Apply to current shell
+export JAVA_HOME="$JAVA_HOME_CHOSEN"
 export PATH="$HOME/bin:$PATH"
 
-# Verify current version
-echo ""
-java -version
+################################################################################
+# 4. Show result
+################################################################################
+echo
+java  -version
 javac -version
-
-echo ""
-echo "Run 'source ~/.profile' or start a new terminal for changes to take effect"
-
+echo
+echo "✓ JAVA_HOME set to $JAVA_HOME_CHOSEN"
+echo "   Run  source ~/.bashrc  or open a new terminal to make it permanent."
 
