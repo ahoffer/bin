@@ -50,6 +50,9 @@ alias k='kubectl'
 complete -F __start_kubectl k
 alias helmlogin='helm registry login $SSF_NEXUS_HOST --username $SSF_NEXUS_USER --password $SSF_NEXUS_TOKEN'
 alias sourceb='source ~/.bashrc'
+alias k3stop='sudo systemctl stop k3s && dstop'
+alias k3go='sudo systemctl start k3s'
+
 
 # Do not set JAVA_HOME here. It gets written and re-written in ~/.bashrc
 #export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"

@@ -1,0 +1,22 @@
+#!/bin/bash
+set -e
+
+# Set desired ZFS ARC max size (2 GiB)
+ARC_MAX_BYTES=2147483648
+MODPROBE_CONF="/etc/modprobe.d/zfs.conf"
+
+echo "Setting ZFS ARC max size to 2 GiB..."
+
+# Add or replace the option in zfs.conf
+if grep -q "^options zfs zfs_arc_max=" "$MODPROBE_CONF"; then
+    sudo sed -i "s/^options zfs zfs_arc_max=.*/options zfs zfs_arc_max=$ARC_MAX_BYTES/" "$MODPROBE_CONF"
+else
+    echo "options zfs zfs_arc_max=$ARC_MAX_BYTES" | sudo tee -a "$MODPROBE_CONF"
+fi
+
+# Update initramfs to apply change
+echo "Updating initramfs..."
+sudo update-initramfs -u
+
+echo "Done. Please reboot to apply the new cache size."
+
