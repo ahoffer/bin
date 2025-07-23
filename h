@@ -30,7 +30,7 @@ fi
 # -F : fixed‑string search (faster, avoids unintended regex interpretation)
 # -n : show line numbers
 # --color=auto : highlight matches when stdout is a terminal
-if ! grep --color=always -n -F -- "$pattern" "$histfile" | sed 's/^[^:]*://' ; then
+if ! grep --color=always -n -F -- "$pattern" "$histfile" | sed 's/^[^:]*:[[:space:]]*//' ; then
   printf 'No commands in history matching: %s\n' "$pattern" >&2
 fi
 

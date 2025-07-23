@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# downsize  –  fast, parallel image shrinker
+#     Turns foo.png → foo_small.jpg (≤1 MB, long edge ≤1600 px)
+#     If foo_small.jpg already exists it is *over-written*.
+#     Files that already end in *_small.<ext> are skipped to avoid *_small_small.jpg.
+#
+# Usage examples:
+#       downsize *.png *.heic
+#       downsize ~/pics/**/*.{jpg,png,heic}   # needs bash 4+ globstar
+
+set -euo pipefail
+shopt -s nocaseglob nullglob
+
+max_px=1600          # longest edge cap
+size_cap="1MB"       # per-file byte ceiling
+jobs=$(nproc)        # one worker per core; change if you like
+
+if [[ $# -eq 0 ]]; then
+  echo "Usage: $(basename "$0") <file|glob …>" >&2
+  exit 1
+fi
+
+###############################################################################
+# Build a list of real, supported input files
+###############################################################################
+tmp=$(mktemp)
+for f in "$@"; do
+  [[ -f $f ]] || continue                          # skip dirs, broken globs
+  base="${f%.*}"
+  [[ ${base,,} == *_small ]] && continue           # skip already-downsized
+  if magick identify -quiet "$f" > /dev/null 2>&1; then
+    printf '%s\0' "$f" >> "$tmp"
+  else
+    echo "Skipping unsupported: $f" >&2
+  fi
+done
+
+###############################################################################
+# Worker: downsizes one file and overwrites (or creates) <base>_small.jpg
+###############################################################################
+down_one() {
+  in_file=$1
+  out_file="${in_file%.*}_small.jpg"
+
+  # Limit threads *inside* ImageMagick so N workers scale cleanly
+  env MAGICK_THREAD_LIMIT=1 magick "$in_file" \
+        -resize "${max_px}x${max_px}>" \
+        -strip \
+        -define "jpeg:extent=${size_cap}" \
+        "$out_file"
+}
+export -f down_one
+export max_px size_cap
+
+###############################################################################
+# Launch workers in parallel via xargs
+###############################################################################
+xargs -0 -n1 -P "$jobs" bash -c 'down_one "$0"' < "$tmp"
+rm -f "$tmp"
+

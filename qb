@@ -6,7 +6,7 @@ IFS=$'\n\t'
 ########################################
 # 1) Format code & licenses
 ########################################
-mvn license:format
+mvn license:format -T1C
 mvn com.spotify.fmt:fmt-maven-plugin:format -T1C
 
 ########################################
