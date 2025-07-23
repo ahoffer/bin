@@ -1,0 +1,11 @@
+On a new machine...
+- Generate an ssh kepair with ssh-keygen -b 2048 -t rsa
+- Copy pub key to GitHub account
+- Clone from home dir, git clone git@github.com:ahoffer/bin.git
+
+After cloning...
+- Copy gitconfig_template to ~/.gitconfig
+- Open ~/bin/bashrc. Copy the parts that add ~/bin to the path into ~/.bashrc and source .bashrc
+- Source ~/.bashrc
+- Set up secret env var in ~/.bashrc
+
