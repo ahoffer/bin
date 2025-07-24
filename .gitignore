@@ -48,3 +48,4 @@ vagrant/.vagrant/
 apollo-cli
 helm
 kubectl
+_apollo_completions
