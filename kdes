@@ -1,0 +1,8 @@
+#!/bin/bash
+
+search_string=$1
+shift
+rest_of_the_line="$*"
+pod_name=$(kubectl get pods | grep "$search_string" | cut -d " " -f1)
+echo "Found $pod_name"
+kubectl describe pod "$pod_name" "$rest_of_line"
