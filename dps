@@ -11,10 +11,12 @@
 # "UniqueSize":"N/A",
 # "VirtualSize":"173.9MB"}
 
+CONTAINER_CLI=$(container-cli)
+
 export FIRST_ARG=$1
 if [ -z "$FIRST_ARG" ]; then
   #docker ps --format='table {{.Names}}\t{{.Status}}\t{{.Size}}\t{{.Ports}}'
-  docker ps --format='table {{.Names}}\t{{.Status}}\t{{.Size}}'
+  $CONTAINER_CLI ps --format='table {{.Names}}\t{{.Status}}\t{{.Size}}'
 else
-  docker ps --format='table {{.Names}}\t{{.Tag}}\t{{.CreatedSince}}\t{{.Size}}' | grep -i $FIRST_ARG
+  $CONTAINER_CLI ps --format='table {{.Names}}\t{{.Tag}}\t{{.CreatedSince}}\t{{.Size}}' | grep -i $FIRST_ARG
 fi

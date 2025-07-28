@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+# Determine which container CLI to use (docker or nerdctl)
+if command -v docker &>/dev/null; then
+  echo docker
+elif command -v nerdctl &>/dev/null; then
+  echo nerdctl
+else
+  echo "Error: neither docker nor nerdctl found in PATH" >&2
+  exit 1
+fi
+
