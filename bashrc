@@ -84,7 +84,9 @@ command -v helm &>/dev/null && source <(helm completion bash)
 #Tab completion for nerdctl, if it is available
 command -v nerdctl &>/dev/null && source <(nerdctl completion bash)
 
-# Not sure what this is. Is it redundant?
+command -v regctl &>/dev/null && source <(regctl completion bash)
+
+# Completions for the alias "k"
 complete -F __start_kubectl k
 
 # Use later version of Docker buildkit
