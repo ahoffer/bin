@@ -1,22 +1,35 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
-#{"Containers":"N/A",
-# "CreatedAt":"1969-12-31 17:00:00 -0700 MST",
-# "CreatedSince":"51 years ago",
-# "Digest":"\u003cnone\u003e","ID":"ceeed163a643",
-# "Repository":"docker-mn.di2e.net/reflex/channelguide-ui",
-# "SharedSize":"N/A",
-# "Size":"174MB",
-# "Tag":"latest",
-# "UniqueSize":"N/A",
-# "VirtualSize":"173.9MB"}
+TAB=$'\t'
 
-CONTAINER_CLI=$(container-cli)
+# Get base CLI name
+CLI=$(container-cli)
 
-export FIRST_ARG=$1
-if [ -z "$FIRST_ARG" ]; then
-  #docker ps --format='table {{.Names}}\t{{.Status}}\t{{.Size}}\t{{.Ports}}'
-  $CONTAINER_CLI ps --format='table {{.Names}}\t{{.Status}}\t{{.Size}}'
+# Test if we need sudo
+if $CLI ps &>/dev/null; then
+  CONTAINER_CLI="$CLI"
+elif sudo -n $CLI ps &>/dev/null; then
+  CONTAINER_CLI="sudo $CLI"
 else
-  $CONTAINER_CLI ps --format='table {{.Names}}\t{{.Tag}}\t{{.CreatedSince}}\t{{.Size}}' | grep -i $FIRST_ARG
+  echo "Error: cannot run $CLI, even with sudo" >&2
+  exit 1
 fi
+
+# Choose format strings
+if [[ "$CLI" == "docker" ]]; then
+  BASE_FORMAT="table {{.Names}}${TAB}{{.Status}}${TAB}{{.Size}}"
+  FILTER_FORMAT="table {{.Names}}${TAB}{{.Image}}${TAB}{{.CreatedAt}}${TAB}{{.Size}}"
+else
+  BASE_FORMAT="{{.Names}}${TAB}{{.Status}}${TAB}{{.Size}}"
+  FILTER_FORMAT="{{.Names}}${TAB}{{.Image}}${TAB}{{.CreatedAt}}${TAB}{{.Size}}"
+fi
+
+# Main logic
+if [[ $# -eq 0 ]]; then
+  $CONTAINER_CLI ps --format "$BASE_FORMAT"
+else
+  FILTER="$1"
+  $CONTAINER_CLI ps --format "$FILTER_FORMAT" | grep -i -- "$FILTER"
+fi
+
