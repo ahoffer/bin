@@ -1,12 +1,21 @@
 #!/usr/bin/env bash
 
-# Determine which container CLI to use (docker or nerdctl)
 if command -v docker &>/dev/null; then
-  echo docker
+  CLI=docker
 elif command -v nerdctl &>/dev/null; then
-  echo nerdctl
+  CLI=nerdctl
 else
   echo "Error: neither docker nor nerdctl found in PATH" >&2
+  exit 1
+fi
+
+# Try running without sudo
+if $CLI ps &>/dev/null; then
+  echo "$CLI"
+elif sudo -n $CLI ps &>/dev/null; then
+  echo "sudo $CLI"
+else
+  echo "Error: cannot run $CLI, even with sudo" >&2
   exit 1
 fi
 
