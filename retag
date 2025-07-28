@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+# retag.py — retag all locally cached images from one registry prefix to another
+#
+# USAGE
+#   ./retag.py <source-registry> <target-registry>
+#
+
+import sys
+import subprocess
+
+if len(sys.argv) != 3:
+    print("Usage: retag.py <source-registry> <target-registry>")
+    sys.exit(1)
+
+source_registry, target_registry = sys.argv[1], sys.argv[2]
+
+# Only include images that are tagged (not <none>)
+format_string = '{{if and (ne .Repository "<none>") (ne .Tag "<none>")}}{{.Repository}}:{{.Tag}} {{.ID}}{{end}}'
+
+try:
+    output = subprocess.check_output(
+        ["docker", "images", "--format", format_string],
+        text=True
+    )
+except subprocess.CalledProcessError as e:
+    print(f"Error running docker images: {e}")
+    sys.exit(1)
+
+seen_references = set()
+
+for line in output.splitlines():
+    line = line.strip()
+    if not line or not line.startswith(f"{source_registry}/"):
+        continue
+    try:
+        reference, dockerImageId = line.split()
+        new_reference = reference.replace(source_registry, target_registry, 1)
+        if new_reference in seen_references:
+            continue
+        seen_references.add(new_reference)
+        print(f"Retagging {reference} -> {new_reference}")
+        subprocess.run(["docker", "tag", dockerImageId, new_reference], check=True)
+    except ValueError:
+        continue  # defensively skip malformed lines
+

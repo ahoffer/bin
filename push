@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+# ------------------------------------------------------------------------
+# Push Docker images tagged for a given registry
+#
+# USAGE:
+#   ./push-images.sh <registry> [-a|--all]
+#
+# ARGUMENTS:
+#   <registry>    Required. Registry prefix to match, e.g. myregistry.local:5000
+#   -a, --all     Optional. Push all tags for each repository. Without this flag,
+#                 only one tag per repository is pushed (the first encountered).
+#
+# EXAMPLES:
+#   ./push-images.sh myregistry.local:5000
+#   ./push-images.sh myregistry.local:5000 --all
+# ------------------------------------------------------------------------
+
+if [ $# -lt 1 ]; then
+  echo "Usage: $0 <registry> [-a|--all]" >&2
+  exit 1
+fi
+
+registry="$1"
+all=false
+if [ "$2" = "-a" ] || [ "$2" = "--all" ]; then
+  all=true
+fi
+
+# Associative array to track which repositories we've already pushed
+declare -A seen
+
+# Filter out dangling images (those with <none> tags or repos)
+filter='{{if and (ne .Repository "<none>") (ne .Tag "<none>")}}{{.Repository}}:{{.Tag}}{{end}}'
+
+# Pushes a Docker image with bounded parallelism (max 4 concurrent pushes)
+push_limited() {
+  local ref="$1"
+
+  # Wait if 4 or more push jobs are already running
+  while [ "$(jobs -rp | wc -l)" -ge 4 ]; do
+    sleep 0.2
+  done
+
+  echo "Pushing $ref"
+  docker push "$ref" &
+}
+
+# Iterate through all local non-dangling Docker images
+docker images --format "$filter" | grep . | while read -r ref; do
+  # Only operate on images whose names begin with the given registry prefix
+  case "$ref" in
+    "$registry"/*)
+      # Strip off the tag to get the repository name.
+      # For example, if ref="myregistry.local:5000/app/api:1.2.3",
+      # then repo="myregistry.local:5000/app/api"
+      repo="${ref%:*}"
+
+      # Push only the first tag for each repo unless --all is passed
+      if $all || [ -z "${seen[$repo]}" ]; then
+        seen[$repo]=1
+        push_limited "$ref"
+      fi
+      ;;
+  esac
+done
+
+# Wait for all background push jobs to finish
+wait
+# Force prompt
+echo

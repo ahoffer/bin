@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SERVICE_NAME=docker-registry
+DATA_DIR=/opt/registry/data
+PORT=5000
+NERDCTL_BIN=/usr/local/bin/nerdctl
+NERDCTL_VERSION=2.1.3
+ARCH=$(uname -m)
+case "$ARCH" in
+  x86_64)   NARCH=amd64 ;;
+  aarch64)  NARCH=arm64 ;;
+  *) echo "Unsupported arch: $ARCH"; exit 1 ;;
+esac
+
+# Ensure containerd is present
+if ! command -v containerd >/dev/null 2>&1; then
+  echo "Installing containerd..."
+  apt-get update -y
+  apt-get install -y containerd
+  systemctl enable --now containerd
+fi
+
+# Install nerdctl if missing
+if ! command -v "$NERDCTL_BIN" >/dev/null 2>&1; then
+  echo "Installing nerdctl v${NERDCTL_VERSION} ..."
+  cd /tmp
+  MINIMAL_TGZ="nerdctl-${NERDCTL_VERSION}-linux-${NARCH}.tar.gz"
+  curl -fsSLO "https://github.com/containerd/nerdctl/releases/download/v${NERDCTL_VERSION}/${MINIMAL_TGZ}"
+  # Optional: verify size/signature manually if you care
+  tar -C /usr/local/bin -xzf "${MINIMAL_TGZ}" nerdctl containerd-rootless.sh containerd-rootless-setuptool.sh
+  chmod 0755 /usr/local/bin/nerdctl
+fi
+
+echo "Creating data dir: ${DATA_DIR}"
+mkdir -p "${DATA_DIR}"
+chown root:root "${DATA_DIR}"
+
+UNIT=/etc/systemd/system/${SERVICE_NAME}.service
+echo "Writing ${UNIT} ..."
+cat > "${UNIT}" <<'EOF'
+[Unit]
+Description=OCI Registry (registry:2) via nerdctl/containerd
+After=network-online.target containerd.service
+Wants=network-online.target
+Requires=containerd.service
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=3
+# Clean any old container instance
+ExecStartPre=-/usr/local/bin/nerdctl rm -f docker-registry
+# Ensure the image exists
+ExecStartPre=/usr/local/bin/nerdctl pull registry:2
+# Run in the foreground so systemd supervises it
+ExecStart=/usr/local/bin/nerdctl run \
+  --name docker-registry \
+  -p 5000:5000 \
+  -v /opt/registry/data:/var/lib/registry \
+  registry:2
+# Graceful stop
+ExecStop=/usr/local/bin/nerdctl stop -t 10 docker-registry
+
+# Hardening
+NoNewPrivileges=true
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+echo "Reloading systemd and starting service..."
+systemctl daemon-reload
+systemctl enable --now "${SERVICE_NAME}"
+
+echo "Status:"
+systemctl --no-pager --full status "${SERVICE_NAME}" || true
+
+echo
+echo "Smoke test:"
+echo "  curl http://localhost:${PORT}/v2/_catalog"
+echo
+echo "If other hosts (using containerd) will push/pull over HTTP, configure /etc/containerd/certs.d on those hosts."
+
