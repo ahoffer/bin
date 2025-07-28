@@ -49,3 +49,8 @@ apollo-cli
 helm
 kubectl
 _apollo_completions
+
+regbot
+regctl
+regsync
+
