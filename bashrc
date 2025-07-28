@@ -53,7 +53,6 @@ alias helmlogin='helm registry login $SSF_NEXUS_HOST --username $SSF_NEXUS_USER 
 alias sourceb='source ~/.bashrc'
 alias k3stop='sudo systemctl stop k3s && dstop'
 alias k3go='sudo systemctl start k3s'
-alias docker='nerdctl'
 # ----------------------------------------------------------------------------------------------------------
 
 
@@ -64,14 +63,14 @@ export YAMLLINT_CONFIG_FILE=/home/aaron/bin/.yamllint
 # Set path to Container Network Interface
 export CNI_PATH=~/.local/libexec/cni
 
-# Use later version of Docker buildkit
-export DOCKER_BUILDKIT=1
+export DOCKER_BUILDKIT=0
 
 # Do not set JAVA_HOME here. It gets written and re-written in ~/.bashrc
 # export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"
 
 # Add Go binaries to PATH if Go is installed
 command -v go >/dev/null 2>&1 && export PATH="$PATH:$(go env GOPATH)/bin"
+
 # ----------------------------------------------------------------------------------------------------------
 
 
@@ -90,7 +89,5 @@ command -v regctl &>/dev/null && source <(regctl completion bash)
 # Completions for the alias "k"
 complete -F __start_kubectl k
 
-# Use later version of Docker buildkit
-export DOCKER_BUILDKIT=1
 # ----------------------------------------------------------------------------------------------------------
 
