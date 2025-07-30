@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+import os
+import sys
+import argparse
+
+try:
+    import gitlab
+except ImportError:
+    print("ERROR: python-gitlab is not installed. Run:", file=sys.stderr)
+    print("    pip install python-gitlab", file=sys.stderr)
+    sys.exit(1)
+
+# ── Argument parsing ──────────────────────────────────────────────────────────
+parser = argparse.ArgumentParser(
+    description="List your GitLab MR comments, optionally filtering by discussion resolution status ('resolved' or 'unresolved')."
+)
+parser.add_argument(
+    'status', nargs='?', choices=['all', 'resolved', 'unresolved'], default='all',
+    help="Filter comments by discussion status: 'resolved', 'unresolved', or 'all'"
+)
+args = parser.parse_args()
+
+# ── Read + normalize env vars ──────────────────────────────────────────────────
+HOST  = os.getenv("RUNSHIFT_HOST", "").strip()
+USER  = os.getenv("RUNSHIFT_USER",  "").strip()
+TOKEN = os.getenv("RUNSHIFT_TOKEN", "").strip()
+
+if not all([HOST, USER, TOKEN]):
+    print("Please set RUNSHIFT_HOST, RUNSHIFT_USER and RUNSHIFT_TOKEN.", file=sys.stderr)
+    sys.exit(1)
+
+# ── Prepend scheme if missing, strip trailing slash ──────────────────────────
+if not HOST.startswith(("http://", "https://")):
+    HOST = "https://" + HOST
+HOST = HOST.rstrip("/")
+
+# ── Connect to GitLab (python-gitlab appends /api/v4) ──────────────────────────
+gl = gitlab.Gitlab(HOST, private_token=TOKEN, ssl_verify=True)
+
+# ── Resolve your user ID ──────────────────────────────────────────────────────
+try:
+    users = gl.users.list(username=USER)
+    if not users:
+        raise RuntimeError(f"user '{USER}' not found")
+    me = users[0].id
+except Exception as e:
+    print("ERROR resolving user ID:", e, file=sys.stderr)
+    sys.exit(1)
+
+# ── Fetch all open MRs (shallow) ───────────────────────────────────────────────
+mrs = gl.mergerequests.list(state='opened', scope='all', all=True)
+
+for mr in mrs:
+    # fetch full project & MR to access discussions
+    project = gl.projects.get(mr.project_id)
+    mr_full = project.mergerequests.get(mr.iid)
+
+    # get all discussion threads
+    discussions = mr_full.discussions.list(all=True)
+
+    # apply resolution filter
+    if args.status == 'resolved':
+        # only include discussions marked resolved
+        discussions = [
+            disc for disc in discussions
+            if disc.attributes.get('resolved', False)
+        ]
+    elif args.status == 'unresolved':
+        # only include unresolved, resolvable discussions
+        discussions = [
+            disc for disc in discussions
+            if disc.attributes.get('resolvable', False)
+            and not disc.attributes.get('resolved', False)
+        ]
+    # 'all' leaves discussions unfiltered
+
+    # collect only your actual comments
+    my_notes = []
+    for disc in discussions:
+        for note in disc.attributes['notes']:
+            if note['author']['id'] != me or note.get('system', False):
+                continue
+            my_notes.append((disc, note))
+
+    # skip MRs with no matching comments
+    if not my_notes:
+        continue
+
+    # print MR header
+    print(f"\nMR !{mr_full.iid}: {mr_full.title}")
+    print(f"URL: {mr_full.web_url}\n")
+
+    # print each comment with status tag
+    for disc, note in sorted(my_notes, key=lambda x: x[1]['created_at']):
+        ts   = note['created_at']
+        user = note['author']['username']
+        body = note['body'].splitlines()[0]
+        status = 'resolved' if disc.attributes.get('resolved', False) else 'unresolved'
+        print(f"  [{ts}] {user:>12} ({status}): {body}")
