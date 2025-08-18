@@ -1,0 +1,41 @@
+@startuml
+!theme plain
+
+rectangle "Host Machine (Node OS)" {
+  rectangle "Kubernetes Cluster" {
+
+    rectangle "Namespace: ingress-nginx" {
+      ' --- Ingress controller exposure + workload ---
+      rectangle """"ingress-nginx-controller""""\nService / NodePort\n10.43.70.122\n80->30080, 443->30443" as svc_nodeport #LightGreen
+      rectangle """"ingress-nginx-controller""""\nDeployment / Deployment" as dep_ic #LightYellow
+      rectangle """"ingress-nginx-controller-xyz""""\nPod / Pod\n10.42.0.12:443" as pod_ic #LightBlue
+    }
+
+    rectangle "Namespace: appns" {
+      ' --- App routing config + backend (namespaced) ---
+      rectangle """"AaronsApp""""\nIngress / Ingress" as ingress #LightYellow
+      rectangle """"AaronsApp""""\nService / ClusterIP\n10.43.10.10:80" as svc_app #LightGreen
+      rectangle """"AaronsApp""""\nEndpointSlice / Endpoints" as eps_app #LightYellow
+      rectangle """"AaronsApp""""\nDeployment / Deployment" as dep_app #LightYellow
+      rectangle """"AaronsApp-xyz""""\nPod / Pod\n10.42.2.25:8080" as pod_app #LightBlue
+    }
+  }
+}
+
+actor "Client" as client
+
+' -------- Data path (HTTPS request) --------
+client -[#black,thickness=4]-> svc_nodeport : "  https://nodeIP:30443"
+svc_nodeport -[#black,thickness=4]-> pod_ic : "forwards to\ncontroller Pod"
+pod_ic -[#black,thickness=4]-> pod_app : proxy per Ingress rules \n(from Service backends)\n10.42.2.25:8080
+
+' -------- Control path / relationships --------
+ingress ..> pod_ic : configuresroutes\n(host/path -> Service)
+dep_ic --> pod_ic : manages\nreplicas
+svc_nodeport .. pod_ic : selects endpoints\n(label selector)
+
+svc_app ..> eps_app : publishes\npod\nbackends
+eps_app ..> pod_app : endpoints\n(10.42.2.25:8080)
+dep_app --> pod_app : manages\nreplicas
+
+@enduml

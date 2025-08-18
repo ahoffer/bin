@@ -53,6 +53,7 @@ alias helmlogin='helm registry login $SSF_NEXUS_HOST --username $SSF_NEXUS_USER 
 alias sourceb='source ~/.bashrc'
 alias k3stop='sudo systemctl stop k3s && dstop'
 alias k3go='sudo systemctl start k3s'
+alias yfmt='yq -P -I 2 --no-doc .'
 # ----------------------------------------------------------------------------------------------------------
 
 

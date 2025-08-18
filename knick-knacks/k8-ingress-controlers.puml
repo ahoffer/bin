@@ -1,0 +1,45 @@
+@startuml
+!theme plain
+title K8 Ingress — Controller View
+
+actor "Client (Other host)" as client
+
+rectangle "Host Machine (Node OS)" {
+  rectangle "Kubernetes Cluster" {
+
+    frame "Data Plane (runtime agents)" {
+      rectangle "kube-proxy (DaemonSet)\nprograms iptables/netfilter for NodePort/ClusterIP" as kubeproxy #LightBlue
+      rectangle "ingress-nginx Controller (Pod)\nreconciles Ingress → NGINX config" as nginxpod #LightBlue
+    }
+
+    frame "Control Plane Controllers" {
+      rectangle "Service Controller\nallocates ClusterIP/NodePort" as svcctrl #LightYellow
+      rectangle "EndpointSlice Controller\nmaintains Endpoints for Services" as epsctrl #LightYellow
+      rectangle "Deployment Controller\nreconciles Deployment → ReplicaSet" as depctrl #LightYellow
+      rectangle "ReplicaSet Controller\nreconciles ReplicaSet → Pods" as rsctrl #LightYellow
+      rectangle "Admission (ValidatingWebhook)\ningress-nginx-admission" as admwh #LightYellow
+    }
+
+    ' Reference objects (not the focus here)
+    rectangle "Ingress:\nAaronsApp Ingress" as ingress #White
+    rectangle "Service:\nAaronsApp\nClusterIP : 10.96.0.10:80" as svc_app #White
+    rectangle "Pod:\nAaronsApp-xyz\n10.244.0.12:8080" as pod_app #White
+  }
+}
+
+' ===== Traffic path (data plane) =====
+client --> kubeproxy : http://nodeIP:30080\nhttps://nodeIP:30443
+kubeproxy --> nginxpod : NodePort DNAT to controller Pod
+nginxpod --> svc_app : proxy to ClusterIP 10.96.0.10:80
+svc_app --> pod_app : forwards to 10.244.0.12:8080
+
+' ===== Reconciliation / responsibilities =====
+admwh ..> ingress : validates annotations on\nIngress create/update
+depctrl ..> nginxpod : ensures controller Pod via\nDeployment → RS → Pods
+depctrl ..> pod_app : ensures AaronsApp Pods via\nDeployment → RS → Pods
+rsctrl ..> nginxpod : manages Pod replicas
+rsctrl ..> pod_app : manages Pod replicas
+svcctrl ..> svc_app : allocates ClusterIP/NodePort
+epsctrl ..> svc_app : updates EndpointSlice for\nAaronsApp Pods
+
+@enduml
