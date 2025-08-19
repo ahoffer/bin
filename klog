@@ -1,13 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-[[ $# -ge 1 ]] || { echo "Usage: $0 <pod-regex> [kubectl logs args...]">&2; exit 2; }
+usage(){ echo "Usage: $0 [-f] [-N NAMESPACE] <pod-regex> [kubectl logs args...]" >&2; exit 2; }
+
+follow=0; ns=""
+while getopts ":fN:" opt; do
+  case "$opt" in
+    f) follow=1 ;;
+    N) ns="$OPTARG" ;;
+    *) usage ;;
+  esac
+done
+shift $((OPTIND-1))
+[[ $# -ge 1 ]] || usage
 regex=$1; shift || true
 
-mapfile -t m < <(kubectl get pods -o name | cut -d/ -f2 | grep -E "$regex" || true)
+getpods=(kubectl ${ns:+-n "$ns"} get pods -o name)
+mapfile -t m < <("${getpods[@]}" | cut -d/ -f2 | grep -E "$regex" || true)
+
 case ${#m[@]} in
   0) echo "No pods match: $regex" >&2; exit 1 ;;
-  1) echo "Found ${m[0]}"; exec kubectl logs "${m[0]}" "$@" ;;
+  1) ;;
   *) echo "More than one pod matches: $regex" >&2; printf '%s\n' "${m[@]}"; exit 1 ;;
 esac
+
+args=()
+(( follow )) && args+=(-f)
+
+echo "Found ${m[0]}"
+exec kubectl ${ns:+-n "$ns"} logs "${m[0]}" "${args[@]}" "$@"
 
