@@ -6,8 +6,8 @@ IFS=$'\n\t'
 ########################################
 # 1) Format code & licenses
 ########################################
-mvn license:format -T1C
-mvn com.spotify.fmt:fmt-maven-plugin:format -T1C
+mvnr license:format -T1C
+mvnr com.spotify.fmt:fmt-maven-plugin:format -T1C
 
 ########################################
 # 2) Ensure Yarn 4.5.1 via Corepack
@@ -31,7 +31,7 @@ done
 ########################################
 # 4) Build with Maven
 ########################################
-CMD=(mvn ${RUN_CLEAN:+clean} install -DskipTests "${ARGS[@]}")
+CMD=(mvnr ${RUN_CLEAN:+clean} install -DskipTests "${ARGS[@]}")
 echo "***************************************************"
 echo "${CMD[*]}"
 echo "***************************************************"

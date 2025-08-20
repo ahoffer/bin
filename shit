@@ -1,0 +1,7 @@
+#! /bin/bash
+#
+# Run a container shell as root user
+# Example:
+#   shit alpine
+
+docker run -it --entrypoint=sh -u root "$@"

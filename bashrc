@@ -60,6 +60,8 @@ alias yfmt='yq -P -I 2 --no-doc .'
 # ----- EXPORT VARS HERE -----
 export KUBECONFIG=~/.kube/config
 export YAMLLINT_CONFIG_FILE=/home/aaron/bin/.yamllint
+export VIMINIT='source $HOME/bin/.vimrc'
+export DOCKER_BUILDKIT=1
 
 # Set path to Container Network Interface
 export CNI_PATH=~/.local/libexec/cni
