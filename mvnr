@@ -1,12 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
-dbg(){ [[ "${MVNR_DEBUG:-}" != "" ]] && printf '[mvnr] %s\n' "$*" >&2; }
-[[ "${MVNR_DEBUG:-}" == "trace" ]] && set -x
-
 PWD_ORIG="$(pwd -P)"
 GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-
 # Find TOPMOST pom (project root) for repo dir
 d="$PWD_ORIG"; root=""
 while :; do
@@ -16,9 +11,7 @@ while :; do
   [[ -n "$GIT_ROOT" && "$d" == "$GIT_ROOT" ]] && break
   d="$parent"
 done
-
 [[ -n "$root" ]] || { echo "Error: no pom.xml found above $PWD_ORIG" >&2; exit 2; }
-
 # Find NEAREST pom (what to build from)
 d="$PWD_ORIG"; nearest=""
 while :; do
@@ -28,12 +21,9 @@ while :; do
   [[ -n "$GIT_ROOT" && "$d" == "$GIT_ROOT" ]] && break
   d="$parent"
 done
-
 [[ -n "$nearest" ]] || nearest="$root/pom.xml"
-
 repo="$root/.m2/repository"
 mkdir -p "$repo"
-
 # Launcher: project wrapper if present, else mvn on PATH
 if [[ -x "$root/mvnw" ]]; then 
   launcher="$root/mvnw"
@@ -41,7 +31,6 @@ else
   launcher="$(command -v mvn || true)"
   [[ -n "$launcher" ]] || { echo "Error: mvn not found and $root/mvnw missing." >&2; exit 127; }
 fi
-
 # Check if any goals are provided
 if [[ $# -eq 0 ]]; then
   echo "Error: No Maven goals specified. Please provide at least one goal (e.g., compile, test, package, install)." >&2
@@ -52,12 +41,10 @@ if [[ $# -eq 0 ]]; then
   echo "  mvnr test -Dtest=MyTest" >&2
   exit 1
 fi
-
 # Respect user overrides
 user_repo_set=false
 user_settings_set=false
 user_file_set=false
-
 for a in "$@"; do
   case "$a" in
     -Dmaven.repo.local=*|--define=maven.repo.local=*)
@@ -72,27 +59,15 @@ for a in "$@"; do
       user_file_set=true ;;
   esac
 done
-
 # Build arguments array
 args=()
 if ! $user_repo_set; then
   args+=("-Dmaven.repo.local=$repo")
 fi
-
 if ! $user_settings_set && [[ -f "$HOME/.m2/settings.xml" ]]; then
   args+=("-s" "$HOME/.m2/settings.xml")
 fi
-
 if ! $user_file_set; then
   args+=("-f" "$nearest")
 fi
-
-dbg "cwd=$PWD_ORIG"
-dbg "root=$root"
-dbg "nearest_pom=$nearest"
-dbg "repo=$repo"
-dbg "launcher=$launcher"
-dbg "settings_used=$([[ -f "$HOME/.m2/settings.xml" ]] && ! $user_settings_set && echo "$HOME/.m2/settings.xml" || echo '(Maven default)')"
-dbg "final_cmd: $launcher ${args[*]} $*"
-
 exec "$launcher" "${args[@]}" "$@"
