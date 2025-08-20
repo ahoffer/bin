@@ -1,73 +1,78 @@
 #!/usr/bin/env bash
+#
+# mvnr - Maven Runner
+# 
+# A wrapper script that automatically configures Maven with project-specific
+# settings including local repository location and settings file.
+# 
+# Usage: mvnr [maven-options] <goals>
+# Examples: mvnr compile
+#          mvnr clean install
+#          mvnr test -Dtest=MyTest
+
 set -euo pipefail
-PWD_ORIG="$(pwd -P)"
-GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-# Find TOPMOST pom (project root) for repo dir
-d="$PWD_ORIG"; root=""
-while :; do
-  [[ -f "$d/pom.xml" ]] && root="$d"
-  parent="$(dirname "$d")"
-  [[ "$parent" == "$d" ]] && break
-  [[ -n "$GIT_ROOT" && "$d" == "$GIT_ROOT" ]] && break
-  d="$parent"
-done
-[[ -n "$root" ]] || { echo "Error: no pom.xml found above $PWD_ORIG" >&2; exit 2; }
-# Find NEAREST pom (what to build from)
-d="$PWD_ORIG"; nearest=""
-while :; do
-  if [[ -f "$d/pom.xml" ]]; then nearest="$d/pom.xml"; break; fi
-  parent="$(dirname "$d")"
-  [[ "$parent" == "$d" ]] && break
-  [[ -n "$GIT_ROOT" && "$d" == "$GIT_ROOT" ]] && break
-  d="$parent"
-done
-[[ -n "$nearest" ]] || nearest="$root/pom.xml"
-repo="$root/.m2/repository"
-mkdir -p "$repo"
-# Launcher: project wrapper if present, else mvn on PATH
-if [[ -x "$root/mvnw" ]]; then 
-  launcher="$root/mvnw"
-else 
-  launcher="$(command -v mvn || true)"
-  [[ -n "$launcher" ]] || { echo "Error: mvn not found and $root/mvnw missing." >&2; exit 127; }
+
+# Store original working directory
+readonly ORIGINAL_PWD="$(pwd -P)"
+
+# Find the topmost pom.xml (project root) for repository configuration
+find_project_root() {
+    local current_dir="$ORIGINAL_PWD"
+    local project_root=""
+    
+    while [[ -n "$current_dir" ]]; do
+        if [[ -f "$current_dir/pom.xml" ]]; then
+            project_root="$current_dir"
+        fi
+        
+        local parent_dir="$(dirname "$current_dir")"
+        [[ "$parent_dir" == "$current_dir" ]] && break
+        current_dir="$parent_dir"
+    done
+    
+    echo "$project_root"
+}
+
+# Validate that we have a Maven project
+readonly PROJECT_ROOT="$(find_project_root)"
+[[ -n "$PROJECT_ROOT" ]] || {
+    echo "Error: No pom.xml found in any parent directory of $ORIGINAL_PWD" >&2
+    exit 2
+}
+
+# Configure local repository
+readonly LOCAL_REPO="$PROJECT_ROOT/.m2/repository"
+mkdir -p "$LOCAL_REPO"
+
+# Determine Maven launcher (wrapper or system Maven)
+if [[ -x "$PROJECT_ROOT/mvnw" ]]; then
+    readonly MAVEN_LAUNCHER="$PROJECT_ROOT/mvnw"
+else
+    readonly MAVEN_LAUNCHER="$(command -v mvn || true)"
+    [[ -n "$MAVEN_LAUNCHER" ]] || {
+        echo "Error: Maven not found in PATH and no mvnw wrapper available" >&2
+        exit 127
+    }
 fi
-# Check if any goals are provided
-if [[ $# -eq 0 ]]; then
-  echo "Error: No Maven goals specified. Please provide at least one goal (e.g., compile, test, package, install)." >&2
-  echo "Usage: mvnr [options] <goals>" >&2
-  echo "Examples:" >&2
-  echo "  mvnr compile" >&2
-  echo "  mvnr clean install" >&2
-  echo "  mvnr test -Dtest=MyTest" >&2
-  exit 1
-fi
-# Respect user overrides
-user_repo_set=false
-user_settings_set=false
-user_file_set=false
-for a in "$@"; do
-  case "$a" in
-    -Dmaven.repo.local=*|--define=maven.repo.local=*)
-      user_repo_set=true ;;
-    -s|--settings)
-      user_settings_set=true ;;
-    -s=*|--settings=*)
-      user_settings_set=true ;;
-    -f|--file)
-      user_file_set=true ;;
-    -f=*|--file=*)
-      user_file_set=true ;;
-  esac
-done
-# Build arguments array
-args=()
-if ! $user_repo_set; then
-  args+=("-Dmaven.repo.local=$repo")
-fi
-if ! $user_settings_set && [[ -f "$HOME/.m2/settings.xml" ]]; then
-  args+=("-s" "$HOME/.m2/settings.xml")
-fi
-if ! $user_file_set; then
-  args+=("-f" "$nearest")
-fi
-exec "$launcher" "${args[@]}" "$@"
+
+# Validate that goals are provided
+[[ $# -gt 0 ]] || {
+    echo "Error: No Maven goals specified" >&2
+    echo "Usage: mvnr [options] <goals>" >&2
+    echo "Examples:" >&2
+    echo "  mvnr compile" >&2
+    echo "  mvnr clean install" >&2
+    echo "  mvnr test -Dtest=MyTest" >&2
+    exit 1
+}
+
+# Build Maven arguments
+MAVEN_ARGS=(
+    "-Dmaven.repo.local=$LOCAL_REPO"
+)
+
+# Add settings file if it exists
+[[ -f "$HOME/.m2/settings.xml" ]] && MAVEN_ARGS+=("-s" "$HOME/.m2/settings.xml")
+
+# Execute Maven
+exec "$MAVEN_LAUNCHER" "${MAVEN_ARGS[@]}" "$@"
