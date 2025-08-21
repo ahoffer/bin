@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+#
+# Docker/Container Process Status
+#
+# Display container status with enhanced formatting for both docker and nerdctl.
+# Supports filtering by container name and automatically handles sudo if needed.
+
 set -euo pipefail
 
 TAB=$'\t'

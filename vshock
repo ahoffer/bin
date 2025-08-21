@@ -1,4 +1,9 @@
 #! /bin/bash
+#
+# Video Zoom Shock Effect
+#
+# Create a zoom shock effect by rapidly cycling through different zoom levels
+# on a video device. Uses vzoom utility with timed delays between zoom changes.
 
 PAUSE=0.8
 

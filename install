@@ -1,3 +1,8 @@
 #! /usr/bin/bash
+#
+# Package Installer
+#
+# Install packages using apt with automatic yes confirmation. Simple wrapper
+# around apt install for quick package installation.
 
 sudo apt install -y $@

@@ -1,3 +1,8 @@
 #! /bin/bash
+#
+# Find Here
+#
+# Search for files in the current directory and subdirectories using case-insensitive
+# pattern matching. Suppresses permission denied errors.
 
 find . -iname "${@}" 2>/dev/null 

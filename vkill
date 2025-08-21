@@ -1,4 +1,10 @@
 #!/usr/bin/bash
+#
+# Volume Kill
+#
+# Remove all Docker volumes from the system. This is a destructive operation
+# that will delete all volume data. Use with caution.
+
 #volumes_to_remove=$(docker volume ls -q | grep -iv "aitr" | grep -iv "semantic")
 volumes_to_remove=$(docker volume ls -q)
 if [ ! -z "$volumes_to_remove" ]; then

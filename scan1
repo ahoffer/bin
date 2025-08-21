@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+# CSV Missing Value Scanner
+#
+# Analyze CSV files for missing values and report counts per column. Supports
+# custom header row positions and can show the first row with missing data.
 
 # Function to display help
 show_help() {

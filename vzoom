@@ -1,4 +1,10 @@
 #! /bin/bash
+#
+# Video Zoom Control
+#
+# Control the zoom level of a Logitech Brio webcam using v4l2-ctl. Automatically
+# detects the device and sets the zoom_absolute control value.
+
 # A value of 175 is average
 
 # If no arguments are provided, display help message and exit

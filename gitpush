@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+#
+# Git Push with Timestamp
+#
+# Automatically stage all changes, commit with current UTC timestamp, and push
+# to the remote repository. Uses ISO 8601 format for timestamps.
+
 set -e
 
 # Get current UTC timestamp in ISO 8601 format

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# Docker Load Images
+#
+# Load all Docker image tarballs from the current directory into Docker. Uses parallel processing when available for faster loading.
 
 set -euo pipefail
 

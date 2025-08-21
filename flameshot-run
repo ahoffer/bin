@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+# Screenshot Capture Tool
+#
+# Launch Flameshot screenshot tool in GUI mode with clipboard copy enabled.
+# Saves screenshots to the Pictures/Screenshots directory.
 
 flameshot gui -c -p "$HOME/Pictures/Screenshots"
 

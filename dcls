@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# Docker Container List Filter
+#
+# List Docker containers filtered by name with formatted output showing ID, names, running time, and status.
 
 ARGS="$1"
 echo

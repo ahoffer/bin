@@ -1,4 +1,9 @@
 #! /bin/bash
+#
+# Google Photos Backup
+#
+# Backup Google Photos to a specified local directory using gphotos-sync.
+# Requires destination path as first argument and validates before proceeding.
 
 if [ -z "$1" ]; then
 	echo Missing destination. Pass destination as first  arg.

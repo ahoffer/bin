@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+#
+# Docker Image List
+#
+# List Docker images with formatted output showing repository:tag, creation time, and size. Supports optional filtering.
+
 export FIRST_ARG=$1
 if [ -z "$FIRST_ARG" ]; then
   docker image ls --format='table {{.Repository}}:{{.Tag}}\t{{.CreatedSince}}\t{{.Size}}'

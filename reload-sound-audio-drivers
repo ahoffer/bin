@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+# Audio Driver Reloader
+#
+# Restart PipeWire audio system and reload ALSA modules to resolve audio issues.
+# Restarts user-level audio services and system-level audio drivers.
 
 # Restart PipeWire and related services
 systemctl --user restart pipewire pipewire-pulse wireplumber

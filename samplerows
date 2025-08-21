@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+# Random Row Sampler
+#
+# Extract a random sample of rows from a file starting from a specified row number.
+# Uses awk to skip to start row and shuf to randomly select the specified number of rows.
 
 # Check if the correct number of arguments is provided
 if [ "$#" -ne 3 ]; then

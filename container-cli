@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+#
+# Container CLI Detector
+#
+# Determine which container runtime is available (docker or nerdctl) and output
+# the appropriate command name. Exits with error if neither is found.
 
 if command -v docker &>/dev/null; then
   echo docker

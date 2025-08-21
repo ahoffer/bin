@@ -1,5 +1,11 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
+#
+# Google Photos Sync Tool
+#
+# Python wrapper for Google Photos synchronization utility. Downloads and syncs
+# photos from Google Photos to local storage.
+
 import re
 import sys
 from gphotos_sync.Main import main

@@ -1,3 +1,10 @@
+#! /bin/bash
+#
+# Network Port Scanner
+#
+# Display listening network ports and associated processes. Uses lsof for Debian
+# systems and netstat for Redhat systems to show port information.
+
 # For Debian, use
 sudo lsof -i 4 -P -n # | grep LISTEN
 

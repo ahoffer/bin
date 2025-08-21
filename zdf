@@ -1,2 +1,8 @@
 #! /bin/bash
+#
+# ZFS Disk Free
+#
+# Display ZFS pool information including name, size, allocated space, free space,
+# capacity percentage, and health status for the rpool.
+
 zpool list -o name,size,alloc,free,cap,health rpool

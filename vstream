@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+# Video Stream Server
+#
+# Stream video files over UDP using FFmpeg with KLV metadata preservation.
+# Supports transport stream files and configurable UDP ports for video streaming.
 
 # Default port value
 DEFAULT_PORT=1234

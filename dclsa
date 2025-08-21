@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# Docker Container List All Filter
+#
+# List all Docker containers (including stopped ones) filtered by name with detailed output including ports.
 
 ARGS="$1"
 echo

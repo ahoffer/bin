@@ -1,4 +1,10 @@
 #! /usr/bin/python3
+#
+# Terminal Maze Generator
+#
+# Generate an infinite maze pattern in the terminal using Unicode box characters.
+# Creates a continuous stream of maze-like patterns with random variations.
+
 import random, time
 while True:
   print(chr(9585+random.randint(0,1)), end='', flush=True)

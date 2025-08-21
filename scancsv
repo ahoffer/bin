@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+# CSV Data Quality Scanner
+#
+# Scan CSV files for missing values and provide detailed reports per column.
+# Supports custom header row positions and tracks first occurrence of missing data.
 
 # Function to display help
 show_help() {

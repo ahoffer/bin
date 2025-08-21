@@ -1,3 +1,8 @@
 #! /usr/bin/bash
+#
+# System Package Update
+#
+# Update all system packages, upgrade installed packages, and remove unused
+# dependencies. Performs a complete system maintenance cycle.
 
 sudo apt update && sudo apt upgrade -y --fix-missing && sudo apt autoremove -y

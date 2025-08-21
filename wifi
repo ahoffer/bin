@@ -1,4 +1,10 @@
 #!/bin/bash
+#
+# WiFi Network Scanner
+#
+# Display detailed information about available WiFi networks including SSID,
+# frequency, BSSID, signal strength, data rate, and signal bars.
+
 # Dump information about networks picked up by wifi adpater.
 
 nmcli -f in-use,ssid,freq,bssid,signal,rate,bars  dev wifi

@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+# Java Process Killer
+#
+# Find and forcefully terminate all Java processes except the JPS process itself.
+# Uses jps to identify Java processes and kills them with SIGKILL.
 
 # Get the list of Java processes except the Jps process
 PIDS=$(jps | grep -iv " jps" | awk '{print $1}')

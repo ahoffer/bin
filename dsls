@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+#
+# Docker Service List
+#
+# List Docker services with formatted output showing ID, name, and ports. Supports optional filtering by service name.
 
 ARGS="$@"
 

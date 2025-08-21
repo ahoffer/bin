@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+# Kubernetes Describe
+#
+# Find a Kubernetes pod by search string and describe it with optional additional
+# kubectl describe flags. Automatically selects the first matching pod.
 
 search_string=$1
 shift

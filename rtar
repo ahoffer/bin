@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+# Docker Image Extractor
+#
+# Extract Docker image tar files and their layer archives into a directory structure.
+# Handles both single tar files and multi-layer tar.gz archives from Docker saves.
 
 # The main Docker image tar file
 rootfile="$1"

@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+# Docker Kill All Except
+#
+# Stop and remove all Docker containers except those containing "bambustudio" in their name.
+# Useful for cleaning up development environments while preserving specific containers.
 
 # Stop all running containers except "my-container"
 docker container stop $(

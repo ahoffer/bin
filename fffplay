@@ -1,2 +1,9 @@
+#! /bin/bash
+#
+# Fast FFplay Launcher
+#
+# Launch FFplay with low-latency settings for fast video playback. Uses
+# nobuffer flags and frame dropping for minimal delay during video streaming.
+
 # Fast ffplay
 ffplay -fflags nobuffer -flags low_delay -framedrop -i %1

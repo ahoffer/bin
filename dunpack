@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+#
+# Archive Extractor
+#
+# Extract various archive formats (tar.gz, zip) with automatic format detection.
+# Uses pigz for faster decompression when available, falls back to gzip.
 
 set -euo pipefail
 
