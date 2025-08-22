@@ -1,45 +1,134 @@
 #!/usr/bin/env python3
-# retag.py — retag all locally cached images from one registry prefix to another
-#
-# USAGE
-#   ./retag.py <source-registry> <target-registry>
-#
+"""
+retag.py — retag all locally cached images from one registry prefix to another
 
-import sys
+USAGE
+  ./retag.py <source-registry> <target-registry> [--push] [--dry-run]
+
+Examples
+  ./retag.py registry.team.local:5000 bigfish:5000 --push
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import shlex
 import subprocess
+import sys
+from typing import Iterable, List
 
-if len(sys.argv) != 3:
-    print("Usage: retag.py <source-registry> <target-registry>")
-    sys.exit(1)
 
-source_registry, target_registry = sys.argv[1], sys.argv[2]
-
-# Only include images that are tagged (not <none>)
-format_string = '{{if and (ne .Repository "<none>") (ne .Tag "<none>")}}{{.Repository}}:{{.Tag}} {{.ID}}{{end}}'
-
-try:
-    output = subprocess.check_output(
-        ["docker", "images", "--format", format_string],
-        text=True
+def run(cmd: List[str], check: bool = True, capture: bool = False) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        cmd,
+        check=check,
+        text=True,
+        stdout=(subprocess.PIPE if capture else None),
+        stderr=(subprocess.PIPE if capture else None),
     )
-except subprocess.CalledProcessError as e:
-    print(f"Error running docker images: {e}")
-    sys.exit(1)
 
-seen_references = set()
 
-for line in output.splitlines():
-    line = line.strip()
-    if not line or not line.startswith(f"{source_registry}/"):
-        continue
-    try:
-        reference, dockerImageId = line.split()
-        new_reference = reference.replace(source_registry, target_registry, 1)
-        if new_reference in seen_references:
+def docker_images_json() -> Iterable[dict]:
+    """Yield docker image entries as dicts via JSON-lines format."""
+    cp = run(["docker", "images", "--no-trunc", "--format", "{{json .}}"], capture=True)
+    for line in cp.stdout.splitlines():
+        s = line.strip()
+        if not s:
             continue
-        seen_references.add(new_reference)
-        print(f"Retagging {reference} -> {new_reference}")
-        subprocess.run(["docker", "tag", dockerImageId, new_reference], check=True)
-    except ValueError:
-        continue  # defensively skip malformed lines
+        try:
+            yield json.loads(s)
+        except json.JSONDecodeError:
+            # Skip malformed row
+            continue
+
+
+def image_exists(ref: str) -> bool:
+    """Return True if a local image with the given ref exists."""
+    result = subprocess.run(
+        ["docker", "image", "inspect", ref],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return result.returncode == 0
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(description="Retag Docker images from one registry prefix to another.")
+    p.add_argument("source_registry")
+    p.add_argument("target_registry")
+    p.add_argument("--push", action="store_true", help="docker push each (existing or newly-tagged) image")
+    p.add_argument("--dry-run", action="store_true", help="print actions without performing them")
+    args = p.parse_args()
+
+    src = args.source_registry.rstrip("/")
+    dst = args.target_registry.rstrip("/")
+
+    if src == dst:
+        print("Source and target registry are the same; nothing to do.")
+        return 0
+
+    planned = []
+    seen_targets = set()
+
+    for img in docker_images_json():
+        repo = img.get("Repository")
+        tag = img.get("Tag")
+        img_id = img.get("ID")
+
+        # Skip untagged/dangling entries
+        if not repo or repo == "<none>" or not tag or tag == "<none>":
+            continue
+
+        # Only retag images whose repository starts with the source registry prefix
+        if not repo.startswith(f"{src}/"):
+            continue
+
+        new_repo = repo.replace(src, dst, 1)
+        old_ref = f"{repo}:{tag}"
+        new_ref = f"{new_repo}:{tag}"
+
+        if new_ref in seen_targets:
+            continue
+        seen_targets.add(new_ref)
+
+        planned.append((old_ref, img_id, new_ref))
+
+    if not planned:
+        print("No matching images found.")
+        return 0
+
+    tagged_n = 0
+    pushed_n = 0
+
+    for old_ref, img_id, new_ref in planned:
+        exists = image_exists(new_ref)
+
+        if not exists:
+            print(f"[TAG ] {old_ref} -> {new_ref}")
+            if not args.dry_run:
+                run(["docker", "tag", img_id, new_ref])
+            tagged_n += 1
+        else:
+            print(f"[EXIST] {new_ref} already tagged locally")
+
+        if args.push:
+            print(f"[PUSH] {new_ref}")
+            if not args.dry_run:
+                run(["docker", "push", new_ref])
+            pushed_n += 1
+
+    print(f"Planned targets: {len(seen_targets)} | Newly tagged: {tagged_n}" + (f" | Pushed: {pushed_n}" if args.push else ""))
+    if args.dry_run:
+        print("Dry run complete. Remove --dry-run to execute.")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except subprocess.CalledProcessError as e:
+        print(f"Command failed: {shlex.join(e.cmd)}\nExit code: {e.returncode}")
+        if e.stderr:
+            print(e.stderr.strip())
+        sys.exit(e.returncode)
 
