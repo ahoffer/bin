@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# list-registry-tags.sh — print full image names with tags from a registry
+# Usage: ./list-registry-tags.sh <registry> [tag-substring]
+# Example:
+#   ./list-registry-tags.sh bigfish:5000
+#   ./list-registry-tags.sh bigfish:5000 1.2.1
+
+set -euo pipefail
+
+if [ $# -lt 1 ]; then
+  echo "Usage: $0 <registry> [tag-substring]" >&2
+  exit 1
+fi
+
+registry="$1"
+filter="${2-}"
+
+regctl repo ls "$registry" | while read -r repo; do
+  [ -n "$repo" ] || continue
+  regctl tag ls "$registry/$repo" 2>/dev/null \
+    | grep . \
+    | awk -v R="$registry" -v P="$repo" '{print R "/" P ":" $0}'
+done | { if [ -n "$filter" ]; then grep -F "$filter" || true; else cat; fi; }
+

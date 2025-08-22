@@ -43,8 +43,8 @@ push_limited() {
     sleep 0.2
   done
 
-  echo "Pushing $ref"
-  docker push "$ref" &
+  echo "$ref"
+  docker push "$ref" >/dev/null 2>&1 &
 }
 
 # Iterate through all local non-dangling Docker images
