@@ -5,7 +5,7 @@
 # Create a zoom shock effect by rapidly cycling through different zoom levels
 # on a video device. Uses vzoom utility with timed delays between zoom changes.
 
-PAUSE=0.8
+PAUSE=0.5
 
 sleep $PAUSE
 vzoom 100
