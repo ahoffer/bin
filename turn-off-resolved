@@ -1,39 +1,65 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-(( EUID == 0 )) || { echo "ERROR: run as root"; exit 1; }
+[[ $EUID -eq 0 ]] || { echo "[ERROR] run as root"; exit 1; }
 
 CHANGED=0
+info() { echo "[INFO] $*"; }
 
-# 1) Disable & mask systemd-resolved
-if systemctl is-enabled systemd-resolved &>/dev/null; then
-  systemctl disable --now systemd-resolved
-  systemctl mask systemd-resolved
-  echo "[INFO] disabled & masked systemd-resolved"
+# 1) Stop, disable, and mask systemd-resolved if present
+if systemctl list-unit-files | grep -q '^systemd-resolved\.service'; then
+  if systemctl is-active --quiet systemd-resolved; then
+    systemctl stop systemd-resolved
+    info "stopped systemd-resolved"
+    CHANGED=1
+  fi
+
+  state="$(systemctl is-enabled systemd-resolved || true)"
+  if [[ "$state" != "masked" ]]; then
+    # disable may fail if already masked; that's fine
+    systemctl disable systemd-resolved 2>/dev/null || true
+    systemctl mask systemd-resolved
+    info "disabled and masked systemd-resolved"
+    CHANGED=1
+  fi
+fi
+
+# 2) Force NetworkManager to manage resolv.conf directly
+CONF_DIR=/etc/NetworkManager/conf.d
+CONF="$CONF_DIR/99-no-resolved.conf"
+mkdir -p "$CONF_DIR"
+
+desired_conf=$'[main]\ndns=default\nrc-manager=symlink\n'
+if [[ ! -f "$CONF" ]] || ! diff -q <(printf '%s' "$desired_conf") "$CONF" >/dev/null; then
+  printf '%s' "$desired_conf" > "$CONF"
+  chmod 0644 "$CONF"
+  info "set NM dns=default and rc-manager=symlink"
   CHANGED=1
 fi
 
-# 2) NM DNS → default
-CONF=/etc/NetworkManager/conf.d/99-no-resolved.conf
-if ! grep -q '^dns=default$' "$CONF" 2>/dev/null; then
-  mkdir -p "${CONF%/*}"
-  printf '[main]\ndns=default\n' > "$CONF"
-  echo "[INFO] set NM to use DHCP DNS"
-  CHANGED=1
-fi
-
-# 3) Symlink resolv.conf
+# 3) Ensure NM has generated its resolv.conf and link to it
 TARGET=/run/NetworkManager/resolv.conf
-if [[ "$(readlink -f /etc/resolv.conf 2>/dev/null)" != "$TARGET" ]]; then
-  ln -sf "$TARGET" /etc/resolv.conf
-  echo "[INFO] linked /etc/resolv.conf → $TARGET"
+# Make sure NM is up and writes the target
+if [[ ! -e "$TARGET" ]]; then
+  systemctl try-restart NetworkManager 2>/dev/null || true
+fi
+
+current="$(readlink -f /etc/resolv.conf 2>/dev/null || true)"
+if [[ "$current" != "$TARGET" ]]; then
+  # remove immutable bit if any
+  chattr -i /etc/resolv.conf 2>/dev/null || true
+  rm -f /etc/resolv.conf
+  ln -s "$TARGET" /etc/resolv.conf
+  info "linked /etc/resolv.conf -> $TARGET"
   CHANGED=1
 fi
 
-# 4) Wrap up
+# 4) Apply without a reboot if anything changed
 if (( CHANGED )); then
-  echo "[INFO] done—please reboot to apply DNS changes"
+  systemctl reload NetworkManager 2>/dev/null || systemctl restart NetworkManager 2>/dev/null || true
+  info "done; verify with:"
+  echo "  nmcli dev show | grep -E 'IP4.DNS|IP6.DNS'"
+  echo "  cat /etc/resolv.conf"
 else
-  echo "[INFO] already configured; no reboot needed"
+  info "already configured; no changes"
 fi
-
