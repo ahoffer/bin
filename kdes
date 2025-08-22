@@ -1,13 +1,87 @@
-#!/bin/bash
-#
-# Kubernetes Describe
-#
-# Find a Kubernetes pod by search string and describe it with optional additional
-# kubectl describe flags. Automatically selects the first matching pod.
+#!/usr/bin/env python3
+"""
+kdes — describe a pod selected by regex
 
-search_string=$1
-shift
-rest_of_the_line="$*"
-pod_name=$(kubectl get pods | grep "$search_string" | cut -d " " -f1)
-echo "Found $pod_name"
-kubectl describe pod "$pod_name" "$rest_of_line"
+Usage:
+  kdes [-N NAMESPACE] <pod-regex> [kubectl describe args...]
+
+Examples:
+  kdes app
+  kdes -N production app
+  kdes app --show-events
+"""
+
+import argparse
+import sys
+
+# Import utilities from the same directory
+from k8s_utils import (
+    Colors, print_error, print_info, resolve_pod, run_command
+)
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Describe a pod selected by regex",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  kdes app
+  kdes -N production app
+  kdes app --show-events
+        """
+    )
+    
+    parser.add_argument(
+        '-N', '--namespace',
+        help='Kubernetes namespace (optional)'
+    )
+    
+    parser.add_argument(
+        'pod_regex',
+        help='ERE matched against pod names (single pod must match)'
+    )
+    
+    parser.add_argument(
+        'kubectl_args',
+        nargs=argparse.REMAINDER,
+        help='Additional arguments to pass to kubectl describe'
+    )
+    
+    return parser.parse_args()
+
+
+def main() -> None:
+    """Main function."""
+    args = parse_args()
+    
+    try:
+        # Resolve the pod
+        pod_name = resolve_pod(args.pod_regex, args.namespace)
+        
+        # Build kubectl describe command
+        cmd = ['kubectl']
+        if args.namespace:
+            cmd.extend(['-n', args.namespace])
+        cmd.extend(['describe', 'pod', pod_name])
+        
+        # Add any additional kubectl describe arguments
+        if args.kubectl_args:
+            cmd.extend(args.kubectl_args)
+        
+        print_info(f"Describing pod: {pod_name}")
+        
+        # Execute the command
+        run_command(cmd, capture_output=False, check=False)
+        
+    except KeyboardInterrupt:
+        print("\nInterrupted by user", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print_error(str(e))
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()

@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """
-klog — show logs from a pod selected by regex
+kshell — open an interactive shell in a pod selected by regex
 
 Usage:
-  klog [-f] [-N NAMESPACE] [-c CONTAINER] <pod-regex> [kubectl logs args...]
+  kshell [-N NAMESPACE] [-c CONTAINER] <pod-regex> [shell-command...]
 
 Examples:
-  klog app
-  klog -f -N production app
-  klog -c sidecar app
-  klog app --tail=100
+  kshell app
+  kshell -N production app
+  kshell -c sidecar app
+  kshell app /bin/bash
 """
 
 import argparse
+import os
 import sys
-from typing import List
 
 # Import utilities from the same directory
 from k8s_utils import (
@@ -25,21 +25,15 @@ from k8s_utils import (
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Show logs from a pod selected by regex",
+        description="Open an interactive shell in a pod selected by regex",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  klog app
-  klog -f -N production app
-  klog -c sidecar app
-  klog app --tail=100
+  kshell app
+  kshell -N production app
+  kshell -c sidecar app
+  kshell app /bin/bash
         """
-    )
-    
-    parser.add_argument(
-        '-f', '--follow',
-        action='store_true',
-        help='Follow the logs (equivalent to kubectl logs -f)'
     )
     
     parser.add_argument(
@@ -58,9 +52,9 @@ Examples:
     )
     
     parser.add_argument(
-        'kubectl_args',
+        'shell_command',
         nargs=argparse.REMAINDER,
-        help='Additional arguments to pass to kubectl logs'
+        help='Optional command to exec (default: /bin/sh)'
     )
     
     return parser.parse_args()
@@ -74,27 +68,25 @@ def main() -> None:
         # Resolve the pod
         pod_name = resolve_pod(args.pod_regex, args.namespace)
         
-        # Build kubectl logs command
+        # Build kubectl exec command
         cmd = ['kubectl']
         if args.namespace:
             cmd.extend(['-n', args.namespace])
-        cmd.append('logs')
+        cmd.extend(['exec', '-it', pod_name])
         
         if args.container:
             cmd.extend(['-c', args.container])
         
-        if args.follow:
-            cmd.append('-f')
+        # Add shell command (default to /bin/sh if none provided)
+        if args.shell_command:
+            cmd.append('--')
+            cmd.extend(args.shell_command)
+        else:
+            cmd.extend(['--', '/bin/sh'])
         
-        cmd.append(pod_name)
+        print_info(f"Opening shell in pod: {pod_name}")
         
-        # Add any additional kubectl logs arguments
-        if args.kubectl_args:
-            cmd.extend(args.kubectl_args)
-        
-        print_info(f"Showing logs for pod: {pod_name}")
-        
-        # Execute the command
+        # Execute the command (don't capture output for interactive shell)
         run_command(cmd, capture_output=False, check=False)
         
     except KeyboardInterrupt:
