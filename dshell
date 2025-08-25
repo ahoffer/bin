@@ -21,6 +21,10 @@ fi
 # Execute using dockerutil
 python3 -c "
 import sys
+import os
+# Add the script's directory to Python path
+script_dir = os.path.dirname(os.path.abspath('$0'))
+sys.path.insert(0, script_dir)
 from dockerutil import execute_docker
 execute_docker('$cmd', '$container')
 "
