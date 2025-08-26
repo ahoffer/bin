@@ -12,4 +12,5 @@ registry="${branch}/${hash}"
 
 echo "Running build with registry: ${registry}"
 qb "-Ddocker.push.registry=${registry}" "$@"
+echo "Running build with registry: ${registry}"
 
