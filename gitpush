@@ -28,4 +28,4 @@ git add .
 echo "Committing with timestamp: $timestamp"
 git commit -m "$timestamp"
 
-git push 2>&1 > /dev/null
+git push > /dev/null 2>&1 
