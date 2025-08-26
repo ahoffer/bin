@@ -2,11 +2,52 @@
 #
 # Docker Image List
 #
-# List Docker images with formatted output showing repository:tag, creation time, and size. Supports optional filtering.
+# List Docker images with formatted output showing repository:tag, creation time, and size. 
+# Supports optional filtering and sorting options.
+# Usage: dils [filter] [-t]
+#   filter: Optional text to filter images by repository/tag
+#   -t: Sort by creation time (most recent first)
 
-export FIRST_ARG=$1
-if [ -z "$FIRST_ARG" ]; then
-  docker image ls --format='table {{.Repository}}:{{.Tag}}\t{{.CreatedSince}}\t{{.Size}}'
-else
-  docker image ls --format='table {{.Repository}}:{{.Tag}}\t{{.CreatedSince}}\t{{.Size}}' | grep -i $FIRST_ARG
+# Parse arguments
+SORT_BY_TIME=false
+FILTER=""
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -t)
+      SORT_BY_TIME=true
+      shift
+      ;;
+    *)
+      if [ -z "$FILTER" ]; then
+        FILTER="$1"
+      fi
+      shift
+      ;;
+  esac
+done
+
+# Get the full output and filter out dangling images
+FULL_OUTPUT=$(docker image ls --format='table {{.Repository}}:{{.Tag}}\t{{.CreatedSince}}' | grep -v '<none>')
+
+# Get header and data separately
+HEADER=$(echo "$FULL_OUTPUT" | head -1)
+DATA=$(echo "$FULL_OUTPUT" | tail -n +2)
+
+# Apply filter if specified
+if [ -n "$FILTER" ]; then
+  DATA=$(echo "$DATA" | grep -i "$FILTER")
 fi
+
+# Sort data based on option
+if [ "$SORT_BY_TIME" = true ]; then
+  # Sort by creation time (most recent first)
+  SORTED_DATA=$(echo "$DATA" | sort -k2,2 -r)
+else
+  # Sort lexically by repository:tag
+  SORTED_DATA=$(echo "$DATA" | sort)
+fi
+
+# Output header and sorted data
+echo "$HEADER"
+echo "$SORTED_DATA"

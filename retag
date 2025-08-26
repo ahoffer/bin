@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-retag.py — retag all locally cached images from one registry prefix to another
+retag — retag all locally cached images from one registry prefix to another
 
 USAGE
-  ./retag.py <source-registry> <target-registry> [--push] [--dry-run]
+  ./retag <source-registry> <target-registry> [--push] [--dry-run]
 
 Examples
-  ./retag.py registry.team.local:5000 bigfish:5000 --push
+  ./retag registry.team.local:5000 bigfish:5000 --push
 """
 from __future__ import annotations
 
