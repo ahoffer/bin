@@ -5,12 +5,29 @@
 # Automatically stage all changes, commit with current UTC timestamp, and push
 # to the remote repository. Uses ISO 8601 format for timestamps.
 
-set -e
+set -euo pipefail
+
+# Check if we're in a git repository
+if ! git rev-parse --git-dir > /dev/null 2>&1; then
+    echo "Error: Not in a git repository"
+    exit 1
+fi
+
+# Check if there are any changes to commit
+if git diff-index --quiet HEAD --; then
+    echo "No changes to commit"
+    exit 0
+fi
 
 # Get current UTC timestamp in ISO 8601 format
 timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+echo "Staging all changes..."
 git add .
+
+echo "Committing with timestamp: $timestamp"
 git commit -m "$timestamp"
-git push
+
+echo "Ready to push. Please run 'git push' manually to complete the operation."
+echo "This prevents accidental pushes to remote repositories."
 
