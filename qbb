@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Get the current local branch name
+branch=$(git rev-parse --abbrev-ref HEAD)
+
+# Get short commit hash
+hash=$(git rev-parse --short=6 HEAD)
+
+# Construct the registry string
+registry="${branch}/${hash}"
+
+echo "Running build with registry: ${registry}"
+qb "-Ddocker.push.registry=${registry}"
+
