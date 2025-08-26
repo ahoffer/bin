@@ -28,6 +28,4 @@ git add .
 echo "Committing with timestamp: $timestamp"
 git commit -m "$timestamp"
 
-echo "Ready to push. Please run 'git push' manually to complete the operation."
-echo "This prevents accidental pushes to remote repositories."
-
+git push
