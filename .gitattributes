@@ -1,0 +1,11 @@
+# Handle line endings automatically for files detected as text
+* text=auto
+
+# Maven repository files - treat as binary to avoid line ending issues
+.m2/repository/** binary
+
+# Force bash scripts to use LF
+*.sh text eol=lf
+
+# Force batch files to use CRLF
+*.bat text eol=crlf

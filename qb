@@ -1,71 +1,210 @@
 #!/usr/bin/env bash
-# Formats code, ensures correct Yarn version, and builds with Maven
+#
+# qbb - Quick Build with Docker
+# 
+# A wrapper script that combines Maven Runner (mvnr) functionality with
+# Docker registry configuration for fabric8 docker plugin.
+# 
+# Features:
+# - Local .m2 repository per project
+# - Automatic Docker image naming with branch/hash
+# - Multi-threaded builds (-T1C)
+# - Quick build mode (skip tests by default)
+# 
+# Usage: qbb [options] [maven-goals]
+# Examples: qbb
+#          qbb clean install
+#          qbb --test test
+#          qbb --dirty install
 
 set -euo pipefail
 
-# Check if license plugin is available
-if mvn help:describe -Dplugin=org.codehaus.mojo:license-maven-plugin -Ddetail >/dev/null 2>&1; then
-    echo "Executing: mvn license:format -T1C"
-    mvn license:format -T1C
-else
-    echo "Warning: License plugin not available, skipping license formatting"
-fi
+# Store original working directory
+readonly ORIGINAL_PWD="$(pwd -P)"
 
-# Check if fmt plugin is available
-if mvn help:describe -Dplugin=com.spotify.fmt:fmt-maven-plugin -Ddetail >/dev/null 2>&1; then
-    echo "Executing: mvn com.spotify.fmt:fmt-maven-plugin:format -T1C"
-    mvn com.spotify.fmt:fmt-maven-plugin:format -T1C
-else
-    echo "Warning: FMT plugin not available, skipping code formatting"
-fi
-
-# Ensure Yarn 4.5.1 via Corepack
-echo "Ensuring Yarn 4.5.1..."
-if ! corepack enable; then
-    echo "Error: Failed to enable corepack"
-    exit 1
-fi
-
-current_yarn_version=$(yarn -v 2>/dev/null || echo "not installed")
-echo "Current Yarn version: $current_yarn_version"
-
-if ! yarn -v | grep -Eq '^v?4\.5\.1$'; then
-    echo "Executing: corepack prepare yarn@4.5.1 --activate"
-    if ! corepack prepare yarn@4.5.1 --activate; then
-        echo "Error: Failed to prepare Yarn 4.5.1"
-        exit 1
-    fi
-    new_yarn_version=$(yarn -v)
-    echo "New Yarn version: $new_yarn_version"
-else
-    echo "Yarn 4.5.1 already active"
-fi
+# Find the topmost pom.xml (project root) for repository configuration
+find_project_root() {
+    local current_dir="$ORIGINAL_PWD"
+    local project_root=""
+    
+    while [[ -n "$current_dir" ]]; do
+        if [[ -f "$current_dir/pom.xml" ]]; then
+            project_root="$current_dir"
+        fi
+        
+        local parent_dir="$(dirname "$current_dir")"
+        [[ "$parent_dir" == "$current_dir" ]] && break
+        current_dir="$parent_dir"
+    done
+    
+    echo "$project_root"
+}
 
 # Parse command line arguments
 clean=true
-for arg in "$@"; do
-    case "$arg" in
+skip_tests=true
+use_default_repo=false
+disable_docker_override=false
+disable_multithreading=false
+custom_docker_registry=""
+maven_goals=()
+custom_args=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
         --dirty|-d)
             clean=false
+            shift
+            ;;
+        --test|-t)
+            skip_tests=false
+            shift
+            ;;
+        --default-repo|-r)
+            use_default_repo=true
+            shift
+            ;;
+        --default-reg|-g)
+            disable_docker_override=true
+            shift
+            ;;
+        --registry|-R)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --registry requires a value" >&2
+                exit 1
+            fi
+            custom_docker_registry="$2"
+            shift 2
+            ;;
+        --single-thread|-1)
+            disable_multithreading=true
+            shift
             ;;
         --help|-h)
-            echo "Usage: $0 [OPTIONS]"
-            echo "Options:"
-            echo "  --dirty, -d    Skip clean step (incremental build)"
-            echo "  --help, -h         Show this help message"
+            cat <<EOF
+Usage: $0 [OPTIONS] [MAVEN-GOALS]
+
+Quick Build with Docker - combines Maven Runner with Docker registry config.
+
+Options:
+  --dirty, -d       Skip clean step (incremental build)
+  --test, -t        Run tests (default: skip tests)
+  --default-repo, -r Use default Maven repository (~/.m2/repository)
+  --default-reg, -g  Don't override docker.push.registry (use pom.xml defaults)
+  --registry, -R     Override docker.push.registry with custom value
+  --single-thread, -1 Disable multi-threading (default: -T6)
+  --help, -h        Show this help message
+
+Maven Goals:
+  If no goals specified, defaults to: clean install
+
+Docker Configuration:
+  Automatically sets docker.push.registry to: <branch>/<commit-hash>
+  Example: main/a1b2c3 or feature-branch/d4e5f6
+EOF
             exit 0
+            ;;
+        -*)
+            # Maven system properties or other options
+            custom_args+=("$1")
+            shift
+            ;;
+        *)
+            # Maven goals
+            maven_goals+=("$1")
+            shift
             ;;
     esac
 done
 
-# Build with Maven
-if [[ "$clean" == true ]]; then
-    echo "mvn clean install -DskipTests $@"
-    mvn clean install -DskipTests "$@"
+# Initialize MAVEN_ARGS array
+MAVEN_ARGS=()
+
+# Validate that we have a Maven project
+readonly PROJECT_ROOT="$(find_project_root)"
+[[ -n "$PROJECT_ROOT" ]] || {
+    echo "Error: No pom.xml found in any parent directory of $ORIGINAL_PWD" >&2
+    exit 2
+}
+
+# Configure local repository
+if [[ "$use_default_repo" == true ]]; then
+    readonly LOCAL_REPO="$HOME/.m2/repository"
+    echo "Using default Maven repository: $LOCAL_REPO"
 else
-    mvn install -DskipTests "$@"
-    echo "mvn install -DskipTests $@"
-    mvn install -DskipTests "$@"
-    echo "mvn install -DskipTests $@"
+    readonly LOCAL_REPO="$PROJECT_ROOT/.m2/repository"
+    mkdir -p "$LOCAL_REPO"
+    echo "Using project-specific repository: $LOCAL_REPO"
 fi
+
+# Determine Maven launcher (wrapper or system Maven)
+if [[ -x "$PROJECT_ROOT/mvnw" ]]; then
+    readonly MAVEN_LAUNCHER="$PROJECT_ROOT/mvnw"
+else
+    readonly MAVEN_LAUNCHER="$(command -v mvn || true)"
+    [[ -n "$MAVEN_LAUNCHER" ]] || {
+        echo "Error: Maven not found in PATH and no mvnw wrapper available" >&2
+        exit 127
+    }
+fi
+
+# Get Git info for Docker image naming
+if git rev-parse --git-dir >/dev/null 2>&1; then
+    branch=$(git rev-parse --abbrev-ref HEAD)
+    hash=$(git rev-parse --short=6 HEAD)
+    docker_registry="$branch/$hash"
+else
+    echo "Warning: Not in a git repository, using default Docker registry" >&2
+    docker_registry="local/build"
+fi
+
+# Set default goals if none provided
+if [[ ${#maven_goals[@]} -eq 0 ]]; then
+    if [[ "$clean" == true ]]; then
+        maven_goals=(clean install)
+    else
+        maven_goals=(install)
+    fi
+fi
+
+# Build Maven arguments
+MAVEN_ARGS+=("-Dmaven.repo.local=$LOCAL_REPO")
+
+# Add multi-threading unless disabled
+if [[ "$disable_multithreading" == false ]]; then
+    MAVEN_ARGS+=("-T6")  # 6 threads (default)
+    echo "Multi-threading: Enabled (-T6)"
+else
+    echo "Multi-threading: Disabled (single-threaded)"
+fi
+
+# Add Docker registry override unless disabled
+if [[ "$disable_docker_override" == false ]]; then
+    if [[ -n "$custom_docker_registry" ]]; then
+        MAVEN_ARGS+=("-Ddocker.push.registry=$custom_docker_registry")
+        echo "Docker registry: $custom_docker_registry (custom)"
+    else
+        MAVEN_ARGS+=("-Ddocker.push.registry=$docker_registry")
+        echo "Docker registry: $docker_registry"
+    fi
+else
+    echo "Docker registry: Using pom.xml defaults (not overridden)"
+fi
+
+# Add skip tests if enabled
+[[ "$skip_tests" == true ]] && MAVEN_ARGS+=("-DskipTests")
+
+# Add settings file if it exists
+[[ -f "$HOME/.m2/settings.xml" ]] && MAVEN_ARGS+=("-s" "$HOME/.m2/settings.xml")
+
+# Add custom arguments
+MAVEN_ARGS+=("${custom_args[@]}")
+
+echo "Project root: $PROJECT_ROOT"
+echo "Local repo: $LOCAL_REPO"
+echo "Goals: ${maven_goals[*]}"
+echo "Executing: $MAVEN_LAUNCHER ${MAVEN_ARGS[*]} ${maven_goals[*]}"
+
+# Execute Maven
+exec "$MAVEN_LAUNCHER" "${MAVEN_ARGS[@]}" "${maven_goals[@]}"
 
