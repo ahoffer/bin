@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-retag — retag all locally cached images from one registry prefix to another
+push — push all locally cached images to a target registry
 
 USAGE
-  ./retag <source-registry> <target-registry> [--push] [--dry-run]
+  ./push <target-registry> [--source-registry <source-registry>] [--dry-run]
 
 Examples
-  ./retag registry.team.local:5000 bigfish:5000 --push
+  ./push bigfish:5000
+  ./push bigfish:5000 --source-registry registry.team.local:5000
 """
 from __future__ import annotations
 
@@ -53,17 +54,16 @@ def image_exists(ref: str) -> bool:
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Retag Docker images from one registry prefix to another.")
-    p.add_argument("source_registry")
-    p.add_argument("target_registry")
-    p.add_argument("--push", action="store_true", help="docker push each (existing or newly-tagged) image")
+    p = argparse.ArgumentParser(description="Push Docker images to a target registry.")
+    p.add_argument("target_registry", help="Target registry to push images to")
+    p.add_argument("--source-registry", help="Source registry prefix to retag images from")
     p.add_argument("--dry-run", action="store_true", help="print actions without performing them")
     args = p.parse_args()
 
-    src = args.source_registry.rstrip("/")
     dst = args.target_registry.rstrip("/")
+    src = args.source_registry.rstrip("/") if args.source_registry else None
 
-    if src == dst:
+    if src and src == dst:
         print("Source and target registry are the same; nothing to do.")
         return 0
 
@@ -79,13 +79,24 @@ def main() -> int:
         if not repo or repo == "<none>" or not tag or tag == "<none>":
             continue
 
-        # Only retag images whose repository starts with the source registry prefix
-        if not repo.startswith(f"{src}/"):
+        # If source registry is specified, only process images from that registry
+        if src and not repo.startswith(f"{src}/"):
             continue
 
-        new_repo = repo.replace(src, dst, 1)
-        old_ref = f"{repo}:{tag}"
-        new_ref = f"{new_repo}:{tag}"
+        if src:
+            # Retag images from source registry to target registry
+            new_repo = repo.replace(src, dst, 1)
+            old_ref = f"{repo}:{tag}"
+            new_ref = f"{new_repo}:{tag}"
+        else:
+            # Default behavior: only push images that already have the target registry prefix
+            if not repo.startswith(f"{dst}/"):
+                # Skip images that don't already have the target registry prefix
+                continue
+            
+            # Image already has target registry prefix, use as is
+            old_ref = f"{repo}:{tag}"
+            new_ref = f"{repo}:{tag}"
 
         if new_ref in seen_targets:
             continue
@@ -101,23 +112,26 @@ def main() -> int:
     pushed_n = 0
 
     for old_ref, img_id, new_ref in planned:
-        exists = image_exists(new_ref)
-
-        if not exists:
-            print(f"[TAG ] {old_ref} -> {new_ref}")
-            if not args.dry_run:
-                run(["docker", "tag", img_id, new_ref])
-            tagged_n += 1
+        if src:
+            # Retagging mode: check if target already exists
+            exists = image_exists(new_ref)
+            if not exists:
+                print(f"[TAG ] {old_ref} -> {new_ref}")
+                if not args.dry_run:
+                    run(["docker", "tag", img_id, new_ref])
+                tagged_n += 1
+            else:
+                print(f"[SKIP] {new_ref} already tagged locally")
         else:
-            print(f"[EXIST] {new_ref} already tagged locally")
+            # Default mode: no retagging, just push
+            pass
 
-        if args.push:
-            print(f"[PUSH] {new_ref}")
-            if not args.dry_run:
-                run(["docker", "push", new_ref])
-            pushed_n += 1
+        print(f"[PUSH] {new_ref}")
+        if not args.dry_run:
+            run(["docker", "push", new_ref])
+        pushed_n += 1
 
-    print(f"Planned targets: {len(seen_targets)} | Newly tagged: {tagged_n}" + (f" | Pushed: {pushed_n}" if args.push else ""))
+    print(f"Summary: {len(seen_targets)} images processed | {tagged_n} newly tagged | {pushed_n} pushed")
     if args.dry_run:
         print("Dry run complete. Remove --dry-run to execute.")
     return 0
@@ -131,4 +145,3 @@ if __name__ == "__main__":
         if e.stderr:
             print(e.stderr.strip())
         sys.exit(e.returncode)
-
