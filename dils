@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# dils — wrapper for `docker image ls`
+# Output: fixed-width columns "REPOSITORY:TAG  CREATED" (no header), sorted by REPOSITORY:TAG.
+# Optional 1 arg: literal substring to match repo OR tag (case-sensitive).
+# Widths can be overridden via env: DILS_COL1_WIDTH (default 56), DILS_COL2_WIDTH (default 16).
+
+set -euo pipefail
+
+usage() {
+  echo "Usage: dils [pattern]" >&2
+  echo "Env:   DILS_COL1_WIDTH (default 56), DILS_COL2_WIDTH (default 16)" >&2
+}
+
+if [[ ${1-} == "-h" || ${1-} == "--help" ]]; then usage; exit 0; fi
+if [[ $# -gt 1 ]]; then usage; exit 2; fi
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "Error: docker not found in PATH." >&2
+  exit 127
+fi
+
+COL1_WIDTH="${DILS_COL1_WIDTH:-96}" # REPOSITORY:TAG
+COL2_WIDTH="${DILS_COL2_WIDTH:-24}" # CREATED (e.g., "2 weeks ago")
+
+# Compose "ref|created" so we can sort/filter on ref only.
+FORMAT='{{.Repository}}:{{.Tag}}|{{.CreatedSince}}'
+
+# Pull and optionally filter
+if [[ $# -eq 1 && -n "${1}" ]]; then
+  PATTERN="$1"
+  docker image ls --format "${FORMAT}" \
+    | awk -F'|' -v pat="$PATTERN" 'index($1, pat) > 0' \
+    | LC_ALL=C sort -t'|' -k1,1
+else
+  docker image ls --format "${FORMAT}" \
+    | LC_ALL=C sort -t'|' -k1,1
+fi \
+| awk -F'|' -v w1="$COL1_WIDTH" -v w2="$COL2_WIDTH" '
+  {
+    ref=$1; created=$2
+    # Fixed width with truncation if necessary; left-aligned.
+    printf "%-*.*s %-*.*s\n", w1, w1, ref, w2, w2, created
+  }'
+
