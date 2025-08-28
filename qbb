@@ -11,6 +11,8 @@ hash=$(git rev-parse --short=6 HEAD)
 registry="${branch}/${hash}"
 
 echo "Running build with registry: ${registry}"
+echo qb "-Ddocker.push.registry=${registry}" "$@"
+
 qb "-Ddocker.push.registry=${registry}" "$@"
 echo "Running build with registry: ${registry}"
 

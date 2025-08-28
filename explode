@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# recursively extract a JAR/ZIP and all nested archives.
+
+set -euo pipefail
+
+if (( $# < 1 || $# > 2 )); then
+  echo "Usage: $0 <file.jar|file.zip> [output_dir]" >&2
+  exit 1
+fi
+
+src="$1"
+out="${2:-${src%.*}}"
+
+mkdir -p "$out"
+unzip -qq -o "$src" -d "$out"
+
+# Repeatedly extract any archives found inside $out
+while :; do
+  mapfile -d '' -t archives < <(
+    find "$out" -type f -regextype posix-extended \
+      -iregex '.*\.(jar|war|ear|zip)$' -print0
+  )
+  ((${#archives[@]})) || break
+
+  for a in "${archives[@]}"; do
+    dir="${a%.*}"
+    mkdir -p "$dir"
+    echo "extracting $a"
+    unzip -qq -o "$a" -d "$dir"
+    rm -f -- "$a"             # always remove inner archive
+  done
+done
+
+echo "Done. Extracted to: $out"
+
