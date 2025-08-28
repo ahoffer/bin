@@ -1,40 +1,71 @@
 #!/usr/bin/env bash
-# qb – quick build helper
 # Formats code, ensures correct Yarn version, and builds with Maven
 
 set -euo pipefail
 
-# Format code and licenses
-echo "Formatting code and licenses..."
-mvn license:format -T1C
-mvn com.spotify.fmt:fmt-maven-plugin:format -T1C
+# Check if license plugin is available
+if mvn help:describe -Dplugin=org.codehaus.mojo:license-maven-plugin -Ddetail >/dev/null 2>&1; then
+    echo "Executing: mvn license:format -T1C"
+    mvn license:format -T1C
+else
+    echo "Warning: License plugin not available, skipping license formatting"
+fi
+
+# Check if fmt plugin is available
+if mvn help:describe -Dplugin=com.spotify.fmt:fmt-maven-plugin -Ddetail >/dev/null 2>&1; then
+    echo "Executing: mvn com.spotify.fmt:fmt-maven-plugin:format -T1C"
+    mvn com.spotify.fmt:fmt-maven-plugin:format -T1C
+else
+    echo "Warning: FMT plugin not available, skipping code formatting"
+fi
 
 # Ensure Yarn 4.5.1 via Corepack
 echo "Ensuring Yarn 4.5.1..."
-corepack enable
+if ! corepack enable; then
+    echo "Error: Failed to enable corepack"
+    exit 1
+fi
+
+current_yarn_version=$(yarn -v 2>/dev/null || echo "not installed")
+echo "Current Yarn version: $current_yarn_version"
+
 if ! yarn -v | grep -Eq '^v?4\.5\.1$'; then
-    corepack prepare yarn@4.5.1 --activate
+    echo "Executing: corepack prepare yarn@4.5.1 --activate"
+    if ! corepack prepare yarn@4.5.1 --activate; then
+        echo "Error: Failed to prepare Yarn 4.5.1"
+        exit 1
+    fi
+    new_yarn_version=$(yarn -v)
+    echo "New Yarn version: $new_yarn_version"
+else
+    echo "Yarn 4.5.1 already active"
 fi
 
 # Parse command line arguments
 clean=true
 for arg in "$@"; do
     case "$arg" in
-        --dirty|-dirty)
+        --dirty|-d)
             clean=false
+            ;;
+        --help|-h)
+            echo "Usage: $0 [OPTIONS]"
+            echo "Options:"
+            echo "  --dirty, -d    Skip clean step (incremental build)"
+            echo "  --help, -h         Show this help message"
+            exit 0
             ;;
     esac
 done
 
 # Build with Maven
-echo "***************************************************"
 if [[ "$clean" == true ]]; then
-    echo "Executing: mvn clean install -DskipTests"
-    echo "***************************************************"
-    mvn clean install -DskipTests
+    echo "mvn clean install -DskipTests $@"
+    mvn clean install -DskipTests "$@"
 else
-    echo "Executing: mvn install -DskipTests"
-    echo "***************************************************"
-    mvn install -DskipTests
+    mvn install -DskipTests "$@"
+    echo "mvn install -DskipTests $@"
+    mvn install -DskipTests "$@"
+    echo "mvn install -DskipTests $@"
 fi
 

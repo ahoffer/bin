@@ -35,11 +35,10 @@ selected_java_home="${all[selection]}"
 
 # 4) Update ~/.bashrc
 sed -i.bak '/^[[:space:]]*export JAVA_HOME=/d' "$HOME/.bashrc"
-echo "export JAVA_HOME=\"$selected_java_home\"" >>"$HOME/.bashrc"
 
 # 5) Apply in current shell
 export JAVA_HOME="$selected_java_home"
 export PATH="$JAVA_HOME/bin:$PATH"
 
-echo "✅ JAVA_HOME set to $JAVA_HOME"
-java -version
+echo "JAVA_HOME set to $JAVA_HOME"
+echo "IMPORTANT: Source .bashrc to apply changes"
