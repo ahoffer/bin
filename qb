@@ -1,23 +1,17 @@
 #!/usr/bin/env bash
 #
-# qbb - Quick Build with Docker
+# qb - Quick Build with Docker
 # 
-# A wrapper script that combines Maven Runner (mvnr) functionality with
-# Docker registry configuration for fabric8 docker plugin.
+# A simplified wrapper that builds with default registry, then retags with branch/commit.
+# This ensures dependencies (like redirect-base) work during build, while still
+# providing branch/commit tagged versions for deployment.
 # 
 # Features:
+# - Builds with default registry (dependencies work)
+# - Retags built images with branch/commit hash
 # - Local .m2 repository per project
-# - Automatic Docker image naming with branch/hash
-# - Multi-threaded builds (-T1C)
+# - Multi-threaded builds (-T6)
 # - Quick build mode (skip tests by default)
-# 
-# Usage: qbb [options] [maven-goals]
-# Examples: qbb
-#          qbb clean install
-#          qbb --test test
-#          qbb --dirty install
-
-set -euo pipefail
 
 # Store original working directory
 readonly ORIGINAL_PWD="$(pwd -P)"
@@ -44,9 +38,8 @@ find_project_root() {
 clean=true
 skip_tests=true
 use_default_repo=false
-disable_docker_override=false
 disable_multithreading=false
-custom_docker_registry=""
+disable_retag=false
 maven_goals=()
 custom_args=()
 
@@ -64,42 +57,34 @@ while [[ $# -gt 0 ]]; do
             use_default_repo=true
             shift
             ;;
-        --default-reg|-g)
-            disable_docker_override=true
-            shift
-            ;;
-        --registry|-R)
-            if [[ $# -lt 2 ]]; then
-                echo "Error: --registry requires a value" >&2
-                exit 1
-            fi
-            custom_docker_registry="$2"
-            shift 2
-            ;;
         --single-thread|-1)
             disable_multithreading=true
+            shift
+            ;;
+        --no-retag|-n)
+            disable_retag=true
             shift
             ;;
         --help|-h)
             cat <<EOF
 Usage: $0 [OPTIONS] [MAVEN-GOALS]
 
-Quick Build with Docker - combines Maven Runner with Docker registry config.
+Quick Build with Docker - builds with default registry, then retags with branch/commit.
 
 Options:
   --dirty, -d       Skip clean step (incremental build)
   --test, -t        Run tests (default: skip tests)
   --default-repo, -r Use default Maven repository (~/.m2/repository)
-  --default-reg, -g  Don't override docker.push.registry (use pom.xml defaults)
-  --registry, -R     Override docker.push.registry with custom value
   --single-thread, -1 Disable multi-threading (default: -T6)
+  --no-retag, -n    Skip retagging with branch/commit (just build normally)
   --help, -h        Show this help message
 
 Maven Goals:
   If no goals specified, defaults to: clean install
 
 Docker Configuration:
-  Automatically sets docker.push.registry to: <branch>/<commit-hash>
+  Builds with default registry first (so dependencies work), then retags
+  built images with: <branch>/<commit-hash>
   Example: main/a1b2c3 or feature-branch/d4e5f6
 EOF
             exit 0
@@ -152,10 +137,10 @@ fi
 if git rev-parse --git-dir >/dev/null 2>&1; then
     branch=$(git rev-parse --abbrev-ref HEAD)
     hash=$(git rev-parse --short=6 HEAD)
-    docker_registry="$branch/$hash"
+    docker_tag="$branch/$hash"
 else
-    echo "Warning: Not in a git repository, using default Docker registry" >&2
-    docker_registry="local/build"
+    echo "Warning: Not in a git repository, skipping retagging" >&2
+    disable_retag=true
 fi
 
 # Set default goals if none provided
@@ -178,19 +163,6 @@ else
     echo "Multi-threading: Disabled (single-threaded)"
 fi
 
-# Add Docker registry override unless disabled
-if [[ "$disable_docker_override" == false ]]; then
-    if [[ -n "$custom_docker_registry" ]]; then
-        MAVEN_ARGS+=("-Ddocker.push.registry=$custom_docker_registry")
-        echo "Docker registry: $custom_docker_registry (custom)"
-    else
-        MAVEN_ARGS+=("-Ddocker.push.registry=$docker_registry")
-        echo "Docker registry: $docker_registry"
-    fi
-else
-    echo "Docker registry: Using pom.xml defaults (not overridden)"
-fi
-
 # Add skip tests if enabled
 [[ "$skip_tests" == true ]] && MAVEN_ARGS+=("-DskipTests")
 
@@ -205,6 +177,72 @@ echo "Local repo: $LOCAL_REPO"
 echo "Goals: ${maven_goals[*]}"
 echo "Executing: $MAVEN_LAUNCHER ${MAVEN_ARGS[*]} ${maven_goals[*]}"
 
-# Execute Maven
-exec "$MAVEN_LAUNCHER" "${MAVEN_ARGS[@]}" "${maven_goals[@]}"
+# Execute Maven build
+"$MAVEN_LAUNCHER" "${MAVEN_ARGS[@]}" "${maven_goals[@]}"
+maven_exit_code=$?
+
+# If Maven build failed, exit with the same code
+if [[ $maven_exit_code -ne 0 ]]; then
+    exit $maven_exit_code
+fi
+
+# If retagging is disabled, we're done
+if [[ "$disable_retag" == true ]]; then
+    echo "Retagging disabled - build complete"
+    exit 0
+fi
+
+echo ""
+echo "Build successful! Retagging images with: $docker_tag"
+
+# Function to retag an image if it exists
+retag_image() {
+    local source_tag="$1"
+    local target_tag="$2"
+    
+    if docker image inspect "$source_tag" >/dev/null 2>&1; then
+        echo "Retagging: $source_tag -> $target_tag"
+        docker tag "$source_tag" "$target_tag"
+        return 0
+    else
+        echo "Image not found: $source_tag (skipping)"
+        return 1
+    fi
+}
+
+# Find images that were just built by looking at recent images
+echo ""
+echo "Looking for recently built images from registry.octo-cx-prod.runshiftup.com/octo-cx..."
+recent_images=$(docker images --format "{{.Repository}}:{{.Tag}}" --filter "since=1h" | head -10)
+
+retagged_count=0
+
+if [[ -n "$recent_images" ]]; then
+    echo "Recent images found:"
+    echo "$recent_images"
+    echo ""
+    
+    # Retag recent images from our registry that were built by this build
+    while IFS= read -r image; do
+        # Only retag images from our registry that aren't already tagged with our pattern
+        if [[ "$image" == "registry.octo-cx-prod.runshiftup.com/octo-cx"* ]] && [[ "$image" != *"$docker_tag"* ]]; then
+            if retag_image "$image" "$docker_tag"; then
+                ((retagged_count++))
+            fi
+        fi
+    done <<< "$recent_images"
+fi
+
+echo ""
+if [[ $retagged_count -gt 0 ]]; then
+    echo "Successfully retagged $retagged_count image(s) with: $docker_tag"
+    echo "You can now use these images for deployment or further testing."
+else
+    echo "No images were retagged. This might be normal if:"
+    echo "  - No Docker images were built by Maven"
+    echo "  - Images were already tagged with the target pattern"
+    echo "  - The build process doesn't create Docker images"
+fi
+
+echo "Build and retagging complete!"
 

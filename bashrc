@@ -75,7 +75,9 @@ export DOCKER_BUILDKIT=0
 # Add Go binaries to PATH if Go is installed
 command -v go >/dev/null 2>&1 && export PATH="$PATH:$(go env GOPATH)/bin"
 
-# ----------------------------------------------------------------------------------------------------------
+
+# Part of the "pickjava" script 
+[ -f $HOME/javahome ] && source $HOME/javahome
 
 
 # ----- TAB COMPLETIONS GO HERE -----
