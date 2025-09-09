@@ -12,3 +12,5 @@ PIDS=$(jps | grep -iv " jps" | awk '{print $1}')
 for pid in $PIDS; do
     kill -9 "$pid"
 done
+
+echo ""

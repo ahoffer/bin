@@ -1,47 +1,13 @@
 #!/usr/bin/env bash
-#
-# qb - Quick Build with Docker
-# 
-# A simplified wrapper that builds with default registry, then retags with branch/commit.
-# This ensures dependencies (like redirect-base) work during build, while still
-# providing branch/commit tagged versions for deployment.
-# 
-# Features:
-# - Builds with default registry (dependencies work)
-# - Retags built images with branch/commit hash
-# - Local .m2 repository per project
-# - Multi-threaded builds (-T6)
-# - Quick build mode (skip tests by default)
 
-# Store original working directory
-readonly ORIGINAL_PWD="$(pwd -P)"
-
-# Find the topmost pom.xml (project root) for repository configuration
-find_project_root() {
-    local current_dir="$ORIGINAL_PWD"
-    local project_root=""
-    
-    while [[ -n "$current_dir" ]]; do
-        if [[ -f "$current_dir/pom.xml" ]]; then
-            project_root="$current_dir"
-        fi
-        
-        local parent_dir="$(dirname "$current_dir")"
-        [[ "$parent_dir" == "$current_dir" ]] && break
-        current_dir="$parent_dir"
-    done
-    
-    echo "$project_root"
-}
-
-# Parse command line arguments
+# Initialize variables with default values
 clean=true
 skip_tests=true
-use_default_repo=false
 disable_multithreading=false
-disable_retag=false
-maven_goals=()
+enable_retag=false
 custom_args=()
+maven_goals=()
+MAVEN_ARGS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -53,196 +19,107 @@ while [[ $# -gt 0 ]]; do
             skip_tests=false
             shift
             ;;
-        --default-repo|-r)
-            use_default_repo=true
-            shift
-            ;;
         --single-thread|-1)
             disable_multithreading=true
             shift
             ;;
-        --no-retag|-n)
-            disable_retag=true
+        --retag|-r)
+            enable_retag=true
             shift
             ;;
         --help|-h)
             cat <<EOF
 Usage: $0 [OPTIONS] [MAVEN-GOALS]
 
-Quick Build with Docker - builds with default registry, then retags with branch/commit.
+Quick Build with Docker - builds with default docker registry, then retags with branch/commit.
 
 Options:
-  --dirty, -d       Skip clean step (incremental build)
-  --test, -t        Run tests (default: skip tests)
-  --default-repo, -r Use default Maven repository (~/.m2/repository)
-  --single-thread, -1 Disable multi-threading (default: -T6)
-  --no-retag, -n    Skip retagging with branch/commit (just build normally)
-  --help, -h        Show this help message
+  -d, --dirty       Skip clean step (incremental build)
+  -t, --test        Run tests (default: skip tests)
+  -1, --single-thread Disable multi-threading (default: -T6)
+  -r, --retag       Retag built images with branch/commit (default: no retagging)
+  -h, --help        Show this help message
 
-Maven Goals:
-  If no goals specified, defaults to: clean install
-
-Docker Configuration:
-  Builds with default registry first (so dependencies work), then retags
-  built images with: <branch>/<commit-hash>
-  Example: main/a1b2c3 or feature-branch/d4e5f6
 EOF
             exit 0
             ;;
         -*)
-            # Maven system properties or other options
+            # Maven system properties or other options (e.g., -Dproperty=value, -X, -e)
             custom_args+=("$1")
             shift
             ;;
         *)
-            # Maven goals
+            # Maven goals (e.g., clean, install, compile, test)
             maven_goals+=("$1")
             shift
             ;;
     esac
 done
 
-# Initialize MAVEN_ARGS array
-MAVEN_ARGS=()
 
-# Validate that we have a Maven project
-readonly PROJECT_ROOT="$(find_project_root)"
-[[ -n "$PROJECT_ROOT" ]] || {
-    echo "Error: No pom.xml found in any parent directory of $ORIGINAL_PWD" >&2
-    exit 2
+# Find project root (directory containing pom.xml)
+find_project_root() {
+    local dir="$PWD"
+    while [[ "$dir" != "/" ]]; do
+        if [[ -f "$dir/pom.xml" ]]; then
+            echo "$dir"
+            return 0
+        fi
+        dir=$(dirname "$dir")
+    done
+    return 1
 }
 
-# Configure local repository
-if [[ "$use_default_repo" == true ]]; then
-    readonly LOCAL_REPO="$HOME/.m2/repository"
-    echo "Using default Maven repository: $LOCAL_REPO"
-else
-    readonly LOCAL_REPO="$PROJECT_ROOT/.m2/repository"
-    mkdir -p "$LOCAL_REPO"
-    echo "Using project-specific repository: $LOCAL_REPO"
+# Change to project root
+PROJECT_ROOT=$(find_project_root)
+if [[ -z "$PROJECT_ROOT" ]]; then
+    echo "Error: No pom.xml found" >&2
+    exit 1
 fi
 
-# Determine Maven launcher (wrapper or system Maven)
-if [[ -x "$PROJECT_ROOT/mvnw" ]]; then
-    readonly MAVEN_LAUNCHER="$PROJECT_ROOT/mvnw"
-else
-    readonly MAVEN_LAUNCHER="$(command -v mvn || true)"
-    [[ -n "$MAVEN_LAUNCHER" ]] || {
-        echo "Error: Maven not found in PATH and no mvnw wrapper available" >&2
-        exit 127
-    }
-fi
+cd "$PROJECT_ROOT"
 
-# Get Git info for Docker image naming
-if git rev-parse --git-dir >/dev/null 2>&1; then
-    branch=$(git rev-parse --abbrev-ref HEAD)
-    hash=$(git rev-parse --short=6 HEAD)
-    docker_tag="$branch/$hash"
-else
-    echo "Warning: Not in a git repository, skipping retagging" >&2
-    disable_retag=true
+# Get Git info for Docker image naming (only if retagging is enabled)
+if $enable_retag; then
+    if git rev-parse --git-dir >/dev/null 2>&1; then
+        docker_tag="$(git rev-parse --abbrev-ref HEAD)/$(git rev-parse --short=6 HEAD)"
+    else
+        echo "Error: --retag requires a git repository" >&2
+        exit 3
+    fi
 fi
 
 # Set default goals if none provided
 if [[ ${#maven_goals[@]} -eq 0 ]]; then
-    if [[ "$clean" == true ]]; then
+    if $clean; then
         maven_goals=(clean install)
     else
         maven_goals=(install)
     fi
 fi
-
-# Build Maven arguments
-MAVEN_ARGS+=("-Dmaven.repo.local=$LOCAL_REPO")
-
 # Add multi-threading unless disabled
-if [[ "$disable_multithreading" == false ]]; then
-    MAVEN_ARGS+=("-T6")  # 6 threads (default)
-    echo "Multi-threading: Enabled (-T6)"
-else
-    echo "Multi-threading: Disabled (single-threaded)"
-fi
+$disable_multithreading || MAVEN_ARGS+=("-T6")
 
 # Add skip tests if enabled
-[[ "$skip_tests" == true ]] && MAVEN_ARGS+=("-DskipTests")
-
-# Add settings file if it exists
-[[ -f "$HOME/.m2/settings.xml" ]] && MAVEN_ARGS+=("-s" "$HOME/.m2/settings.xml")
+$skip_tests && MAVEN_ARGS+=("-DskipTests")
 
 # Add custom arguments
 MAVEN_ARGS+=("${custom_args[@]}")
 
-echo "Project root: $PROJECT_ROOT"
-echo "Local repo: $LOCAL_REPO"
-echo "Goals: ${maven_goals[*]}"
-echo "Executing: $MAVEN_LAUNCHER ${MAVEN_ARGS[*]} ${maven_goals[*]}"
+echo "Executing: mvn ${MAVEN_ARGS[*]} ${maven_goals[*]}"
 
 # Execute Maven build
-"$MAVEN_LAUNCHER" "${MAVEN_ARGS[@]}" "${maven_goals[@]}"
-maven_exit_code=$?
+mvn "${MAVEN_ARGS[@]}" "${maven_goals[@]}"
 
-# If Maven build failed, exit with the same code
-if [[ $maven_exit_code -ne 0 ]]; then
-    exit $maven_exit_code
-fi
+# If retagging is not enabled, we're done
+$enable_retag || exit 0
 
-# If retagging is disabled, we're done
-if [[ "$disable_retag" == true ]]; then
-    echo "Retagging disabled - build complete"
-    exit 0
-fi
+echo "Retagging images with: $docker_tag"
 
-echo ""
-echo "Build successful! Retagging images with: $docker_tag"
-
-# Function to retag an image if it exists
-retag_image() {
-    local source_tag="$1"
-    local target_tag="$2"
-    
-    if docker image inspect "$source_tag" >/dev/null 2>&1; then
-        echo "Retagging: $source_tag -> $target_tag"
-        docker tag "$source_tag" "$target_tag"
-        return 0
-    else
-        echo "Image not found: $source_tag (skipping)"
-        return 1
-    fi
-}
-
-# Find images that were just built by looking at recent images
-echo ""
-echo "Looking for recently built images from registry.octo-cx-prod.runshiftup.com/octo-cx..."
-recent_images=$(docker images --format "{{.Repository}}:{{.Tag}}" --filter "since=1h" | head -10)
-
-retagged_count=0
-
-if [[ -n "$recent_images" ]]; then
-    echo "Recent images found:"
-    echo "$recent_images"
-    echo ""
-    
-    # Retag recent images from our registry that were built by this build
-    while IFS= read -r image; do
-        # Only retag images from our registry that aren't already tagged with our pattern
-        if [[ "$image" == "registry.octo-cx-prod.runshiftup.com/octo-cx"* ]] && [[ "$image" != *"$docker_tag"* ]]; then
-            if retag_image "$image" "$docker_tag"; then
-                ((retagged_count++))
-            fi
-        fi
-    done <<< "$recent_images"
-fi
-
-echo ""
-if [[ $retagged_count -gt 0 ]]; then
-    echo "Successfully retagged $retagged_count image(s) with: $docker_tag"
-    echo "You can now use these images for deployment or further testing."
-else
-    echo "No images were retagged. This might be normal if:"
-    echo "  - No Docker images were built by Maven"
-    echo "  - Images were already tagged with the target pattern"
-    echo "  - The build process doesn't create Docker images"
-fi
-
-echo "Build and retagging complete!"
+# Simple retagging: find recent images and retag them
+docker images --format "{{.Repository}}:{{.Tag}}" --filter "since=1h" | head -5 | while read -r image; do
+    [[ "$image" != *"$docker_tag"* ]] || continue
+    echo "Retagging: $image -> $docker_tag"
+    docker tag "$image" "$docker_tag" 2>/dev/null
+done
 
