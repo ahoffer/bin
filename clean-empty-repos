@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# gc-registry.sh — run Docker Distribution garbage-collect (no stop/start)
+# Usage: ./gc-registry.sh [--dry-run]
+#
+# Assumptions:
+#   - You run this on the same host where the registry container is running.
+#   - The registry is already running and may keep running (best practice is to quiesce writes).
+
+set -euo pipefail
+
+CONTAINER_NAME="docker-registry"   # change if your container has a different name
+DRY=0
+[[ "${1:-}" == "--dry-run" ]] && DRY=1
+
+log(){ echo "[$(date +%H:%M:%S)] $*"; }
+need(){ command -v "$1" >/dev/null || { echo "[ERROR] $1 is required" >&2; exit 1; }; }
+need jq
+
+# Pick container CLI: prefer nerdctl (rootless or sudo rootful), else docker
+CTL=""; SUDO=""
+if command -v nerdctl >/dev/null 2>&1; then
+  if nerdctl ps >/dev/null 2>&1; then
+    CTL="nerdctl"; SUDO=""
+  elif sudo -n nerdctl ps >/dev/null 2>&1 || sudo nerdctl ps >/dev/null 2>&1; then
+    CTL="nerdctl"; SUDO="sudo"
+  fi
+fi
+if [[ -z "$CTL" ]] && command -v docker >/dev/null 2>&1; then
+  CTL="docker"; SUDO=""
+fi
+[[ -n "$CTL" ]] || { echo "[ERROR] neither nerdctl nor docker is available" >&2; exit 1; }
+
+# Ensure the registry container exists
+if ! $SUDO $CTL ps --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
+  echo "[ERROR] container not found: $CONTAINER_NAME (via $SUDO $CTL)" >&2
+  echo "        Tip: $SUDO $CTL ps --format '{{.Names}}'" >&2
+  exit 1
+fi
+
+# Inspect the container's mounts to detect host paths
+inspect_json="$($SUDO $CTL inspect "$CONTAINER_NAME" 2>/dev/null | jq '.[0]')"
+
+CONFIG_PATH="$(jq -r '
+  ( .Mounts // [] )[]
+  | select(.Destination=="/etc/docker/registry/config.yml")
+  | .Source
+' <<<"$inspect_json" | head -n1 || true)"
+
+REG_DATA_HOST="$(jq -r '
+  ( .Mounts // [] )[]
+  | select(.Destination=="/var/lib/registry")
+  | .Source
+' <<<"$inspect_json" | head -n1 || true)"
+
+if [[ -z "$REG_DATA_HOST" || "$REG_DATA_HOST" == "null" ]]; then
+  echo "[ERROR] Could not locate host-side bind mount for /var/lib/registry" >&2
+  exit 1
+fi
+[[ -d "$REG_DATA_HOST" ]] || { echo "[ERROR] data dir not found on host: $REG_DATA_HOST" >&2; exit 1; }
+
+# If config isn't bind-mounted, copy it out of the running container to a temp file
+COPIED_TMP=0
+if [[ -z "$CONFIG_PATH" || "$CONFIG_PATH" == "null" ]]; then
+  CONFIG_PATH="/tmp/registry-config.yml"
+  log "Config not bind-mounted; copying from container to $CONFIG_PATH"
+  if (( DRY )); then
+    echo "[DRY] $SUDO $CTL cp $CONTAINER_NAME:/etc/docker/registry/config.yml $CONFIG_PATH"
+  else
+    $SUDO $CTL cp "$CONTAINER_NAME:/etc/docker/registry/config.yml" "$CONFIG_PATH"
+    COPIED_TMP=1
+  fi
+else
+  [[ -f "$CONFIG_PATH" ]] || { echo "[ERROR] config not found on host: $CONFIG_PATH" >&2; exit 1; }
+fi
+
+log "Using: $SUDO $CTL"
+log "Config: $CONFIG_PATH"
+log "Data:   $REG_DATA_HOST"
+
+# Show current size (best effort)
+if (( DRY )); then
+  echo "[DRY] du -sh '$REG_DATA_HOST'"
+else
+  BEFORE="$(du -sh "$REG_DATA_HOST" 2>/dev/null | awk '{print $1}')"
+  log "Data size before GC: ${BEFORE:-unknown}"
+fi
+
+# Run garbage-collect in a one-shot registry:2 container
+GC_CMD=( $SUDO $CTL run --rm
+  -v "$CONFIG_PATH":/etc/docker/registry/config.yml:ro
+  -v "$REG_DATA_HOST":/var/lib/registry
+  registry:2 garbage-collect /etc/docker/registry/config.yml )
+
+log "Running registry garbage-collect"
+if (( DRY )); then
+  echo "[DRY] ${GC_CMD[*]}"
+else
+  "${GC_CMD[@]}"
+fi
+
+# Show size after GC; clean up temp config if we copied it
+if (( DRY )); then
+  echo "[DRY] du -sh '$REG_DATA_HOST'"
+else
+  AFTER="$(du -sh "$REG_DATA_HOST" 2>/dev/null | awk '{print $1}')"
+  log "Data size after  GC: ${AFTER:-unknown}"
+  if (( COPIED_TMP )); then
+    log "Removing temporary config: $CONFIG_PATH"
+    rm -f -- "$CONFIG_PATH" || true
+  fi
+fi
+
+log "Done."
+

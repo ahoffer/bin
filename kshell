@@ -1,101 +1,170 @@
-#!/usr/bin/env python3
-"""
-kshell — open an interactive shell in a pod selected by regex
+#!/usr/bin/env bash
+# kshell — open a shell (or run a command) in a matching pod/container
+# Usage: kshell [-n NAMESPACE] [-c CONTAINER] REGEX [-- CMD ...]
+set -Eeuo pipefail
 
-Usage:
-  kshell [-N NAMESPACE] [-c CONTAINER] <pod-regex> [shell-command...]
+KUBECTL="${KUBECTL:-kubectl}"
+WAIT_SECS="${WAIT_SECS:-60}"
 
-Examples:
-  kshell app
-  kshell -N production app
-  kshell -c sidecar app
-  kshell app /bin/bash
-"""
+die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
+have() { command -v "$1" >/dev/null 2>&1; }
 
-import argparse
-import os
-import sys
+trap 'echo; die "Interrupted."' INT
 
-# Import utilities from the same directory
-from k8s_utils import (
-    Colors, print_error, print_info, resolve_pod, run_command
+usage() {
+  cat >&2 <<'USAGE'
+Usage: kshell [-n NAMESPACE] [-c CONTAINER] REGEX [-- CMD ...]
+  REGEX  Required positional regex to match pod name
+  -n     Kubernetes namespace (defaults to current context's namespace)
+  -c     Container name; must be Running to attach
+  --     Everything after this is the command to run (default: /bin/sh)
+
+Env:
+  KUBECTL   kubectl binary (default: kubectl)
+  WAIT_SECS seconds to wait for pod Ready (default: 60)
+USAGE
+  exit "${1:-1}"
+}
+
+NS=""; CONTAINER=""
+while getopts ":n:c:h" opt; do
+  case "$opt" in
+    n) NS="$OPTARG" ;;
+    c) CONTAINER="$OPTARG" ;;
+    h) usage 0 ;;
+    *) usage 1 ;;
+  esac
+done
+shift $((OPTIND-1))
+
+# Positional: REGEX
+[ "$#" -ge 1 ] || usage 1
+REGEX="$1"; shift
+
+# Command to run inside the container (default: /bin/sh)
+if [ "$#" -gt 0 ]; then
+  [ "${1:-}" = "--" ] && shift
+  CMD=("$@")
+else
+  CMD=("/bin/sh")
+fi
+
+have "$KUBECTL" || die "kubectl not found in PATH"
+
+nsflag=()
+[ -n "$NS" ] && nsflag=(-n "$NS")
+
+choose_from() {
+  # stdin: options; stdout: chosen
+  local prompt="${1:-Select}"
+  mapfile -t _opts < <(cat)
+  [ "${#_opts[@]}" -gt 0 ] || die "Nothing to choose from for: $prompt"
+  [ "${#_opts[@]}" -eq 1 ] && { printf '%s\n' "${_opts[0]}"; return; }
+
+  if [ -r /dev/tty ]; then
+    if have fzf; then
+      printf '%s\n' "${_opts[@]}" | fzf --prompt="$prompt > " --height=40% --reverse
+    else
+      printf '%s\n' "$prompt:" >&2
+      local PS3="$prompt > "
+      local choice
+      select choice in "${_opts[@]}"; do
+        [ -n "${choice:-}" ] && { printf '%s\n' "$choice"; break; }
+      done < /dev/tty
+    fi
+  else
+    # Non-interactive: pick newest/last.
+    printf '%s\n' "${_opts[${#_opts[@]}-1]}"
+  fi
+}
+
+# Get pods matching regex, sorted oldest->newest
+mapfile -t PODS < <(
+  "$KUBECTL" "${nsflag[@]}" get pods \
+    --sort-by=.metadata.creationTimestamp \
+    --no-headers -o custom-columns=:metadata.name \
+  | grep -E -- "$REGEX" || true
 )
+[ "${#PODS[@]}" -gt 0 ] || die "No pods match regex: $REGEX"
 
+# Pick pod
+if [ "${#PODS[@]}" -eq 1 ]; then
+  POD="${PODS[0]}"
+else
+  POD="$(printf '%s\n' "${PODS[@]}" | choose_from "Select pod")"
+fi
+[ -n "$POD" ] || die "No pod selected"
 
-def parse_args() -> argparse.Namespace:
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Open an interactive shell in a pod selected by regex",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  kshell app
-  kshell -N production app
-  kshell -c sidecar app
-  kshell app /bin/bash
-        """
-    )
-    
-    parser.add_argument(
-        '-N', '--namespace',
-        help='Kubernetes namespace (optional)'
-    )
-    
-    parser.add_argument(
-        '-c', '--container',
-        help='Container name (optional)'
-    )
-    
-    parser.add_argument(
-        'pod_regex',
-        help='ERE matched against pod names (single pod must match)'
-    )
-    
-    parser.add_argument(
-        'shell_command',
-        nargs=argparse.REMAINDER,
-        help='Optional command to exec (default: /bin/sh)'
-    )
-    
-    return parser.parse_args()
+# Wait briefly for containers to become Ready (best-effort)
+"$KUBECTL" "${nsflag[@]}" wait --for=condition=Ready "pod/$POD" --timeout="${WAIT_SECS}s" >/dev/null 2>&1 || true
 
+# Robust container status fetch: prefer jq, fallback to jsonpath with safe quoting
+get_container_status_lines() {
+  if have jq; then
+    "$KUBECTL" "${nsflag[@]}" get pod "$POD" -o json \
+    | jq -r '.status.containerStatuses[]? | [
+        .name,
+        (.ready // false),
+        (.restartCount // 0),
+        (.state.running.startedAt // ""),
+        (.state.waiting.reason // ""),
+        (.state.terminated.reason // "")
+      ] | @tsv'
+  else
+    local JP
+    JP='{range .status.containerStatuses[*]}{.name}{"\t"}{.ready}{"\t"}{.restartCount}{"\t"}{.state.running.startedAt}{"\t"}{.state.waiting.reason}{"\t"}{.state.terminated.reason}{"\n"}{end}'
+    "$KUBECTL" "${nsflag[@]}" get pod "$POD" -o "jsonpath=${JP}"
+  fi
+}
 
-def main() -> None:
-    """Main function."""
-    args = parse_args()
-    
-    try:
-        # Resolve the pod
-        pod_name = resolve_pod(args.pod_regex, args.namespace)
-        
-        # Build kubectl exec command
-        cmd = ['kubectl']
-        if args.namespace:
-            cmd.extend(['-n', args.namespace])
-        cmd.extend(['exec', '-it', pod_name])
-        
-        if args.container:
-            cmd.extend(['-c', args.container])
-        
-        # Add shell command (default to /bin/sh if none provided)
-        if args.shell_command:
-            cmd.append('--')
-            cmd.extend(args.shell_command)
-        else:
-            cmd.extend(['--', '/bin/sh'])
-        
-        print_info(f"Opening shell in pod: {pod_name}")
-        
-        # Execute the command (don't capture output for interactive shell)
-        run_command(cmd, capture_output=False, check=False)
-        
-    except KeyboardInterrupt:
-        print("\nInterrupted by user", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print_error(str(e))
-        sys.exit(1)
+mapfile -t CST < <(get_container_status_lines)
 
+# If containerStatuses not yet populated, bail with a clear reason
+if [ "${#CST[@]}" -eq 0 ]; then
+  die "Pod status not yet available for '$POD'. Try again in a few seconds."
+fi
 
-if __name__ == '__main__':
-    main()
+RUNNING=()
+ALL=()
+STATE_STR=()
+for line in "${CST[@]}"; do
+  IFS=$'\t' read -r name ready restarts running_ts waiting_reason term_reason <<<"$line"
+  ALL+=("$name")
+  if [ -n "${running_ts}" ]; then
+    RUNNING+=("$name")
+    STATE_STR+=("$name=Running")
+  elif [ -n "${waiting_reason}" ]; then
+    STATE_STR+=("$name=Waiting(${waiting_reason})")
+  elif [ -n "${term_reason}" ]; then
+    STATE_STR+=("$name=Terminated(${term_reason})")
+  else
+    STATE_STR+=("$name=Unknown")
+  fi
+done
+
+# If user specified -c, it must exist and be Running
+if [ -n "$CONTAINER" ]; then
+  printf '%s\n' "${ALL[@]}" | grep -Fxq -- "$CONTAINER" \
+    || die "Container '$CONTAINER' not in pod '$POD'. Available: ${ALL[*]}"
+  printf '%s\n' "${RUNNING[@]}" | grep -Fxq -- "$CONTAINER" \
+    || die "Container '$CONTAINER' is not Running in '$POD' (states: ${STATE_STR[*]})."
+else
+  if [ "${#RUNNING[@]}" -eq 0 ]; then
+    die "No Running containers in '$POD' (states: ${STATE_STR[*]})."
+  elif [ "${#RUNNING[@]}" -eq 1 ]; then
+    CONTAINER="${RUNNING[0]}"
+  else
+    if [ -r /dev/tty ]; then
+      CONTAINER="$(printf '%s\n' "${RUNNING[@]}" | choose_from "Select container")"
+    else
+      CONTAINER="${RUNNING[${#RUNNING[@]}-1]}"
+    fi
+  fi
+fi
+
+# TTY flags: always -i; add -t only when attached to a tty
+tty_flags=(-i); { [ -t 0 ] && [ -t 1 ]; } && tty_flags+=(-t)
+
+printf 'Opening shell in %s/%s%s\n' "$POD" "$CONTAINER" "${NS:+ (ns:$NS)}" >&2
+exec "$KUBECTL" "${nsflag[@]}" exec "${tty_flags[@]}" "$POD" -c "$CONTAINER" -- "${CMD[@]}"
+
