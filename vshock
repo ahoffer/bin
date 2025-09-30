@@ -15,4 +15,7 @@ sleep $PAUSE
 vzoom 300
 sleep $PAUSE
 vzoom 400
+sleep $PAUSE
+sleep $PAUSE
+vzom 170
 

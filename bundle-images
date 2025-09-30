@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Reads image tags from stdin, dedupes, saves them to tar.
+#
+# Expected format is one image per line:
+#   postgres:13.4
+#   qdrant/qdrant:v1.13.3-gpu-nvidia
+#   registry.octo-cx-prod.runshiftup.com/octo-cx/common/docker-hub/coturn:25.9.18-edge-alpine#
+#
+# Examples:
+#  save-images < images.txt
+#  echo "postgres:13.4" | save-images
+
+archive_bundle_file="/tmp/container-images.tar"
+compress=true
+
+# fresh workspace
+tmpdir="$(mktemp -d)"
+
+# For now, always compression because it is very effective
+#if [[ "${1:-}" == "-c" ]]; then
+#  compress=true
+#  shift
+#fi
+
+if $compress; then
+  if ! command -v zstd >/dev/null 2>&1; then
+    echo "Error: zstd is not installed or not in PATH." >&2
+    exit 1
+  fi
+fi
+
+# strip comments/blanks, dedupe
+images=$(grep -vE '^\s*(#|$)' | sed 's/^\s*//;s/\s*$//' | sort -u)
+
+echo "Created temp dir $tmpdir"
+
+while IFS= read -r image; do
+  [[ -z "$image" ]] && continue
+  echo "$image"
+  safe_filename="$(printf '%s' "$image" | tr '/:' '__')"
+  image_file="$tmpdir/${safe_filename}.tar"
+  docker pull "$image" >/dev/null
+  docker save -o "$image_file" "$image"
+done <<<"$images"
+
+echo "Creating tar archive...(slow)"
+( cd "$tmpdir" && tar -cf "$archive_bundle_file" ./*.tar )
+zstd -T0 -q -f --rm "$archive_bundle_file"
+echo "Created $archive_bundle_file.zst in $SECONDS seconds"
+
+
