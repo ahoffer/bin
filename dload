@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 #
 # Docker Load Images
+# To untar a tar file of other files, use tar -xf "archive" -C "outdir"
 #
-# Load all Docker image tarballs from the current directory into Docker. Uses parallel processing when available for faster loading.
-
+# Load all Docker image tarballs from the current directory into Docker. Uses parallel processing with background jobs.
 set -euo pipefail
 
 # Kill all child jobs on Ctrl+C
 trap 'echo "Interrupted. Killing all jobs..."; kill 0; exit 1' SIGINT
 
 EXTRACT_DIR="."
+
 mapfile -t TARFILES < <(find "$EXTRACT_DIR" -maxdepth 1 -name '*.tar')
 
 if [[ ${#TARFILES[@]} -eq 0 ]]; then
@@ -17,7 +18,7 @@ if [[ ${#TARFILES[@]} -eq 0 ]]; then
   exit 1
 fi
 
-echo "Found ${#TARFILES[@]} image tarballs. Loading..."
+echo "Found ${#TARFILES[@]} image tarballs. Loading in parallel..."
 
 load_image() {
   local tarfile="$1"
@@ -25,16 +26,12 @@ load_image() {
   docker load -i "$tarfile"
 }
 
-export -f load_image
+# Start all jobs in background
+for tar in "${TARFILES[@]}"; do
+  load_image "$tar" &
+done
 
-if command -v parallel &>/dev/null; then
-  printf "%s\n" "${TARFILES[@]}" | parallel --will-cite load_image {}
-else
-  echo "Warning: GNU parallel not found. Falling back to sequential loading." >&2
-  for tar in "${TARFILES[@]}"; do
-    load_image "$tar"
-  done
-fi
+# Wait for all background jobs to complete
+wait
 
 echo "All images loaded successfully!"
-
