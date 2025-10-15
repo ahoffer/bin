@@ -8,7 +8,7 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-# Determine real user’s home (for cloning into ~/bin)
+# Determine real user's home (for cloning into ~/bin)
 if [[ -n "${SUDO_USER:-}" ]]; then
   USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
   TARGET_USER=$SUDO_USER
@@ -44,6 +44,7 @@ echo "Installing development tools…"
 apt install -y \
   git \
   vim \
+  wget \
   xclip \
   maven \
   openssh-server \
@@ -52,7 +53,6 @@ apt install -y \
   openjdk-17-jdk \
   openjdk-21-jdk \
   gnome-shell-extension-manager \
-  flameshot \
   python3-pip \
   python3-venv \
   jq \
@@ -66,7 +66,6 @@ apt install -y \
   tree \
   graphviz \
   v4l-utils \
-  obs-studio \
   gnome-online-accounts \
   gvfs-backends \
   nautilus \
@@ -86,8 +85,8 @@ apt install -y \
 
 
 #### pipx - can use instead of pip to install global utilities like yamlformat
-pipx ensurepath
-pipx completions
+sudo -u "$TARGET_USER" pipx ensurepath
+sudo -u "$TARGET_USER" pipx completions
 
 
 ############################
@@ -144,7 +143,7 @@ fi
 ############################
 if [[ ! -d "${USER_HOME}/bin" ]]; then
   echo "Cloning ~/bin from GitHub…"
-  sudo -u "$TARGET_USER" git clone git@github.com:ahoffer/bin.git \
+  sudo -u "$TARGET_USER" git clone https://github.com/ahoffer/bin.git \
     "${USER_HOME}/bin"
 else
   echo "${USER_HOME}/bin exists; skipping clone."
@@ -153,45 +152,52 @@ fi
 ############################
 # 7) Docker CE & Docker Compose
 ############################
-if [[ ! -f "$DOCKER_KEY" ]]; then
-  echo "Adding Docker’s GPG key…"
-  mkdir -p /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-    | gpg --dearmor > "$DOCKER_KEY"
-else
-  echo "Docker GPG key already in place; skipping."
-fi
+if ! command -v docker >/dev/null 2>&1; then
+  echo "Installing Docker…"
+  
+  if [[ ! -f "$DOCKER_KEY" ]]; then
+    echo "Adding Docker's GPG key…"
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor > "$DOCKER_KEY"
+  else
+    echo "Docker GPG key already in place; skipping."
+  fi
 
-DOCKER_DEB="deb [arch=$(dpkg --print-architecture) signed-by=${DOCKER_KEY}] \
+  DOCKER_DEB="deb [arch=$(dpkg --print-architecture) signed-by=${DOCKER_KEY}] \
 https://download.docker.com/linux/ubuntu \
 $(lsb_release -cs) stable"
-if ! grep -Fxq "$DOCKER_DEB" "$DOCKER_LIST" 2>/dev/null; then
-  echo "Configuring Docker apt repository…"
-  tee "$DOCKER_LIST" >/dev/null <<<"$DOCKER_DEB"
+  if ! grep -Fxq "$DOCKER_DEB" "$DOCKER_LIST" 2>/dev/null; then
+    echo "Configuring Docker apt repository…"
+    tee "$DOCKER_LIST" >/dev/null <<<"$DOCKER_DEB"
+  else
+    echo "Docker repository already configured; skipping."
+  fi
+
+  apt update
+  apt install -y \
+    docker-ce \
+    docker-ce-cli \
+    containerd.io \
+    docker-compose-plugin
+
+  # Enable & start Docker
+  systemctl is-enabled docker >/dev/null 2>&1 || systemctl enable docker
+  systemctl is-active docker  >/dev/null 2>&1 || systemctl start  docker
 else
-  echo "Docker repository already configured; skipping."
+  echo "Docker already installed; skipping."
 fi
-
-apt update
-apt install -y \
-  docker-ce \
-  docker-ce-cli \
-  containerd.io \
-  docker-compose-plugin
-
-# Enable & start Docker
-systemctl is-enabled docker >/dev/null 2>&1 || systemctl enable docker
-systemctl is-active docker  >/dev/null 2>&1 || systemctl start  docker
 
 ############################
 # 8) Add user to docker group
 ############################
-if ! id -nG "$TARGET_USER" | grep -qw docker; then
-  echo "Adding $TARGET_USER to docker group…"
-  usermod -aG docker "$TARGET_USER"
-  echo "→ Run 'newgrp docker' or log out/in to apply."
-else
-  echo "$TARGET_USER already in docker group; skipping."
+if command -v docker >/dev/null 2>&1; then
+  if ! id -nG "$TARGET_USER" | grep -qw docker; then
+    echo "Adding $TARGET_USER to docker group…"
+    usermod -aG docker "$TARGET_USER"
+    echo "→ Run 'newgrp docker' or log out/in to apply."
+  else
+    echo "$TARGET_USER already in docker group; skipping."
+  fi
 fi
 
 ############################
@@ -211,9 +217,125 @@ else
   echo "Helm already installed; skipping."
 fi
 
+
+# default file: ~/.git-credentials
+sudo -u "$TARGET_USER" git config --global credential.helper store
+
+
 ############################
-# 10) Cleanup & Verify
+# Register Kubernetes repo (community‐owned repo)
 ############################
+if ! command -v kubectl >/dev/null 2>&1; then
+  echo "Installing Kubernetes tools…"
+  
+  K8S_KEYRING=/etc/apt/keyrings/kubernetes-archive-keyring.gpg
+  K8S_LIST=/etc/apt/sources.list.d/kubernetes.list
+  K8S_DEB="deb [signed-by=${K8S_KEYRING}] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /"
+
+  echo "Configuring Kubernetes apt repo…"
+
+  # 1) Import the key only if it doesn't already exist
+  if [[ ! -f "$K8S_KEYRING" ]]; then
+    echo "→ Adding Kubernetes GPG key…"
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key \
+      | gpg --batch --yes --dearmor -o "$K8S_KEYRING"
+  else
+    echo "→ Kubernetes keyring already present; skipping."
+  fi
+
+  # 2) Add the apt source only if it's not already in place
+  if ! grep -Fxq "$K8S_DEB" "$K8S_LIST" 2>/dev/null; then
+    echo "→ Writing Kubernetes apt source…"
+    tee "$K8S_LIST" >/dev/null <<EOF
+$K8S_DEB
+EOF
+  else
+    echo "→ Kubernetes apt source already configured; skipping."
+  fi
+
+  # install & pin
+  apt update
+  apt install -y kubelet kubeadm kubectl
+  apt-mark hold kubelet kubeadm kubectl
+else
+  echo "Kubernetes tools already installed; skipping."
+fi
+
+
+###### Add VS Code
+wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg
+install -D -o root -g root -m 644 packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg
+echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | tee /etc/apt/sources.list.d/vscode.list > /dev/null
+rm -f packages.microsoft.gpg
+apt update && apt install -y code
+
+########### Signal
+# 1. Install our official public software signing key:
+wget -O- https://updates.signal.org/desktop/apt/keys.asc | gpg --dearmor > signal-desktop-keyring.gpg
+cat signal-desktop-keyring.gpg | tee /usr/share/keyrings/signal-desktop-keyring.gpg > /dev/null
+rm -f signal-desktop-keyring.gpg
+# 2. Add our repository to your list of repositories:
+echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/signal-desktop-keyring.gpg] https://updates.signal.org/desktop/apt xenial main' | \
+  tee /etc/apt/sources.list.d/signal-xenial.list
+# 3. Update your package database and install Signal:
+apt update && apt install -y signal-desktop
+
+
+# Enable the kernel's user-namespace sandbox
+echo 'kernel.unprivileged_userns_clone = 1' | tee /etc/sysctl.d/20-appimage-namespaces.conf
+# Allow unprivileged namespaces in AppArmor
+echo 'kernel.apparmor_restrict_unprivileged_userns = 0' | tee /etc/sysctl.d/20-apparmor-unrestrict.conf
+# Apply immediately (ignore errors if kernel doesn't support these parameters)
+sysctl --system || true
+
+
+#### FF MPEG Snap 
+snap install ffmpeg
+
+
+### Install k3d
+curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+
+
+#### Register Geany as editor (run as target user for desktop environment)
+apt install -y geany
+sudo -u "$TARGET_USER" xdg-mime default geany.desktop text/plain
+sudo -u "$TARGET_USER" gio mime text/plain geany.desktop
+
+#### Install the good OBS
+OBS_LIST=/etc/apt/sources.list.d/obs-studio-ppa.list
+if [[ ! -f "$OBS_LIST" ]]; then
+  echo "Adding OBS Studio PPA…"
+  # -y / --yes skips the ENTER prompt
+  add-apt-repository -y ppa:obsproject/obs-studio
+else
+  echo "OBS Studio PPA already configured; skipping."
+fi
+apt update
+apt install -y obs-studio
+
+
+#### Install flatpak and Flameshot
+if ! command -v flatpak >/dev/null 2>&1; then
+  echo "Installing flatpak…"
+  apt install -y flatpak
+  # Add Flathub repo
+  flatpak remote-add --system --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+else
+  echo "flatpak already installed; skipping."
+fi
+
+echo "Installing Flameshot via flatpak…"
+flatpak install --system -y flathub org.flameshot.Flameshot
+
+#### Enable ssh server
+systemctl enable --now ssh
+
+############################
+# Final Cleanup & Verify
+############################
+echo
 echo "Cleaning up apt caches…"
 apt clean
 rm -rf /var/lib/apt/lists/*
@@ -226,112 +348,7 @@ git --version        || echo "Git not found"
 google-chrome --version 2>/dev/null && echo "Chrome OK" || echo "Chrome not installed"
 docker --version     || echo "Docker not found"
 helm version         || echo "Helm not found"
-
-
-# default file: ~/.git-credentials
-git config --global credential.helper store
-
-
-############################
-# Register Kubernetes repo (community‐owned repo)
-############################
-K8S_KEYRING=/etc/apt/keyrings/kubernetes-archive-keyring.gpg
-K8S_LIST=/etc/apt/sources.list.d/kubernetes.list
-K8S_DEB="deb [signed-by=${K8S_KEYRING}] https://pkgs.k8s.io/core:/stable:/v1.33/deb/ /"
-
-echo "Configuring Kubernetes apt repo…"
-
-# 1) Import the key only if it doesn't already exist
-if [[ ! -f "$K8S_KEYRING" ]]; then
-  echo "→ Adding Kubernetes GPG key…"
-  mkdir -p /etc/apt/keyrings
-  curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.33/deb/Release.key \
-    | gpg --batch --yes --dearmor -o "$K8S_KEYRING"
-else
-  echo "→ Kubernetes keyring already present; skipping."
-fi
-
-# 2) Add the apt source only if it’s not already in place
-if ! grep -Fxq "$K8S_DEB" "$K8S_LIST" 2>/dev/null; then
-  echo "→ Writing Kubernetes apt source…"
-  tee "$K8S_LIST" >/dev/null <<EOF
-$K8S_DEB
-EOF
-else
-  echo "→ Kubernetes apt source already configured; skipping."
-fi
-
-# install & pin
-apt update
-apt install -y kubelet kubeadm kubectl
-apt-mark hold kubelet kubeadm kubectl
-
-
-###### Add VS Code
-wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg
-sudo install -D -o root -g root -m 644 packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg
-echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" |sudo tee /etc/apt/sources.list.d/vscode.list > /dev/null
-rm -f packages.microsoft.gpg
-sudo apt update && sudo apt install -y code
-
-########### Signal
-# 1. Install our official public software signing key:
-wget -O- https://updates.signal.org/desktop/apt/keys.asc | gpg --dearmor > signal-desktop-keyring.gpg
-cat signal-desktop-keyring.gpg | sudo tee /usr/share/keyrings/signal-desktop-keyring.gpg > /dev/null
-# 2. Add our repository to your list of repositories:
-echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/signal-desktop-keyring.gpg] https://updates.signal.org/desktop/apt xenial main' |\
-  sudo tee /etc/apt/sources.list.d/signal-xenial.list
-# 3. Update your package database and install Signal:
-sudo apt update && sudo apt install signal-desktop
-
-
-# Enable the kernel’s user-namespace sandbox
-echo 'kernel.unprivileged_userns_clone = 1' | sudo tee /etc/sysctl.d/20-appimage-namespaces.conf
-# Allow unprivileged namespaces in AppArmor
-echo 'kernel.apparmor_restrict_unprivileged_userns = 0' | sudo tee /etc/sysctl.d/20-apparmor-unrestrict.conf
-# Apply immediately
-sudo sysctl --system
-
-
-#### FF MPEG Snap 
-sudo snap install ffmpeg
-
-
-### Install k3d
-curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
-
-
-### Download kubectl to always get the latest “stable” release
-# Doesn't work as sudo
-#curl -Lo ~/bin/kubectl "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-#chmod +x ~/bin/kubectl
-apt install -y 
-
-#### Register Geany as editor
-xdg-mime default geany.desktop text/plain
-## Or this. How are they different?
-apt install -y geany
-gio mime text/plain geany.desktop
-
-#### Install the good OBS
-OBS_LIST=/etc/apt/sources.list.d/obs-studio-ppa.list
-if [[ ! -f "$OBS_LIST" ]]; then
-  echo "Adding OBS Studio PPA…"
-  # -y / --yes skips the ENTER prompt
-  add-apt-repository -y ppa:obsproject/obs-studio
-else
-  echo "OBS Studio PPA already configured; skipping."
-fi
-apt update
-apt install obs-studio
-
-
-#### Flameshot
-flatpak install -y flathub org.flameshot.Flameshot
-
-#### Enable ssh server
-sudo systemctl enable --now ssh
+kubectl version --client 2>/dev/null && echo "kubectl OK" || echo "kubectl not found"
 
 echo
 echo "All done!"
-
