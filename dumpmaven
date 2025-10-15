@@ -1,0 +1,108 @@
+#!/bin/bash
+set -euo pipefail
+
+# Validate environment variables
+if [[ -z "${RUNSHIFT_HOST:-}" ]] || [[ -z "${RUNSHIFT_PROJECT_ID:-}" ]] || [[ -z "${RUNSHIFT_TOKEN:-}" ]]; then
+  echo "Error: Missing required environment variables" >&2
+  echo "Required: RUNSHIFT_HOST, RUNSHIFT_PROJECT_ID, RUNSHIFT_TOKEN" >&2
+  exit 1
+fi
+
+API_BASE="https://${RUNSHIFT_HOST}/api/v4"
+PROJECT_ID="${RUNSHIFT_PROJECT_ID}"
+TOKEN="${RUNSHIFT_TOKEN}"
+
+# Function to make authenticated API calls
+api_call() {
+  local endpoint="$1"
+  curl -sf -H "PRIVATE-TOKEN: ${TOKEN}" "${API_BASE}${endpoint}"
+}
+
+echo "Querying GitLab Package Registry..." >&2
+echo >&2
+
+# Get all Maven packages with pagination
+page=1
+all_packages="[]"
+
+while true; do
+  packages=$(api_call "/projects/${PROJECT_ID}/packages?package_type=maven&per_page=100&page=${page}&order_by=name&sort=asc")
+
+  # Break if no packages returned
+  if [[ $(echo "$packages" | jq '. | length') -eq 0 ]]; then
+    break
+  fi
+
+  # Append to all_packages
+  all_packages=$(echo "$all_packages" "$packages" | jq -s '.[0] + .[1]')
+  ((page++))
+done
+
+# Count packages
+package_count=$(echo "$all_packages" | jq '. | length')
+
+if [[ $package_count -eq 0 ]]; then
+  echo "No Maven artifacts found in the repository." >&2
+  exit 0
+fi
+
+echo "Found ${package_count} Maven package(s)" >&2
+echo >&2
+
+# Print header
+printf "%-30s %-20s %-10s %-10s\n" "Artifact ID" "Version" "Type" "Classifier" >&2
+echo "===========================================================================" >&2
+
+# Process each package
+echo "$all_packages" | jq -c '.[]' | while IFS= read -r package; do
+  package_id=$(echo "$package" | jq -r '.id')
+  package_name=$(echo "$package" | jq -r '.name')
+  version=$(echo "$package" | jq -r '.version')
+
+  # Extract artifact ID from package name (format: groupId/artifactId or just artifactId)
+  artifact_id=$(echo "$package_name" | awk -F'/' '{print $NF}')
+
+  # Get package files
+  files=$(api_call "/projects/${PROJECT_ID}/packages/${package_id}/package_files")
+
+  # Process each file
+  echo "$files" | jq -c '.[]' | while IFS= read -r file; do
+    filename=$(echo "$file" | jq -r '.file_name')
+
+    # Skip metadata files
+    if [[ "$filename" =~ \.(md5|sha1|sha256|sha512|asc)$ ]] || [[ "$filename" == "maven-metadata.xml" ]]; then
+      continue
+    fi
+
+    # Parse extension (type)
+    if [[ "$filename" =~ \.([^.]+)$ ]]; then
+      file_type="${BASH_REMATCH[1]}"
+    else
+      file_type="N/A"
+    fi
+
+    # Parse classifier
+    # Format: artifactId-version[-classifier].extension
+    basename="${filename%.*}"
+    prefix="${artifact_id}-${version}"
+
+    if [[ "$basename" == "$prefix" ]]; then
+      classifier="N/A"
+    elif [[ "$basename" =~ ^${prefix}-(.+)$ ]]; then
+      classifier="${BASH_REMATCH[1]}"
+    else
+      classifier="N/A"
+    fi
+
+    # Print artifact details
+    printf "%-30s %-20s %-10s %-10s\n" "$artifact_id" "$version" "$file_type" "$classifier"
+  done
+
+  # If no files printed, show package with N/A
+  files_count=$(echo "$files" | jq '. | length')
+  if [[ $files_count -eq 0 ]]; then
+    printf "%-30s %-20s %-10s %-10s\n" "$artifact_id" "$version" "N/A" "N/A"
+  fi
+done
+
+echo "=================================================================================="

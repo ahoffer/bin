@@ -5,9 +5,9 @@ import subprocess
 import re
 
 def get_container_ids():
-    """Get IDs of all running containers"""
     result = subprocess.run(['docker', 'ps', '-q'], capture_output=True, text=True)
-    return result.stdout.strip().split('\n')
+    ids = [x for x in result.stdout.strip().split('\n') if x]
+    return ids
 
 def format_ports(tcp_ports, udp_ports):
     """Format port lists with ranges and proper separation"""
@@ -82,17 +82,21 @@ def main():
             image, tag = image_with_tag, "latest"
         
         # Get exposed ports
-        exposed_ports = container_info['Config'].get('ExposedPorts', {})
-        tcp_ports = []
-        udp_ports = []
-        
-        for port_proto in exposed_ports:
-            port, proto = port_proto.split('/')
+        exposed_ports = container_info['Config'].get('ExposedPorts') or {}
+        tcp_ports, udp_ports = [], []
+
+        for key in exposed_ports.keys():
+            s = str(key)
+            parts = s.split('/', 1)
+            port = parts[0]
+            proto = parts[1].lower() if len(parts) == 2 else 'tcp'  # default to tcp if missing
+            if not port.isdigit():
+                continue
             if proto == 'tcp':
                 tcp_ports.append(port)
             elif proto == 'udp':
                 udp_ports.append(port)
-        
+
         ports = format_ports(tcp_ports, udp_ports)
         
         # Add container info to our list

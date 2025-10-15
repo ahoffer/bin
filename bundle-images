@@ -6,48 +6,62 @@ set -euo pipefail
 # Expected format is one image per line:
 #   postgres:13.4
 #   qdrant/qdrant:v1.13.3-gpu-nvidia
-#   registry.octo-cx-prod.runshiftup.com/octo-cx/common/docker-hub/coturn:25.9.18-edge-alpine#
+#   registry.octo-cx-prod.runshiftup.com/octo-cx/common/docker-hub/coturn:25.9.18-edge-alpine
 #
 # Examples:
-#  save-images < images.txt
-#  echo "postgres:13.4" | save-images
+#  echo "postgres:13.4" | save-images -o /path/container-images.tar
+#  save-images < images.manifest
 
-archive_bundle_file="/tmp/container-images.tar"
-compress=true
+archive_bundle_file="/tmp/container-images-$(date +%Y%m%d%H%M%S).tar"
 
-# fresh workspace
-tmpdir="$(mktemp -d)"
+while [[ $# -gt 0 ]]; do
+  case $1 in
+  -o|--output) archive_bundle_file="$2"; shift 2 ;;
+  -h|--help) echo "Usage: $0 [-o|--output file]"; exit 0 ;;
+  *) echo "Usage: $0 [-o|--output file]" >&2; exit 2 ;;
+  esac
+done
 
-# For now, always compression because it is very effective
-#if [[ "${1:-}" == "-c" ]]; then
-#  compress=true
-#  shift
-#fi
-
-if $compress; then
-  if ! command -v zstd >/dev/null 2>&1; then
-    echo "Error: zstd is not installed or not in PATH." >&2
-    exit 1
-  fi
+# normalize output path
+if [[ "$archive_bundle_file" != /* ]]; then
+  archive_bundle_file="$(pwd)/$archive_bundle_file"
 fi
 
-# strip comments/blanks, dedupe
-images=$(grep -vE '^\s*(#|$)' | sed 's/^\s*//;s/\s*$//' | sort -u)
+# ensure output dir exists
+mkdir -p "$(dirname "$archive_bundle_file")"
 
-echo "Created temp dir $tmpdir"
 
-while IFS= read -r image; do
-  [[ -z "$image" ]] && continue
-  echo "$image"
+save_image () {
+  image=$1
   safe_filename="$(printf '%s' "$image" | tr '/:' '__')"
   image_file="$tmpdir/${safe_filename}.tar"
   docker pull "$image" >/dev/null
   docker save -o "$image_file" "$image"
+}
+
+# strip comments/blanks, dedupe
+images=$(grep -vE '^\s*(#|$)' | sed 's/^\s*//;s/\s*$//' | sort -u)
+
+# fresh workspace
+tmpdir="$(mktemp -d)"
+echo "Created temp dir $tmpdir"
+
+echo "Starting pull and save..."
+while IFS= read -r image_spec; do
+  [[ -z "$image_spec" ]] && continue
+  echo "  $image_spec"
+save_image "$image_spec" &
 done <<<"$images"
 
-echo "Creating tar archive...(slow)"
-( cd "$tmpdir" && tar -cf "$archive_bundle_file" ./*.tar )
-zstd -T0 -q -f --rm "$archive_bundle_file"
-echo "Created $archive_bundle_file.zst in $SECONDS seconds"
+#synchronize
+echo "Waiting for pull and save to complete..."
+wait
+echo "Done"
 
+echo 'Creating tar archive (slow)'
+( cd "$tmpdir" && tar -cf "$archive_bundle_file" *.tar )
 
+# compressing large files is not always the best thing to do
+# zstd -T0 -q -f --rm "$archive_bundle_file" && archive_bundle_file="${archive_bundle_file}.zst"
+
+echo "Created $archive_bundle_file in ${SECONDS} seconds"
