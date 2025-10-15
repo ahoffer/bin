@@ -50,23 +50,30 @@ echo "Found ${package_count} Maven package(s)" >&2
 echo >&2
 
 # Print header
-printf "%-30s %-20s %-10s %-10s\n" "Artifact ID" "Version" "Type" "Classifier" >&2
-echo "===========================================================================" >&2
+printf "%-35s %-30s %-20s %-10s %-10s\n" "Group ID" "Artifact ID" "Version" "Type" "Classifier" >&2
+echo "=========================================================================================================" >&2
 
 # Process each package
-echo "$all_packages" | jq -c '.[]' | while IFS= read -r package; do
+while IFS= read -r package; do
   package_id=$(echo "$package" | jq -r '.id')
   package_name=$(echo "$package" | jq -r '.name')
   version=$(echo "$package" | jq -r '.version')
 
-  # Extract artifact ID from package name (format: groupId/artifactId or just artifactId)
-  artifact_id=$(echo "$package_name" | awk -F'/' '{print $NF}')
+  # Extract group ID and artifact ID from package name (format: groupId/artifactId or just artifactId)
+  if [[ "$package_name" =~ ^(.+)/([^/]+)$ ]]; then
+    group_id="${BASH_REMATCH[1]}"
+    artifact_id="${BASH_REMATCH[2]}"
+  else
+    group_id="N/A"
+    artifact_id="$package_name"
+  fi
 
   # Get package files
   files=$(api_call "/projects/${PROJECT_ID}/packages/${package_id}/package_files")
 
   # Process each file
-  echo "$files" | jq -c '.[]' | while IFS= read -r file; do
+  has_files=false
+  while IFS= read -r file; do
     filename=$(echo "$file" | jq -r '.file_name')
 
     # Skip metadata files
@@ -95,14 +102,14 @@ echo "$all_packages" | jq -c '.[]' | while IFS= read -r package; do
     fi
 
     # Print artifact details
-    printf "%-30s %-20s %-10s %-10s\n" "$artifact_id" "$version" "$file_type" "$classifier"
-  done
+    printf "%-35s %-30s %-20s %-10s %-10s\n" "$group_id" "$artifact_id" "$version" "$file_type" "$classifier"
+    has_files=true
+  done < <(echo "$files" | jq -c '.[]')
 
   # If no files printed, show package with N/A
-  files_count=$(echo "$files" | jq '. | length')
-  if [[ $files_count -eq 0 ]]; then
-    printf "%-30s %-20s %-10s %-10s\n" "$artifact_id" "$version" "N/A" "N/A"
+  if [[ "$has_files" == "false" ]]; then
+    printf "%-35s %-30s %-20s %-10s %-10s\n" "$group_id" "$artifact_id" "$version" "N/A" "N/A"
   fi
-done
+done < <(echo "$all_packages" | jq -c '.[]')
 
-echo "=================================================================================="
+echo "========================================================================================================="
