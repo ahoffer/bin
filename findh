@@ -6,8 +6,8 @@
 # pattern matching. Suppresses permission denied errors.
 
 if command -v fdfind >/dev/null 2>&1; then
-  fdfind . -i -g "${@}"
+  fdfind -i -g "${1}" .
 else
   echo "fdfind not found. Install it with: sudo apt install fd-find"
-  find . -iname "${@}" 2>/dev/null
+  find . -iname "${1}" 2>/dev/null
 fi

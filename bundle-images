@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Kill all child jobs on Ctrl+C
+trap 'echo "Interrupted. Killing all jobs..."; kill 0; exit 1' SIGINT
+
 # Reads image tags from stdin, dedupes, saves them to tar.
 #
 # Expected format is one image per line:
@@ -54,7 +57,7 @@ save_image "$image_spec" &
 done <<<"$images"
 
 #synchronize
-echo "Waiting for pull and save to complete..."
+echo "Waiting for pull and save to complete (slow)"
 wait
 echo "Done"
 

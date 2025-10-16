@@ -50,8 +50,8 @@ echo "Found ${package_count} Maven package(s)" >&2
 echo >&2
 
 # Print header
-printf "%-35s %-30s %-20s %-10s %-10s\n" "Group ID" "Artifact ID" "Version" "Type" "Classifier" >&2
-echo "=========================================================================================================" >&2
+printf "%-35s %-30s %-20s %-15s %-10s\n" "Group ID" "Artifact ID" "Version" "Package Type" "Classifier" >&2
+echo "==================================================================================================================" >&2
 
 # Process each package
 while IFS= read -r package; do
@@ -102,14 +102,14 @@ while IFS= read -r package; do
     fi
 
     # Print artifact details
-    printf "%-35s %-30s %-20s %-10s %-10s\n" "$group_id" "$artifact_id" "$version" "$file_type" "$classifier"
+    printf "%-35s %-30s %-20s %-15s %-10s\n" "$group_id" "$artifact_id" "$version" "$file_type" "$classifier"
     has_files=true
   done < <(echo "$files" | jq -c '.[]')
 
   # If no files printed, show package with N/A
   if [[ "$has_files" == "false" ]]; then
-    printf "%-35s %-30s %-20s %-10s %-10s\n" "$group_id" "$artifact_id" "$version" "N/A" "N/A"
+    printf "%-35s %-30s %-20s %-15s %-10s\n" "$group_id" "$artifact_id" "$version" "N/A" "N/A"
   fi
 done < <(echo "$all_packages" | jq -c '.[]')
 
-echo "========================================================================================================="
+echo "============================================================================================================="
