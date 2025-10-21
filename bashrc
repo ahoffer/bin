@@ -39,7 +39,8 @@ shopt -s histappend
 HISTSIZE=50
 HISTFILESIZE=20000
 # Append history lines immediately
-export PROMPT_COMMAND="history -a; history -n"
+PROMPT_COMMAND='history -a; history -n; '"${PROMPT_COMMAND:-:}"
+export PROMPT_COMMAND
 # ----------------------------------------------------------------------------------------------------------
 
 
@@ -95,5 +96,4 @@ command -v regctl &>/dev/null && source <(regctl completion bash)
 # Completions for the alias "k"
 complete -F __start_kubectl k
 
-# ----------------------------------------------------------------------------------------------------------
 
