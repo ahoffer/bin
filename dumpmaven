@@ -11,6 +11,7 @@ fi
 API_BASE="https://${RUNSHIFT_HOST}/api/v4"
 PROJECT_ID="${RUNSHIFT_PROJECT_ID}"
 TOKEN="${RUNSHIFT_TOKEN}"
+MAX_PARALLEL_JOBS=30
 
 # Function to make authenticated API calls
 api_call() {
@@ -50,11 +51,13 @@ echo "Found ${package_count} Maven package(s)" >&2
 echo >&2
 
 # Print header
-printf "%-35s %-30s %-20s %-15s %-10s\n" "Group ID" "Artifact ID" "Version" "Package Type" "Classifier" >&2
-echo "==================================================================================================================" >&2
+printf "%-35s %-30s %-20s %-15s %-10s %-10s %-50s\n" "Group ID" "Artifact ID" "Version" "Package Type" "Classifier" "File ID" "Filename" >&2
+echo "====================================================================================================================================================================================================" >&2
 
-# Process each package
-while IFS= read -r package; do
+# Function to process a single package
+process_package() {
+  local package="$1"
+
   package_id=$(echo "$package" | jq -r '.id')
   package_name=$(echo "$package" | jq -r '.name')
   version=$(echo "$package" | jq -r '.version')
@@ -75,6 +78,7 @@ while IFS= read -r package; do
   has_files=false
   while IFS= read -r file; do
     filename=$(echo "$file" | jq -r '.file_name')
+    file_id=$(echo "$file" | jq -r '.id')
 
     # Skip metadata files
     if [[ "$filename" =~ \.(md5|sha1|sha256|sha512|asc)$ ]] || [[ "$filename" == "maven-metadata.xml" ]]; then
@@ -101,15 +105,41 @@ while IFS= read -r package; do
       classifier="N/A"
     fi
 
-    # Print artifact details
-    printf "%-35s %-30s %-20s %-15s %-10s\n" "$group_id" "$artifact_id" "$version" "$file_type" "$classifier"
+    # Print artifact details directly to stdout
+    printf "%-35s %-30s %-20s %-15s %-10s %-10s %-50s\n" "$group_id" "$artifact_id" "$version" "$file_type" "$classifier" "$file_id" "$filename"
     has_files=true
   done < <(echo "$files" | jq -c '.[]')
 
   # If no files printed, show package with N/A
   if [[ "$has_files" == "false" ]]; then
-    printf "%-35s %-30s %-20s %-15s %-10s\n" "$group_id" "$artifact_id" "$version" "N/A" "N/A"
+    printf "%-35s %-30s %-20s %-15s %-10s %-10s %-50s\n" "$group_id" "$artifact_id" "$version" "N/A" "N/A" "N/A" "N/A"
   fi
+}
+
+# Export necessary variables and functions for parallel execution
+export -f process_package
+export -f api_call
+export API_BASE PROJECT_ID TOKEN
+
+# Process packages in parallel
+pids=()
+
+while IFS= read -r package; do
+  # Wait if we've hit the parallel job limit
+  while [[ ${#pids[@]} -ge $MAX_PARALLEL_JOBS ]]; do
+    for i in "${!pids[@]}"; do
+      if ! kill -0 "${pids[$i]}" 2>/dev/null; then
+        unset 'pids[$i]'
+      fi
+    done
+    pids=("${pids[@]}") # Re-index array
+    [[ ${#pids[@]} -ge $MAX_PARALLEL_JOBS ]] && sleep 0.1
+  done
+
+  # Start background job
+  process_package "$package" &
+  pids+=($!)
 done < <(echo "$all_packages" | jq -c '.[]')
 
-echo "============================================================================================================="
+# Wait for all remaining jobs to complete
+wait
