@@ -1,22 +1,15 @@
 #!/usr/bin/env bash
-# Run arbitrary Bash commands in a BusyBox container and log output
-
-NAMESPACE="marrs"
+set -euo pipefail
 IMAGE="busybox:1.36"
+POD="kbb-$$"
+LOG="$HOME/kbb.log"
 
-if [ $# -eq 0 ]; then
-  echo "Usage: $0 <command>"
-  exit 1
-fi
+[ $# -eq 0 ] && { echo "usage: $0 <command>"; exit 1; }
 
-CMD="$*"
-TS=$(date +%F_%H-%M-%S)
-LOG="$HOME/kbb_${TS}.log"
+trap 'kubectl delete pod "$POD" --now --wait=false >/dev/null 2>&1 || true' EXIT
 
-echo "[INFO] Running in namespace '$NAMESPACE': $CMD"
-kubectl -n "$NAMESPACE" run kbb-test \
-  --rm -i --restart=Never --image="$IMAGE" \
-  --command -- sh -c "$CMD" | tee "$LOG"
+kubectl run "$POD" --image="$IMAGE" --restart=Never -- sleep infinity >/dev/null 2>&1
+kubectl wait --for=condition=Ready pod/"$POD" --timeout=30s >/dev/null 2>&1
 
-echo "[INFO] Output logged to: $LOG"
+kubectl exec "$POD" -- sh -lc "$*" 2>&1 | tee -a "$LOG"
 
