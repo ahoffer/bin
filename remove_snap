@@ -1,0 +1,44 @@
+#!/bin/bash
+
+# Script to completely remove snap packages and snapd from Ubuntu
+# Run with: sudo bash remove_snap.sh
+
+echo "Starting snap removal process..."
+
+# Step 1: Remove all snap packages
+echo "Removing all installed snap packages..."
+for snap in $(snap list | awk '{if(NR>1)print $1}'); do
+    echo "Removing $snap..."
+    snap remove --purge "$snap"
+done
+
+# Step 2: Remove snapd itself
+echo "Removing snapd..."
+systemctl stop snapd
+systemctl disable snapd
+systemctl mask snapd
+apt remove --autoremove snapd
+
+# Step 3: Remove snap directories
+echo "Cleaning up snap directories..."
+rm -rf /var/cache/snapd/
+rm -rf ~/snap
+rm -rf /snap
+rm -rf /var/snap
+rm -rf /var/lib/snapd
+
+# Step 4: Prevent snap from being reinstalled
+echo "Preventing snap reinstallation..."
+cat << 'EOF' > /etc/apt/preferences.d/nosnap.pref
+# To prevent repository packages from triggering the installation of Snap,
+# this file forbids snapd from being installed by APT.
+# For more information: https://linuxmint-user-guide.readthedocs.io/en/latest/snap.html
+
+Package: snapd
+Pin: release a=*
+Pin-Priority: -10
+EOF
+
+echo "Snap removal complete!"
+echo "You may want to reboot your system to ensure all snap-related processes are terminated."
+echo "After reboot, you can verify removal with: mount | grep snap"
