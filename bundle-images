@@ -1,29 +1,38 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Kill all child jobs on Ctrl+C
-trap 'echo "Interrupted. Killing all jobs..."; kill 0; exit 1' SIGINT
+show_help() {
+  cat <<EOF
+Reads Docker image tags from stdin, dedupes, and saves them to a tar archive.
+Usage: $(basename "$0") [-o|--output file]
+Examples:
+  echo "postgres:13.4" | $(basename "$0") -o /path/container-images.tar
+  $(basename "$0") < images.manifest
+Expected format of a manifest is one image per line:
+  postgres:13.4
+  qdrant/qdrant:v1.13.3-gpu-nvidia
+  registry.octo-cx-prod.runshiftup.com/octo-cx/common/docker-hub/coturn:25.9.18-edge-alpine
 
-# Reads image tags from stdin, dedupes, saves them to tar.
-#
-# Expected format is one image per line:
-#   postgres:13.4
-#   qdrant/qdrant:v1.13.3-gpu-nvidia
-#   registry.octo-cx-prod.runshiftup.com/octo-cx/common/docker-hub/coturn:25.9.18-edge-alpine
-#
-# Examples:
-#  echo "postgres:13.4" | save-images -o /path/container-images.tar
-#  save-images < images.manifest
+Options:
+  -o, --output FILE    Output tar file path (default: /tmp/container-images-TIMESTAMP.tar)
+  -h, --help          Show this help message
+
+EOF
+}
+
+trap 'echo "Interrupted. Killing all jobs..."; kill 0; exit 1' SIGINT
 
 archive_bundle_file="/tmp/container-images-$(date +%Y%m%d%H%M%S).tar"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
   -o|--output) archive_bundle_file="$2"; shift 2 ;;
-  -h|--help) echo "Usage: $0 [-o|--output file]"; exit 0 ;;
-  *) echo "Usage: $0 [-o|--output file]" >&2; exit 2 ;;
+  -h|--help) show_help; exit 0 ;;
+  *) show_help >&2; exit 2 ;;
   esac
 done
+
+echo "Waiting for stdin. Run $(basename "$0") -h for help"
 
 # normalize output path
 if [[ "$archive_bundle_file" != /* ]]; then
