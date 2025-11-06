@@ -47,8 +47,8 @@ save_image () {
   image=$1
   safe_filename="$(printf '%s' "$image" | tr '/:' '__')"
   image_file="$tmpdir/${safe_filename}.tar"
-  docker pull "$image" || { echo "ERROR: Failed to pull $image" >&2; return 1; }
-  docker save -o "$image_file" "$image" || { echo "ERROR: Failed to save $image" >&2; return 1; }
+  docker pull "$image" >/dev/null
+  docker save -o "$image_file" "$image"
 }
 
 # strip comments/blanks, dedupe
@@ -59,26 +59,15 @@ tmpdir="$(mktemp -d)"
 echo "Created temp dir $tmpdir"
 
 echo "Starting pull and save..."
-pids=()
 while IFS= read -r image_spec; do
   [[ -z "$image_spec" ]] && continue
-  save_image "$image_spec" &
-  pids+=($!)
+  echo "  $image_spec"
+save_image "$image_spec" &
 done <<<"$images"
 
 #synchronize
 echo "Waiting for pull and save to complete (slow)"
-jobs_remaining=${#pids[@]}
-while [ $jobs_remaining -gt 0 ]; do
-  if ! wait -n; then
-    echo "ERROR: One or more images failed to pull or save" >&2
-    # Kill all remaining background jobs
-    kill "${pids[@]}" 2>/dev/null || true
-    rm -rf "$tmpdir"
-    exit 1
-  fi
-  ((jobs_remaining--))
-done
+wait
 echo "Done"
 
 echo 'Creating tar archive (slow)'
