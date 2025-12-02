@@ -98,8 +98,8 @@ $skip_tests && MAVEN_ARGS+=("-DskipTests")
 MAVEN_ARGS+=("${custom_args[@]}")
 
 #This can mess up other projects
-mvn com.spotify.fmt:fmt-maven-plugin:format
-mvn license:format
+mvn com.spotify.fmt:fmt-maven-plugin:format -T6
+mvn license:format -T6
 
 echo "Executing: mvn ${MAVEN_ARGS[*]} ${maven_goals[*]}"
 

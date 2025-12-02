@@ -33,9 +33,9 @@ fi
 
 # Main logic
 if [[ $# -eq 0 ]]; then
-  $CONTAINER_CLI ps --format "$BASE_FORMAT"
+  $CONTAINER_CLI ps --format "$BASE_FORMAT" | sort
 else
   FILTER="$1"
-  $CONTAINER_CLI ps --format "$FILTER_FORMAT" | grep -i -- "$FILTER"
+  $CONTAINER_CLI ps --format "$FILTER_FORMAT" | grep -i -- "$FILTER" | sort
 fi
 

@@ -5,9 +5,15 @@
 # Search for files in the current directory and subdirectories using case-insensitive
 # pattern matching. Suppresses permission denied errors.
 
+# Wrap pattern in wildcards if not already present
+pattern="${1}"
+if [[ "${pattern}" != *\** ]]; then
+  pattern="*${pattern}*"
+fi
+
 if command -v fdfind >/dev/null 2>&1; then
-  fdfind -i -g --no-ignore "${1}"
+  fdfind -i -g --no-ignore "${pattern}"
 else
   echo "fdfind not found. Install it with: sudo apt install fd-find"
-  find . -iname "${1}" 2>/dev/null
+  find . -iname "${pattern}" 2>/dev/null
 fi
