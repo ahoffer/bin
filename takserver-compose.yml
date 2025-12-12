@@ -1,0 +1,59 @@
+services:
+  takserver:
+    image: freetakteam/freetakserver:1.1.2
+    container_name: takserver
+    hostname: takserver
+    restart: unless-stopped
+
+    networks:
+      - octo-cx-network
+
+    ports:
+      - "8087:8087"
+      - "8089:8089"
+      - "8080:8080"
+      - "8443:8443"
+      - "9000:9000"
+      - "19023:19023"
+
+    environment:
+      username: "admin"
+      password: "admin"
+      websocket_key: "admin"
+      secret_key: "admin"
+      connection_message: "Development TAK Server"
+      cot_port: 8087
+      cot_tls_port: 8089
+      api_port: 19023
+      federation_port: 9000
+      log_level: "info"
+
+  takserver-ui:
+    image: ghcr.io/freetakteam/ui:latest
+    container_name: takserver-ui
+    hostname: takserver-ui
+    restart: unless-stopped
+
+    networks:
+      - octo-cx-network
+
+    ports:
+      - "5000:5000"
+
+    environment:
+      admin_user: "admin"
+      admin_password: "admin"
+      api_host: "takserver"
+      api_port: 19023
+      api_protocol: "http"
+      websocket_key: "admin"
+      api_token: "admin"
+
+volumes:
+  core-db:
+  ui-db:
+
+networks:
+  octo-cx-network:
+    external: true
+

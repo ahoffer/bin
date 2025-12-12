@@ -5,10 +5,13 @@
 # Search for files in the current directory and subdirectories using case-insensitive
 # pattern matching. Suppresses permission denied errors.
 
-# Wrap pattern in wildcards if not already present
+# Always ensure pattern has leading and trailing wildcards for substring matching
 pattern="${1}"
-if [[ "${pattern}" != *\** ]]; then
-  pattern="*${pattern}*"
+if [[ "${pattern}" != \** ]]; then
+  pattern="*${pattern}"
+fi
+if [[ "${pattern}" != *\* ]]; then
+  pattern="${pattern}*"
 fi
 
 if command -v fdfind >/dev/null 2>&1; then
