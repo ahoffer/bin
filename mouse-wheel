@@ -28,7 +28,7 @@ fi
 
 CURRENT_VALUE=$(awk -F 'Button4,' '{print $2}' ~/.imwheelrc)
 
-NEW_VALUE=$(zenity --scale --ok-label=Apply --title="Wheelies" --text "Mouse wheel speed:" --min-value=1 --max-value=100 --value="$CURRENT_VALUE" --step 1)
+NEW_VALUE=$(zenity --scale --ok-label=Apply --title="Wheelies" --text "Mouse wheel speed:" --min-value=1 --max-value=10 --value="$CURRENT_VALUE" --step 1)
 
 if [ "$NEW_VALUE" == "" ];
 then exit 0
