@@ -38,4 +38,5 @@ sed -i "s/\( *Button4, *\).*/\1$NEW_VALUE/" ~/.imwheelrc # find the string Butto
 sed -i "s/\( *Button5, *\).*/\1$NEW_VALUE/" ~/.imwheelrc # find the string Button5, and write new value.
 
 cat ~/.imwheelrc
-imwheel -kill
+pkill imwheel 2>/dev/null || true
+imwheel
