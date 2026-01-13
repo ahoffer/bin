@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+NS="${1:-}"
+if [[ -z "$NS" ]]; then
+  echo "Usage: $0 <namespace>"
+  exit 1
+fi
+
+# Ensure namespace exists (and fail fast if it doesn't)
+kubectl get namespace "$NS" >/dev/null
+
+echo "Cleaning namespace: $NS"
+
+# 1) Fast path deletes (common built-ins)
+kubectl delete all --all -n "$NS" --ignore-not-found || true
+kubectl delete \
+  configmap,secret,pvc,ingress,networkpolicy,serviceaccount,role,rolebinding \
+  --all -n "$NS" --ignore-not-found || true
+
+# 2) Delete all namespaced resource kinds (includes CRDs)
+kubectl api-resources --verbs=delete --namespaced -o name \
+  | xargs -r -n 1 kubectl delete --all -n "$NS" --ignore-not-found || true
+
+# 3) Clear finalizers on anything still present (unsticks Terminating CRs)
+echo "Clearing finalizers on remaining objects (if any)..."
+kubectl api-resources --namespaced -o name \
+  | while read -r r; do
+      mapfile -t objs < <(kubectl get "$r" -n "$NS" -o name 2>/dev/null || true)
+      ((${#objs[@]})) || continue
+
+      for obj in "${objs[@]}"; do
+        kubectl patch "$obj" -n "$NS" --type=merge -p '{"metadata":{"finalizers":[]}}' \
+          >/dev/null 2>&1 || true
+      done
+    done
+
+# 4) Final delete pass after finalizers are cleared
+kubectl api-resources --verbs=delete --namespaced -o name \
+  | xargs -r -n 1 kubectl delete --all -n "$NS" --ignore-not-found || true
+
+echo "Remaining objects in $NS (should be none):"
+kubectl api-resources --namespaced -o name \
+  | while read -r r; do
+      out="$(kubectl get "$r" -n "$NS" --ignore-not-found --no-headers 2>/dev/null || true)"
+      [[ -n "$out" ]] && { echo "== $r =="; echo "$out"; echo; }
+    done
+
+echo "Done."
+
