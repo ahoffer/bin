@@ -14,6 +14,25 @@ get_pod_selector() {
     jq -r 'to_entries | map("\(.key)=\(.value)") | join(",")'
 }
 
+# Check for pod failure states that indicate deployment won't succeed
+# Returns 1 and prints error if fatal condition found
+check_pod_failures() {
+  local selector="$1"
+  local fatal_reasons="CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerConfigError|InvalidImageName"
+
+  while read -r pod_name reason _; do
+    [[ -z "$pod_name" ]] && continue
+    if [[ "$reason" =~ ^($fatal_reasons)$ ]]; then
+      echo "ERROR: Pod $pod_name is in $reason state"
+      kubectl describe pod "$pod_name" -n "$NAMESPACE" | tail -20
+      return 1
+    fi
+  done < <(kubectl get pod -n "$NAMESPACE" -l "$selector" \
+    -o jsonpath='{range .items[*]}{.metadata.name} {.status.containerStatuses[0].state.waiting.reason}{"\n"}{end}')
+
+  return 0
+}
+
 # Outputs status for each pod, returns 0 if all match expected hash
 verify_pod_images() {
   local expected="$1" selector="$2" result=0
@@ -52,6 +71,7 @@ SECONDS=0
 
 while ! output=$(verify_pod_images "$EXPECTED_HASH" "$SELECTOR"); do
   ((SECONDS >= RETRY_TIMEOUT)) && { echo "$output"; echo "ERROR: Image verification failed after ${RETRY_TIMEOUT}s"; exit 1; }
+  check_pod_failures "$SELECTOR" || exit 1
   echo "Pods not yet running expected image, retrying in ${RETRY_INTERVAL}s... (${SECONDS}s/${RETRY_TIMEOUT}s)"
   sleep "$RETRY_INTERVAL"
 done
