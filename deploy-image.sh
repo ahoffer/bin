@@ -5,7 +5,7 @@ readonly IMAGE="${1:?Usage: $0 <image:tag> <deployment-name>}"
 readonly DEPLOY_NAME="${2:?Usage: $0 <image:tag> <deployment-name>}"
 readonly REMOTE_HOST="bigfish"
 readonly NAMESPACE="octocx"
-readonly RETRY_TIMEOUT=10
+readonly RETRY_TIMEOUT=60
 readonly RETRY_INTERVAL=2
 
 get_pod_selector() {
