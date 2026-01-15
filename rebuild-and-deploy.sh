@@ -2,20 +2,37 @@
 set -euo pipefail
 
 # Script to rebuild and deploy Docker images to k3s
-# Usage: ./rebuild-and-deploy.sh [component...]
+# Usage: ./rebuild-and-deploy.sh [-p project_root] [component...]
 # Examples:
-#   ./rebuild-and-deploy.sh                    # Build and deploy all
-#   ./rebuild-and-deploy.sh graphql            # Build and deploy only graphql
-#   ./rebuild-and-deploy.sh edge graphql docs  # Build and deploy specific components
+#   ./rebuild-and-deploy.sh                           # Build and deploy all
+#   ./rebuild-and-deploy.sh graphql                   # Build and deploy only graphql
+#   ./rebuild-and-deploy.sh edge graphql docs         # Build and deploy specific components
+#   ./rebuild-and-deploy.sh -p /builds/cx-search app  # Use alternate project root
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly DEPLOY_SCRIPT="$SCRIPT_DIR/deploy-image.sh"
-readonly PROJECT_ROOT="${CX_PROJECT_ROOT:-/projects/cx-search}"
-readonly REGISTRY="registry.octo-cx-prod.runshiftup.com/octo-cx/cx/cx-search"
-readonly VERSION="1.27.0-SNAPSHOT"
 
 # Component name -> docker directory (image name = dir, deploy = cx-{dir minus cx- prefix})
 declare -rA DIRS=([edge]=cx-edge [app]=app [graphql]=graphql [docs]=docs [redirect]=redirect [video-streaming]=video-streaming)
+
+# Parse options
+usage() {
+  sed -n '4,10p' "$0"  # Print usage from header comments
+  echo -e "\nComponents: ${!DIRS[*]}"
+  exit 0
+}
+
+project_root="${CX_PROJECT_ROOT:-/projects/cx-search}"
+while [[ $# -gt 0 && "$1" == -* ]]; do
+  case "$1" in
+    -h|--help) usage ;;
+    -p|--project) project_root="$2"; shift 2 ;;
+    *) echo "Unknown option: $1"; exit 1 ;;
+  esac
+done
+readonly PROJECT_ROOT="$project_root"
+readonly REGISTRY="registry.octo-cx-prod.runshiftup.com/octo-cx/cx/cx-search"
+readonly VERSION="1.27.0-SNAPSHOT"
 
 banner() {
   printf '\n========================================\n%s\n========================================\n' "$1"

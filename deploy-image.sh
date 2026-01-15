@@ -1,10 +1,33 @@
 #!/bin/bash
 set -euo pipefail
 
-readonly IMAGE="${1:?Usage: $0 <image:tag> <deployment-name>}"
-readonly DEPLOY_NAME="${2:?Usage: $0 <image:tag> <deployment-name>}"
-readonly REMOTE_HOST="bigfish"
-readonly NAMESPACE="octocx"
+# Deploy a Docker image to k3s
+# Usage: ./deploy-image.sh [-r host] [-n namespace] <image:tag> <deployment-name>
+# Examples:
+#   ./deploy-image.sh registry.example.com/app:1.0 cx-app
+#   ./deploy-image.sh -r otherhost myimage:latest cx-service
+#   ./deploy-image.sh -n mynamespace myimage:latest cx-service
+
+usage() {
+  sed -n '4,9p' "$0"
+  exit 0
+}
+
+remote_host="bigfish"
+namespace="octocx"
+while [[ $# -gt 0 && "$1" == -* ]]; do
+  case "$1" in
+    -h|--help) usage ;;
+    -r|--remote) remote_host="$2"; shift 2 ;;
+    -n|--namespace) namespace="$2"; shift 2 ;;
+    *) echo "Unknown option: $1"; exit 1 ;;
+  esac
+done
+
+readonly IMAGE="${1:?Usage: $0 [-r host] [-n namespace] <image:tag> <deployment-name>}"
+readonly DEPLOY_NAME="${2:?Usage: $0 [-r host] [-n namespace] <image:tag> <deployment-name>}"
+readonly REMOTE_HOST="$remote_host"
+readonly NAMESPACE="$namespace"
 readonly RETRY_TIMEOUT=60
 readonly RETRY_INTERVAL=2
 
