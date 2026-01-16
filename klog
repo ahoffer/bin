@@ -1,109 +1,64 @@
-#!/usr/bin/env python3
-"""
-klog — show logs from a pod selected by regex
+#!/bin/bash
+# klog - Follow logs for a pod matching a partial name
+#
+# Usage: klog <partial-name> [kubectl logs options...]
+# Examples:
+#   klog nginx              # follow logs for first pod matching 'nginx'
+#   klog frontend --tail=100  # follow logs, starting from last 100 lines
+#   klog myapp -n my-namespace  # search in specific namespace
 
-Usage:
-  klog [-f] [-N NAMESPACE] [-c CONTAINER] <pod-regex> [kubectl logs args...]
+set -e
 
-Examples:
-  klog app
-  klog -f -N production app
-  klog -c sidecar app
-  klog app --tail=100
-"""
+if [[ $# -lt 1 ]]; then
+    echo "Usage: klog <partial-pod-name> [kubectl logs options...]"
+    echo ""
+    echo "Examples:"
+    echo "  klog nginx              # follow logs for pod matching 'nginx'"
+    echo "  klog web --tail=50      # follow, starting from last 50 lines"
+    echo "  klog app -n prod        # search in 'prod' namespace"
+    exit 1
+fi
 
-import argparse
-import sys
-from typing import List
+PATTERN="$1"
+shift
 
-# Import utilities from the same directory
-from k8s_utils import (
-    Colors, print_error, print_info, resolve_pod, run_command
-)
+# Extract namespace from remaining args if provided
+NAMESPACE_ARGS=""
+REMAINING_ARGS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -n|--namespace)
+            NAMESPACE_ARGS="-n $2"
+            shift 2
+            ;;
+        -n=*|--namespace=*)
+            NAMESPACE_ARGS="$1"
+            shift
+            ;;
+        *)
+            REMAINING_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
 
+# Find matching pods
+PODS=$(kubectl get pods $NAMESPACE_ARGS --no-headers 2>/dev/null | grep -i -- "$PATTERN" | awk '{print $1}')
 
-def parse_args() -> argparse.Namespace:
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Show logs from a pod selected by regex",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  klog app
-  klog -f -N production app
-  klog -c sidecar app
-  klog app --tail=100
-        """
-    )
-    
-    parser.add_argument(
-        '-f', '--follow',
-        action='store_true',
-        help='Follow the logs (equivalent to kubectl logs -f)'
-    )
-    
-    parser.add_argument(
-        '-N', '--namespace',
-        help='Kubernetes namespace (optional)'
-    )
-    
-    parser.add_argument(
-        '-c', '--container',
-        help='Container name (optional)'
-    )
-    
-    parser.add_argument(
-        'pod_regex',
-        help='ERE matched against pod names (single pod must match)'
-    )
-    
-    parser.add_argument(
-        'kubectl_args',
-        nargs=argparse.REMAINDER,
-        help='Additional arguments to pass to kubectl logs'
-    )
-    
-    return parser.parse_args()
+if [[ -z "$PODS" ]]; then
+    echo "No pods found matching '$PATTERN'"
+    exit 1
+fi
 
+POD_COUNT=$(echo "$PODS" | wc -l)
 
-def main() -> None:
-    """Main function."""
-    args = parse_args()
-    
-    try:
-        # Resolve the pod
-        pod_name = resolve_pod(args.pod_regex, args.namespace)
-        
-        # Build kubectl logs command
-        cmd = ['kubectl']
-        if args.namespace:
-            cmd.extend(['-n', args.namespace])
-        cmd.append('logs')
-        
-        if args.container:
-            cmd.extend(['-c', args.container])
-        
-        if args.follow:
-            cmd.append('-f')
-        
-        cmd.append(pod_name)
-        
-        # Add any additional kubectl logs arguments
-        if args.kubectl_args:
-            cmd.extend(args.kubectl_args)
-        
-        print_info(f"Showing logs for pod: {pod_name}")
-        
-        # Execute the command
-        run_command(cmd, capture_output=False, check=False)
-        
-    except KeyboardInterrupt:
-        print("\nInterrupted by user", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print_error(str(e))
-        sys.exit(1)
+if [[ $POD_COUNT -gt 1 ]]; then
+    echo "Error: Ambiguous match - multiple pods match '$PATTERN':" >&2
+    echo "$PODS" >&2
+    exit 1
+fi
 
+POD="$PODS"
 
-if __name__ == '__main__':
-    main()
+echo "→ kubectl logs $NAMESPACE_ARGS $POD -f ${REMAINING_ARGS[*]}"
+kubectl logs $NAMESPACE_ARGS "$POD" -f "${REMAINING_ARGS[@]}"

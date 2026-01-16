@@ -1,0 +1,38 @@
+#!/bin/bash
+set -euo pipefail
+
+# Build a cx-search component
+# Usage: cx-build [-p project_root] <component>
+# Examples:
+#   cx-build graphql                       # Build graphql component
+#   cx-build -p /builds/cx-search edge     # Build from alternate project
+
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+usage() {
+  sed -n '4,7p' "$0"
+  echo -e "\nComponents: $(cx-config components | tr '\n' ' ')"
+  exit 0
+}
+
+project_root="${CX_PROJECT_ROOT:-/projects/cx-search}"
+while [[ $# -gt 0 && "$1" == -* ]]; do
+  case "$1" in
+    -h|--help) usage ;;
+    -p|--project) project_root="$2"; shift 2 ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
+
+readonly COMPONENT="${1:?Usage: cx-build [-p project_root] <component>}"
+readonly PROJECT_ROOT="$project_root"
+readonly DOCKER_DIR=$("$SCRIPT_DIR/cx-config" dir "$COMPONENT")
+
+if [[ ! -d "$PROJECT_ROOT/docker/$DOCKER_DIR" ]]; then
+  echo "Error: Directory not found: $PROJECT_ROOT/docker/$DOCKER_DIR" >&2
+  exit 1
+fi
+
+echo "==> Building $COMPONENT ($PROJECT_ROOT/docker/$DOCKER_DIR)"
+(cd "$PROJECT_ROOT/docker/$DOCKER_DIR" && mvn install -DskipTests)
+echo "==> Build complete"

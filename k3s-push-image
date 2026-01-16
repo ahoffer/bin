@@ -1,0 +1,30 @@
+#!/bin/bash
+set -euo pipefail
+
+# Push a Docker image to a remote k3s node
+# Usage: k3s-push-image [-q] <image:tag> [host]
+# Examples:
+#   k3s-push-image myapp:1.0                  # Push to default host
+#   k3s-push-image myapp:1.0 node2            # Push to specific host
+#   k3s-push-image -q myapp:1.0               # Quiet mode (no progress)
+
+usage() {
+  sed -n '4,8p' "$0"
+  exit 0
+}
+
+quiet=false
+while [[ $# -gt 0 && "$1" == -* ]]; do
+  case "$1" in
+    -h|--help) usage ;;
+    -q|--quiet) quiet=true; shift ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
+
+readonly IMAGE="${1:?Usage: k3s-push-image [-q] <image:tag> [host]}"
+readonly HOST="${2:-bigfish}"
+
+$quiet || echo "==> Pushing $IMAGE to $HOST..." >&2
+docker save "$IMAGE" | ssh "$HOST" 'sudo k3s ctr images import -'
+$quiet || echo "==> Done" >&2

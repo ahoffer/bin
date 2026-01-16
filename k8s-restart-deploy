@@ -1,0 +1,37 @@
+#!/bin/bash
+set -euo pipefail
+
+# Restart a Kubernetes deployment and wait for rollout
+# Usage: k8s-restart-deploy [-n namespace] [-t timeout] <deployment>
+# Examples:
+#   k8s-restart-deploy cx-app                    # Restart in default namespace
+#   k8s-restart-deploy -n prod cx-app            # Restart in specific namespace
+#   k8s-restart-deploy -t 300s cx-app            # Custom timeout
+
+usage() {
+  sed -n '4,8p' "$0"
+  exit 0
+}
+
+namespace="octocx"
+timeout="120s"
+while [[ $# -gt 0 && "$1" == -* ]]; do
+  case "$1" in
+    -h|--help) usage ;;
+    -n|--namespace) namespace="$2"; shift 2 ;;
+    -t|--timeout) timeout="$2"; shift 2 ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
+
+readonly DEPLOY="${1:?Usage: k8s-restart-deploy [-n namespace] [-t timeout] <deployment>}"
+readonly NAMESPACE="$namespace"
+readonly TIMEOUT="$timeout"
+
+echo "==> Restarting deployment $DEPLOY in $NAMESPACE..."
+kubectl rollout restart deployment "$DEPLOY" -n "$NAMESPACE"
+
+echo "==> Waiting for rollout (timeout: $TIMEOUT)..."
+kubectl rollout status deployment "$DEPLOY" -n "$NAMESPACE" --timeout="$TIMEOUT"
+
+echo "==> Rollout complete"

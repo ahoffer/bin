@@ -1,103 +1,46 @@
 #!/bin/bash
 set -euo pipefail
 
-# Deploy a Docker image to k3s
-# Usage: ./deploy-image.sh [-r host] [-n namespace] <image:tag> <deployment-name>
+# Kill child processes on exit
+trap 'pkill -P $$ 2>/dev/null || true' EXIT
+
+# Deploy a Docker image to k3s: push, restart, and verify
+# Usage: deploy-image.sh [-r host] [-n namespace] [-t timeout] <image:tag> <deployment>
 # Examples:
-#   ./deploy-image.sh registry.example.com/app:1.0 cx-app
-#   ./deploy-image.sh -r otherhost myimage:latest cx-service
-#   ./deploy-image.sh -n mynamespace myimage:latest cx-service
+#   deploy-image.sh myapp:1.0 cx-app
+#   deploy-image.sh -r node2 myapp:1.0 cx-app
+#   deploy-image.sh -n prod -t 180 myapp:1.0 cx-app
+
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
-  sed -n '4,9p' "$0"
+  sed -n '4,8p' "$0"
   exit 0
 }
 
 remote_host="bigfish"
 namespace="octocx"
+timeout=60
 while [[ $# -gt 0 && "$1" == -* ]]; do
   case "$1" in
     -h|--help) usage ;;
     -r|--remote) remote_host="$2"; shift 2 ;;
     -n|--namespace) namespace="$2"; shift 2 ;;
-    *) echo "Unknown option: $1"; exit 1 ;;
+    -t|--timeout) timeout="$2"; shift 2 ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
 
-readonly IMAGE="${1:?Usage: $0 [-r host] [-n namespace] <image:tag> <deployment-name>}"
-readonly DEPLOY_NAME="${2:?Usage: $0 [-r host] [-n namespace] <image:tag> <deployment-name>}"
-readonly REMOTE_HOST="$remote_host"
-readonly NAMESPACE="$namespace"
-readonly RETRY_TIMEOUT=60
-readonly RETRY_INTERVAL=2
+readonly IMAGE="${1:?Usage: deploy-image.sh [-r host] [-n namespace] <image:tag> <deployment>}"
+readonly DEPLOY="${2:?Usage: deploy-image.sh [-r host] [-n namespace] <image:tag> <deployment>}"
 
-get_pod_selector() {
-  kubectl get deployment "$DEPLOY_NAME" -n "$NAMESPACE" \
-    -o jsonpath='{.spec.selector.matchLabels}' |
-    jq -r 'to_entries | map("\(.key)=\(.value)") | join(",")'
-}
+# Push image to remote k3s node
+"$SCRIPT_DIR/k3s-push-image" "$IMAGE" "$remote_host"
 
-# Check for pod failure states that indicate deployment won't succeed
-# Returns 1 and prints error if fatal condition found
-check_pod_failures() {
-  local selector="$1"
-  local fatal_reasons="CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerConfigError|InvalidImageName"
+# Restart deployment and wait for rollout
+"$SCRIPT_DIR/k8s-restart-deploy" -n "$namespace" -t "${timeout}s" "$DEPLOY"
 
-  while read -r pod_name reason _; do
-    [[ -z "$pod_name" ]] && continue
-    if [[ "$reason" =~ ^($fatal_reasons)$ ]]; then
-      echo "ERROR: Pod $pod_name is in $reason state"
-      kubectl describe pod "$pod_name" -n "$NAMESPACE" | tail -20
-      return 1
-    fi
-  done < <(kubectl get pod -n "$NAMESPACE" -l "$selector" \
-    -o jsonpath='{range .items[*]}{.metadata.name} {.status.containerStatuses[0].state.waiting.reason}{"\n"}{end}')
+# Verify pods are running the correct image
+"$SCRIPT_DIR/k8s-verify-image" -n "$namespace" -r "$remote_host" -t "$timeout" "$IMAGE" "$DEPLOY"
 
-  return 0
-}
-
-# Outputs status for each pod, returns 0 if all match expected hash
-verify_pod_images() {
-  local expected="$1" selector="$2" result=0
-
-  while read -r pod_name pod_hash _; do
-    [[ -z "$pod_name" ]] && continue
-    if [[ "$pod_hash" == "$expected" ]]; then
-      echo "✓ $pod_name"
-    else
-      printf "✗ %s\n  got:      %s\n  expected: %s\n" "$pod_name" "$pod_hash" "$expected"
-      result=1
-    fi
-  done < <(kubectl get pod -n "$NAMESPACE" -l "$selector" \
-    -o jsonpath='{range .items[*]}{.metadata.name} {.status.containerStatuses[0].imageID}{"\n"}{end}')
-
-  return "$result"
-}
-
-echo "==> Exporting and importing image..."
-docker save "$IMAGE" | ssh "$REMOTE_HOST" 'sudo k3s ctr images import -'
-
-echo "==> Restarting deployment $DEPLOY_NAME..."
-kubectl rollout restart deployment "$DEPLOY_NAME" -n "$NAMESPACE"
-
-echo "==> Waiting for rollout..."
-kubectl rollout status deployment "$DEPLOY_NAME" -n "$NAMESPACE" --timeout=120s
-
-echo "==> Getting expected image hash..."
-EXPECTED_HASH=$(ssh "$REMOTE_HOST" "sudo k3s crictl inspecti '$IMAGE' 2>/dev/null" | jq -r '.status.id')
-: "${EXPECTED_HASH:?ERROR: Could not get image hash for $IMAGE}"
-echo "Expected: $EXPECTED_HASH"
-
-echo "==> Verifying pod images..."
-SELECTOR=$(get_pod_selector)
-SECONDS=0
-
-while ! output=$(verify_pod_images "$EXPECTED_HASH" "$SELECTOR"); do
-  ((SECONDS >= RETRY_TIMEOUT)) && { echo "$output"; echo "ERROR: Image verification failed after ${RETRY_TIMEOUT}s"; exit 1; }
-  check_pod_failures "$SELECTOR" || exit 1
-  echo "Pods not yet running expected image, retrying in ${RETRY_INTERVAL}s... (${SECONDS}s/${RETRY_TIMEOUT}s)"
-  sleep "$RETRY_INTERVAL"
-done
-
-echo "$output"
-echo "==> Done - all pods verified"
+echo "==> Deploy complete"

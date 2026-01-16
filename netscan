@@ -103,7 +103,7 @@ MAX_CONCURRENT=100
 # -----------------------------------------------------------------------------
 scan_host() {
   local ip_addr="$1"
-  local ping_res ssh_res
+  local ping_res ssh_res dns_res
 
   # 1s timeout ping
   if ping -c1 -W1 "$ip_addr" &>/dev/null; then
@@ -116,12 +116,19 @@ scan_host() {
   if nc -zvw1 "$ip_addr" 22 &>/dev/null; then
     ssh_res="OPEN"
   else
-    ssh_res="CLOSED"
+    ssh_res="-"
   fi
 
- if  [[ $ping_res == "OK" || $ssh_res == "OPEN" ]]; then  
-  printf '%-15s → PING:%-4s SSH:%-6s\n' "$ip_addr" "$ping_res" "$ssh_res"
- fi 
+  # 1s timeout for DNS (TCP port 53)
+  if nc -zvw1 "$ip_addr" 53 &>/dev/null; then
+    dns_res="OPEN"
+  else
+    dns_res="-"
+  fi
+
+ if  [[ $ping_res == "OK" || $ssh_res == "OPEN" || $dns_res == "OPEN" ]]; then
+  printf '%-15s → PING:%-4s SSH:%-6s DNS:%-6s\n' "$ip_addr" "$ping_res" "$ssh_res" "$dns_res"
+ fi
 }
 
 # -----------------------------------------------------------------------------
