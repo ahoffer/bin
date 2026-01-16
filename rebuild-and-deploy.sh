@@ -16,7 +16,7 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
   sed -n '4,10p' "$0"
-  echo -e "\nComponents: $("$SCRIPT_DIR/cx-config" components | tr '\n' ' ')"
+  echo -e "\nComponents: $("$SCRIPT_DIR/cxconfig" components | tr '\n' ' ')"
   exit 0
 }
 
@@ -40,12 +40,12 @@ fi
 if [[ $# -gt 0 ]]; then
   targets=("$@")
 else
-  mapfile -t targets < <("$SCRIPT_DIR/cx-config" components)
+  mapfile -t targets < <("$SCRIPT_DIR/cxconfig" components)
 fi
 
 # Validate targets
 for target in "${targets[@]}"; do
-  "$SCRIPT_DIR/cx-config" dir "$target" >/dev/null  # exits if invalid
+  "$SCRIPT_DIR/cxconfig" dir "$target" >/dev/null  # exits if invalid
 done
 
 echo "Will build and deploy: ${targets[*]}"
@@ -55,8 +55,8 @@ for target in "${targets[@]}"; do
   echo "========================================"
   echo " $target"
   echo "========================================"
-  "$SCRIPT_DIR/cx-build" -p "$PROJECT_ROOT" "$target"
-  "$SCRIPT_DIR/cx-deploy" "$target"
+  "$SCRIPT_DIR/cxbuild" -p "$PROJECT_ROOT" "$target"
+  "$SCRIPT_DIR/cxdeploy" "$target"
   echo
 done
 

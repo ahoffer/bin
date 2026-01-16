@@ -2,16 +2,16 @@
 set -euo pipefail
 
 # Deploy a cx-search component to k3s
-# Usage: cx-deploy [-r host] [-n namespace] <component>
+# Usage: cxdeploy [-r host] [-n namespace] <component>
 # Examples:
-#   cx-deploy graphql                  # Deploy graphql component
-#   cx-deploy -r node2 edge            # Deploy to alternate host
+#   cxdeploy graphql                  # Deploy graphql component
+#   cxdeploy -r node2 edge            # Deploy to alternate host
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
   sed -n '4,7p' "$0"
-  echo -e "\nComponents: $(cx-config components | tr '\n' ' ')"
+  echo -e "\nComponents: $(cxconfig components | tr '\n' ' ')"
   exit 0
 }
 
@@ -26,10 +26,10 @@ while [[ $# -gt 0 && "$1" == -* ]]; do
   esac
 done
 
-readonly COMPONENT="${1:?Usage: cx-deploy [-r host] [-n namespace] <component>}"
-readonly IMAGE=$("$SCRIPT_DIR/cx-config" image "$COMPONENT")
-readonly DEPLOY=$("$SCRIPT_DIR/cx-config" deploy "$COMPONENT")
-readonly TIMEOUT=$("$SCRIPT_DIR/cx-config" timeout "$COMPONENT")
+readonly COMPONENT="${1:?Usage: cxdeploy [-r host] [-n namespace] <component>}"
+readonly IMAGE=$("$SCRIPT_DIR/cxconfig" image "$COMPONENT")
+readonly DEPLOY=$("$SCRIPT_DIR/cxconfig" deploy "$COMPONENT")
+readonly TIMEOUT=$("$SCRIPT_DIR/cxconfig" timeout "$COMPONENT")
 
 echo "==> Deploying $COMPONENT"
 echo "    Image:      $IMAGE"

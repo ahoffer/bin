@@ -2,16 +2,16 @@
 set -euo pipefail
 
 # Build a cx-search component
-# Usage: cx-build [-p project_root] <component>
+# Usage: cxbuild [-p project_root] <component>
 # Examples:
-#   cx-build graphql                       # Build graphql component
-#   cx-build -p /builds/cx-search edge     # Build from alternate project
+#   cxbuild graphql                       # Build graphql component
+#   cxbuild -p /builds/cx-search edge     # Build from alternate project
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
   sed -n '4,7p' "$0"
-  echo -e "\nComponents: $(cx-config components | tr '\n' ' ')"
+  echo -e "\nComponents: $(cxconfig components | tr '\n' ' ')"
   exit 0
 }
 
@@ -24,9 +24,9 @@ while [[ $# -gt 0 && "$1" == -* ]]; do
   esac
 done
 
-readonly COMPONENT="${1:?Usage: cx-build [-p project_root] <component>}"
+readonly COMPONENT="${1:?Usage: cxbuild [-p project_root] <component>}"
 readonly PROJECT_ROOT="$project_root"
-readonly DOCKER_DIR=$("$SCRIPT_DIR/cx-config" dir "$COMPONENT")
+readonly DOCKER_DIR=$("$SCRIPT_DIR/cxconfig" dir "$COMPONENT")
 
 if [[ ! -d "$PROJECT_ROOT/docker/$DOCKER_DIR" ]]; then
   echo "Error: Directory not found: $PROJECT_ROOT/docker/$DOCKER_DIR" >&2

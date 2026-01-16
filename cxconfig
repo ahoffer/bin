@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Query cx-search project configuration
-# Usage: cx-config <command> [args]
+# Usage: cxconfig <command> [args]
 # Commands:
 #   components          List all component names
 #   dir <component>     Get docker directory for component
@@ -50,20 +50,20 @@ case "$1" in
     grep -E '^[a-z].*:' "$CONFIG" | cut -d: -f1
     ;;
   dir)
-    get_component_dir "${2:?Usage: cx-config dir <component>}"
+    get_component_dir "${2:?Usage: cxconfig dir <component>}"
     ;;
   deploy)
-    dir=$(get_component_dir "${2:?Usage: cx-config deploy <component>}")
+    dir=$(get_component_dir "${2:?Usage: cxconfig deploy <component>}")
     echo "cx-${dir#cx-}"  # strip cx- prefix if present, then add it back
     ;;
   image)
-    dir=$(get_component_dir "${2:?Usage: cx-config image <component>}")
+    dir=$(get_component_dir "${2:?Usage: cxconfig image <component>}")
     registry=$(get_setting registry)
     version=$(get_setting version)
     echo "$registry/$dir:$version"
     ;;
   timeout)
-    component="${2:?Usage: cx-config timeout <component>}"
+    component="${2:?Usage: cxconfig timeout <component>}"
     get_component_dir "$component" >/dev/null  # validate component exists
     timeout=$(get_component_field "$component" 3)
     echo "${timeout:-$(get_setting default_timeout)}"
