@@ -1,60 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Accept parent window ID as argument (from @active-kitty-window-id)
-PARENT_WINDOW_ID="${1:-}"
+title="$(kitty +kitten ask --prompt 'Window title: ' || true)"
+[[ -z "$title" ]] && exit 0
 
-raw_title="$(kitty +kitten ask --prompt 'Window title: ' || true)"
-
-# If user hit Esc/cancel, title will be empty
-[ -n "${raw_title}" ] || exit 0
-
-# Handle JSON output from kitten ask
-if [[ "${raw_title}" == *\"response\"* ]]; then
-  if command -v jq >/dev/null 2>&1; then
-    title="$(printf '%s' "${raw_title}" | jq -r '.response // empty' 2>/dev/null)" || true
-  else
-    # Fallback: extract value with grep/sed
-    title="$(printf '%s' "${raw_title}" | grep -o '"response"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"response"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')" || true
-  fi
-
-  if [ -z "${title}" ]; then
-    echo "Error: Failed to parse title from JSON response" >&2
-    read -p "Press Enter to close..."
-    exit 1
-  fi
-else
-  title="${raw_title}"
+# Parse JSON if kitten ask returned it
+if [[ "$title" == *'"response"'* ]]; then
+  title="$(jq -r '.response // empty' <<< "$title")" || { echo "JSON parse failed" >&2; exit 1; }
+  [[ -z "$title" ]] && exit 0
 fi
 
-[ -n "${title}" ] || exit 0
+match="id:${1:-${KITTY_WINDOW_ID:-}}"
+[[ "$match" == "id:" ]] && match="state:focused"
 
-# Prefer kitty remote control; fall back to OSC 2 if unavailable.
-set_titles() {
-  local match_arg="$1"
-  local ok=0
-  if kitty @ set-window-title --match "${match_arg}" "$title" 2>/dev/null; then
-    ok=1
-  fi
-  if kitty @ set-tab-title --match "${match_arg}" "$title" 2>/dev/null; then
-    ok=1
-  fi
-  [ "$ok" -eq 1 ]
-}
-
-# Use PARENT_WINDOW_ID (passed as arg) if set, otherwise fall back to KITTY_WINDOW_ID
-target_window_id="${PARENT_WINDOW_ID:-${KITTY_WINDOW_ID:-}}"
-
-if [ -n "${target_window_id}" ]; then
-  if set_titles "id:${target_window_id}"; then
-    exit 0
-  fi
-else
-  # Background-launched kittens may not have window ID; target focused window.
-  if set_titles "state:focused"; then
-    exit 0
-  fi
-fi
-
-# Last resort: use OSC 2 escape sequence
-printf '\033]2;%s\007' "$title"
+kitty @ set-window-title --match "$match" "$title" 2>/dev/null || true
+kitty @ set-tab-title --match "$match" "$title" 2>/dev/null || true
