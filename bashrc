@@ -63,12 +63,17 @@ alias jpick='. pickjava'
 export KUBECONFIG=~/.kube/config
 export YAMLLINT_CONFIG_FILE=/home/aaron/bin/.yamllint
 export VIMINIT='source $HOME/bin/.vimrc'
-export DOCKER_BUILDKIT=1
-
 # Set path to Container Network Interface
 export CNI_PATH=~/.local/libexec/cni
 
-export DOCKER_BUILDKIT=0
+#export DOCKER_BUILDKIT=0
+
+# Claude Code - reduce token usage for longer conversations
+export CLAUDE_CODE_MAX_OUTPUT_TOKENS=16000
+export MAX_THINKING_TOKENS=5000
+export BASH_MAX_OUTPUT_LENGTH=4000
+export MAX_MCP_OUTPUT_TOKENS=12000
+export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=75
 
 # Do not set JAVA_HOME here. It gets written and re-written in ~/.bashrc
 # export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"

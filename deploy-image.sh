@@ -5,7 +5,7 @@ set -euo pipefail
 trap 'pkill -P $$ 2>/dev/null || true' EXIT
 
 # Deploy a Docker image to k3s: push, restart, and verify
-# Usage: deploy-image.sh [-r host] [-n namespace] [-t timeout] <image:tag> <deployment>
+# Usage: deploy-image.sh [-r host] [-n namespace] [-t timeout] <image:tag> [deployment]
 # Examples:
 #   deploy-image.sh myapp:1.0 cx-app
 #   deploy-image.sh -r node2 myapp:1.0 cx-app
@@ -15,6 +15,8 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
   sed -n '4,8p' "$0"
+  echo
+  echo "If deployment is omitted, it defaults to the image name (before the tag)."
   exit 0
 }
 
@@ -31,11 +33,16 @@ while [[ $# -gt 0 && "$1" == -* ]]; do
   esac
 done
 
-readonly IMAGE="${1:?Usage: deploy-image.sh [-r host] [-n namespace] <image:tag> <deployment>}"
-readonly DEPLOY="${2:?Usage: deploy-image.sh [-r host] [-n namespace] <image:tag> <deployment>}"
+readonly IMAGE="${1:?Usage: deploy-image.sh [-r host] [-n namespace] <image:tag> [deployment]}"
+if [[ -n "${2:-}" ]]; then
+  DEPLOY="$2"
+else
+  DEPLOY="${IMAGE%%:*}"
+  DEPLOY="${DEPLOY##*/}"
+fi
 
 # Push image to remote k3s node
-"$SCRIPT_DIR/k3s-push-image" "$IMAGE" "$remote_host"
+"$SCRIPT_DIR/k3s-push-image" -H "$remote_host" "$IMAGE"
 
 # Restart deployment and wait for rollout
 "$SCRIPT_DIR/k8s-restart-deploy" -n "$namespace" -t "${timeout}s" "$DEPLOY"

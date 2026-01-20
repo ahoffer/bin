@@ -1,0 +1,58 @@
+#!/bin/bash
+set -euo pipefail
+
+# Deploy JAR files to a k8s pod's deploy directory
+# Usage: k8s-deploy-jar [-n namespace] [-p pod] <jar-file>...
+# Examples:
+#   k8s-deploy-jar myapp.jar                    # Deploy to default pod
+#   k8s-deploy-jar -p cx-edge-abc myapp.jar     # Deploy to specific pod
+#   k8s-deploy-jar -n prod *.jar                # Deploy multiple jars
+
+usage() {
+  sed -n '4,7p' "$0"
+  exit 0
+}
+
+namespace="octocx"
+pod_selector="cx-edge"
+while [[ $# -gt 0 && "$1" == -* ]]; do
+  case "$1" in
+    -h|--help) usage ;;
+    -n|--namespace) namespace="$2"; shift 2 ;;
+    -p|--pod) pod_selector="$2"; shift 2 ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ $# -eq 0 ]]; then
+  echo "Usage: k8s-deploy-jar [-n namespace] [-p pod] <jar-file>..." >&2
+  exit 1
+fi
+
+# Find the pod if selector doesn't look like a full pod name
+if [[ "$pod_selector" != *-*-* ]]; then
+  pod=$(kubectl get pod -n "$namespace" -l "app=$pod_selector" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) || true
+  if [[ -z "$pod" ]]; then
+    pod=$(kubectl get pod -n "$namespace" --field-selector=status.phase=Running -o name 2>/dev/null | grep "$pod_selector" | head -1 | sed 's|pod/||')
+  fi
+  if [[ -z "$pod" ]]; then
+    echo "ERROR: Could not find running pod matching '$pod_selector' in namespace '$namespace'" >&2
+    exit 1
+  fi
+else
+  pod="$pod_selector"
+fi
+
+echo "==> Deploying to pod: $pod (namespace: $namespace)"
+
+for jar in "$@"; do
+  if [[ ! -f "$jar" ]]; then
+    echo "ERROR: File not found: $jar" >&2
+    exit 1
+  fi
+  filename=$(basename "$jar")
+  echo "==> Copying $filename..."
+  kubectl cp "$jar" "$namespace/$pod:/app/deploy/$filename"
+done
+
+echo "==> Done"

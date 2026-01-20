@@ -1,0 +1,51 @@
+#!/bin/bash
+set -euo pipefail
+
+# Print the image age (e.g., "3d2h ago") for a given image reference.
+# Usage: image-age <image:tag>
+
+readonly IMAGE="${1:?Usage: image-age <image:tag>}"
+
+image_created_at() {
+  local image="$1" created=""
+
+  if command -v regctl >/dev/null 2>&1; then
+    created=$(regctl image inspect --format '{{.Created}}' "$image" 2>/dev/null || true)
+  fi
+
+  if [[ -z "$created" ]]; then
+    created=$(docker image inspect --format '{{.Created}}' "$image" 2>/dev/null || true)
+  fi
+
+  echo "$created"
+}
+
+format_age() {
+  local seconds="$1"
+  local days=$((seconds / 86400))
+  local hours=$(((seconds % 86400) / 3600))
+  local mins=$(((seconds % 3600) / 60))
+  local secs=$((seconds % 60))
+  local out=""
+
+  ((days > 0)) && out+="${days}d"
+  ((hours > 0)) && out+="${hours}h"
+  ((mins > 0)) && out+="${mins}m"
+  [[ -z "$out" ]] && out="${secs}s"
+
+  echo "${out} ago"
+}
+
+IMAGE_CREATED_AT="$(image_created_at "$IMAGE")"
+if [[ -n "$IMAGE_CREATED_AT" ]]; then
+  CREATED_EPOCH=$(date -d "$IMAGE_CREATED_AT" +%s 2>/dev/null || true)
+  if [[ -n "${CREATED_EPOCH:-}" ]]; then
+    NOW_EPOCH=$(date +%s)
+    if (( NOW_EPOCH >= CREATED_EPOCH )); then
+      format_age $((NOW_EPOCH - CREATED_EPOCH))
+      exit 0
+    fi
+  fi
+fi
+
+echo "unknown"

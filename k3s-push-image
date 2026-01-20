@@ -1,30 +1,99 @@
 #!/bin/bash
 set -euo pipefail
 
-# Push a Docker image to a remote k3s node
-# Usage: k3s-push-image [-q] <image:tag> [host]
+# Push images to a remote k3s node using docker save + k3s ctr import
+# Usage: k3s-push-image [-q] [-H host] [-f file] <image:tag>
 # Examples:
 #   k3s-push-image myapp:1.0                  # Push to default host
-#   k3s-push-image myapp:1.0 node2            # Push to specific host
+#   k3s-push-image -H node2 myapp:1.0         # Push to specific host
 #   k3s-push-image -q myapp:1.0               # Quiet mode (no progress)
+#   k3s-push-image -H node2 myapp:1.0 nginx   # Multiple images (explicit host)
+#   k3s-push-image -f images.txt              # Read images from a file
+#   k3s-push-image docker://nginx:latest      # Explicit transport (falls back to docker pull)
 
 usage() {
-  sed -n '4,8p' "$0"
+  sed -n '4,11p' "$0"
   exit 0
 }
 
 quiet=false
+host=""
+file=""
 while [[ $# -gt 0 && "$1" == -* ]]; do
   case "$1" in
     -h|--help) usage ;;
     -q|--quiet) quiet=true; shift ;;
+    -H|--host) host="${2:-}"; shift 2 ;;
+    -f|--file) file="${2:-}"; shift 2 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
 
-readonly IMAGE="${1:?Usage: k3s-push-image [-q] <image:tag> [host]}"
-readonly HOST="${2:-bigfish}"
+if [[ -n "$file" && ! -f "$file" ]]; then
+  echo "File not found: $file" >&2
+  exit 1
+fi
 
-$quiet || echo "==> Pushing $IMAGE to $HOST..." >&2
-docker save "$IMAGE" | ssh "$HOST" 'sudo k3s ctr images import -'
+images=()
+if [[ -n "$file" ]]; then
+  while IFS= read -r line; do
+    line="${line%%#*}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -n "$line" ]] && images+=("$line")
+  done < "$file"
+fi
+
+args=("$@")
+if [[ ${#args[@]} -eq 0 && ${#images[@]} -eq 0 ]]; then
+  echo "Usage: k3s-push-image [-q] [-H host] [-f file] <image:tag>" >&2
+  exit 1
+fi
+
+if [[ ${#args[@]} -ge 1 ]]; then
+  if [[ -z "$host" && ${#args[@]} -ge 2 ]]; then
+    echo "Multiple images require --host (or use -f with --host)." >&2
+    exit 1
+  fi
+  images+=("${args[@]}")
+fi
+
+readonly HOST="${host:-bigfish}"
+
+if [[ ${#images[@]} -eq 0 ]]; then
+  echo "No images provided." >&2
+  exit 1
+fi
+
+resolve_source() {
+  local image="$1"
+  if [[ "$image" == *"://"* ]]; then
+    echo "$image"
+    return 0
+  fi
+  if docker image inspect "$image" >/dev/null 2>&1; then
+    echo "docker-daemon:$image"
+    return 0
+  fi
+  echo "docker://$image"
+}
+
+$quiet || echo "==> Pushing ${#images[@]} image(s) to $HOST..." >&2
+for image in "${images[@]}"; do
+  source_ref="$(resolve_source "$image")"
+  $quiet || echo "==> Importing $image ($source_ref)..." >&2
+  if [[ "$source_ref" == docker-daemon:* ]]; then
+    if docker image inspect "$image" >/dev/null 2>&1; then
+      docker save "$image" | ssh "$HOST" 'sudo k3s ctr images import -'
+    elif sudo -n docker image inspect "$image" >/dev/null 2>&1; then
+      sudo -n docker save "$image" | ssh "$HOST" 'sudo k3s ctr images import -'
+    else
+      echo "Local image not found or docker access denied: $image" >&2
+      exit 1
+    fi
+  else
+    docker pull "$image"
+    docker save "$image" | ssh "$HOST" 'sudo k3s ctr images import -'
+  fi
+done
 $quiet || echo "==> Done" >&2

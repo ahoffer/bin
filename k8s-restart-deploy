@@ -28,6 +28,14 @@ readonly DEPLOY="${1:?Usage: k8s-restart-deploy [-n namespace] [-t timeout] <dep
 readonly NAMESPACE="$namespace"
 readonly TIMEOUT="$timeout"
 
+if ! kubectl get deployment "$DEPLOY" -n "$NAMESPACE" >/dev/null 2>&1; then
+  if [[ -f k8s.yml ]]; then
+    kubectl apply -f k8s.yml -n "$NAMESPACE" >/dev/null
+  else
+    exit 0
+  fi
+fi
+
 echo "==> Restarting deployment $DEPLOY in $NAMESPACE..."
 kubectl rollout restart deployment "$DEPLOY" -n "$NAMESPACE"
 
@@ -35,3 +43,4 @@ echo "==> Waiting for rollout (timeout: $TIMEOUT)..."
 kubectl rollout status deployment "$DEPLOY" -n "$NAMESPACE" --timeout="$TIMEOUT"
 
 echo "==> Rollout complete"
+true

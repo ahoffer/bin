@@ -31,8 +31,11 @@ readonly IMAGE=$("$SCRIPT_DIR/cxconfig" image "$COMPONENT")
 readonly DEPLOY=$("$SCRIPT_DIR/cxconfig" deploy "$COMPONENT")
 readonly TIMEOUT=$("$SCRIPT_DIR/cxconfig" timeout "$COMPONENT")
 
+IMAGE_AGE=$("$SCRIPT_DIR/image-age" "$IMAGE" 2>/dev/null || echo "unknown")
+
 echo "==> Deploying $COMPONENT"
 echo "    Image:      $IMAGE"
+echo "    Image age:  $IMAGE_AGE"
 echo "    Deployment: $DEPLOY"
 echo "    Timeout:    ${TIMEOUT}s"
 
