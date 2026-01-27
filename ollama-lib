@@ -2,8 +2,22 @@
 # Ollama shared library - source this in other scripts
 # Usage: source ollama-lib
 
-OLLAMA_HOST="${OLLAMA_HOST:-http://bigfish:11434}"
 OLLAMA_TIMEOUT="${OLLAMA_TIMEOUT:-120}"
+
+# Resolve Ollama host with fallback (hostname → IP)
+# Respects OLLAMA_HOST if already set in environment
+OLLAMA_HOST="${OLLAMA_HOST:-}"
+_resolve_ollama_host() {
+    [[ -n "$OLLAMA_HOST" ]] && return
+    for host in "http://bigfish:11434" "http://192.168.0.70:11434"; do
+        if curl -s --connect-timeout 1 "$host/api/tags" </dev/null >/dev/null 2>&1; then
+            OLLAMA_HOST="$host"
+            return
+        fi
+    done
+    OLLAMA_HOST="http://bigfish:11434"  # default, will fail with clear error
+}
+_resolve_ollama_host
 OLLAMA_USAGE_LOG="${OLLAMA_USAGE_LOG:-$HOME/.cache/ollama-usage.jsonl}"
 
 # Read conversation ID from file if not set in environment
