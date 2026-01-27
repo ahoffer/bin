@@ -1,0 +1,49 @@
+#!/bin/bash
+# Generate conventional commit message from staged changes
+# Usage: llm-commit-msg [--type TYPE]
+# Examples:
+#   llm-commit-msg           # auto-detect type
+#   llm-commit-msg --type fix
+
+set -euo pipefail
+source "$(dirname "$0")/ollama-lib"
+
+if ! ollama_ping; then
+    echo "Error: Cannot reach Ollama at $OLLAMA_HOST" >&2
+    exit 1
+fi
+
+# Parse args
+commit_type=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --type) commit_type="$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+
+# Get staged diff
+diff=$(git diff --cached --stat && echo "---" && git diff --cached | truncate_input 4000)
+
+if [[ -z "$diff" || "$diff" == "---" ]]; then
+    echo "No staged changes" >&2
+    exit 1
+fi
+
+type_hint=""
+if [[ -n "$commit_type" ]]; then
+    type_hint="Use type: $commit_type"
+fi
+
+system="Generate a conventional commit message for these changes.
+Format: type(scope): description
+
+Types: feat, fix, docs, style, refactor, test, chore, perf, ci, build
+Scope: the module/component affected (optional but preferred)
+Description: imperative mood, lowercase, no period, max 72 chars
+
+$type_hint
+
+Output ONLY the commit message, nothing else."
+
+ollama_generate "$MODEL_CHAT" "$diff" "$system"

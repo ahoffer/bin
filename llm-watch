@@ -1,0 +1,110 @@
+#!/bin/bash
+# Watch command output and summarize/alert on patterns
+# Usage: llm-watch "mvn test"              # Run and summarize on completion
+#        llm-watch --tail /var/log/app.log # Tail and summarize periodically
+#        some_command | llm-watch          # Pipe mode
+
+set -euo pipefail
+
+stdin_content=""
+if [[ ! -t 0 ]]; then
+    stdin_content=$(cat)
+fi
+
+source "$(dirname "$0")/ollama-lib"
+
+SUMMARY_INTERVAL="${LLM_WATCH_INTERVAL:-60}"  # seconds between summaries for --tail
+
+watch_command() {
+    local cmd="$*"
+    local output
+    local exit_code
+
+    echo "Running: $cmd"
+    echo "---"
+
+    # Run command, capture output
+    set +e
+    output=$(eval "$cmd" 2>&1)
+    exit_code=$?
+    set -e
+
+    # Show last 20 lines
+    echo "$output" | tail -20
+    echo "---"
+    echo "Exit code: $exit_code"
+
+    # Summarize if there's substantial output
+    if [[ ${#output} -gt 200 ]]; then
+        echo ""
+        echo "Summary:"
+        echo "$output" | llm-summarize 2>/dev/null || echo "(summary unavailable)"
+    fi
+
+    return $exit_code
+}
+
+watch_tail() {
+    local file="$1"
+    local buffer=""
+    local last_summary=$(date +%s)
+
+    echo "Watching: $file (summarizing every ${SUMMARY_INTERVAL}s)"
+    echo "Press Ctrl+C to stop"
+    echo "---"
+
+    tail -f "$file" 2>/dev/null | while IFS= read -r line; do
+        echo "$line"
+        buffer+="$line"$'\n'
+
+        local now=$(date +%s)
+        if (( now - last_summary >= SUMMARY_INTERVAL )) && [[ -n "$buffer" ]]; then
+            echo ""
+            echo "--- Summary (last ${SUMMARY_INTERVAL}s) ---"
+            echo "$buffer" | llm-summarize 2>/dev/null || echo "(summary unavailable)"
+            echo "---"
+            buffer=""
+            last_summary=$now
+        fi
+    done
+}
+
+watch_pipe() {
+    local output="$1"
+
+    # Show output
+    echo "$output"
+
+    # Summarize if substantial
+    if [[ ${#output} -gt 200 ]]; then
+        echo ""
+        echo "--- Summary ---"
+        echo "$output" | llm-summarize 2>/dev/null || echo "(summary unavailable)"
+    fi
+}
+
+case "${1:-}" in
+    --tail)
+        shift
+        watch_tail "$1"
+        ;;
+    --help|-h)
+        echo "Usage:"
+        echo "  llm-watch \"command\"        Run command, summarize output"
+        echo "  llm-watch --tail file      Tail file, periodic summaries"
+        echo "  command | llm-watch        Pipe mode"
+        echo ""
+        echo "Environment:"
+        echo "  LLM_WATCH_INTERVAL=60      Seconds between tail summaries"
+        ;;
+    *)
+        if [[ -n "$stdin_content" ]]; then
+            watch_pipe "$stdin_content"
+        elif [[ $# -gt 0 ]]; then
+            watch_command "$@"
+        else
+            echo "Usage: llm-watch \"command\" or command | llm-watch" >&2
+            exit 1
+        fi
+        ;;
+esac

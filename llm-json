@@ -1,0 +1,45 @@
+#!/bin/bash
+# Generate jq query from description
+# Usage: llm-json "get all names from users array"
+#        echo '{"users":[...]}' | llm-json "extract emails"
+
+set -euo pipefail
+
+# Capture stdin immediately if piped
+stdin_content=""
+if [[ ! -t 0 ]]; then
+    stdin_content=$(cat | head -c 2000)
+fi
+
+source "$(dirname "$0")/ollama-lib"
+
+if ! ollama_ping; then
+    echo "Error: Cannot reach Ollama at $OLLAMA_HOST" >&2
+    exit 1
+fi
+
+if [[ $# -eq 0 ]]; then
+    echo "Usage: llm-json \"what you want to extract\"" >&2
+    echo "       echo '{...}' | llm-json \"description\"" >&2
+    exit 1
+fi
+
+desc="$*"
+
+prompt="$desc"
+if [[ -n "$stdin_content" ]]; then
+    prompt="Given this JSON sample:
+$stdin_content
+
+$desc"
+fi
+
+system="Generate a jq query for the request.
+Output format:
+QUERY: <the jq expression>
+EXPLANATION: <what it does>
+
+If input was provided, make the query work for that structure.
+Keep it simple - one liner preferred unless complex."
+
+ollama_generate "$MODEL_CHAT" "$prompt" "$system"

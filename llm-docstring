@@ -1,0 +1,59 @@
+#!/bin/bash
+# Generate docstring/documentation for code
+# Usage: llm-docstring < function.py
+#        llm-docstring file.ts
+#        echo "function code" | llm-docstring --style jsdoc
+
+set -euo pipefail
+
+# Capture stdin immediately if piped
+stdin_content=""
+if [[ ! -t 0 ]]; then
+    stdin_content=$(cat)
+fi
+
+source "$(dirname "$0")/ollama-lib"
+
+if ! ollama_ping; then
+    echo "Error: Cannot reach Ollama at $OLLAMA_HOST" >&2
+    exit 1
+fi
+
+# Parse args
+style=""
+file=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --style) style="$2"; shift 2 ;;
+        *) file="$1"; shift ;;
+    esac
+done
+
+# Read input
+if [[ -n "$file" && -f "$file" ]]; then
+    input=$(cat "$file" | truncate_input 3000)
+    # Auto-detect style from extension
+    if [[ -z "$style" ]]; then
+        case "$file" in
+            *.py) style="google-style python docstring" ;;
+            *.ts|*.tsx|*.js|*.jsx) style="JSDoc" ;;
+            *.java) style="Javadoc" ;;
+            *.go) style="Go doc comment" ;;
+            *.rs) style="Rust doc comment (///)" ;;
+            *) style="appropriate doc comment" ;;
+        esac
+    fi
+elif [[ -n "$stdin_content" ]]; then
+    input=$(echo "$stdin_content" | truncate_input 3000)
+    style="${style:-appropriate doc comment}"
+else
+    echo "No code provided" >&2
+    exit 1
+fi
+
+system="Generate a $style for this code.
+Include: brief description, parameters, return value, throws/raises (if any).
+Output ONLY the documentation comment, ready to paste above the code.
+Be concise but complete."
+
+ollama_generate "$MODEL_CODE" "$input" "$system"

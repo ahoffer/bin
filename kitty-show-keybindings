@@ -1,0 +1,216 @@
+#!/bin/bash
+# Show all kitty keybindings in a human-readable format
+# Must be run inside kitty terminal
+
+kitty +runpy '
+from kitty.config import load_config
+from kitty.fast_data_types import (
+    GLFW_MOD_SHIFT, GLFW_MOD_CONTROL, GLFW_MOD_ALT, GLFW_MOD_SUPER,
+    glfw_get_key_name,
+)
+
+opts = load_config()
+km = opts.keyboard_modes.get("", None)
+
+geometry = []
+
+if km:
+    bindings = []
+    for key, definitions in km.keymap.items():
+        mods = key.mods
+        keycode = key.key
+
+        mod_parts = []
+        if mods & GLFW_MOD_CONTROL:
+            mod_parts.append("ctrl")
+        if mods & GLFW_MOD_SHIFT:
+            mod_parts.append("shift")
+        if mods & GLFW_MOD_ALT:
+            mod_parts.append("alt")
+        if mods & GLFW_MOD_SUPER:
+            mod_parts.append("super")
+        mod_str = "+".join(mod_parts) if mod_parts else ""
+
+        key_name = glfw_get_key_name(keycode, 0)
+        if not key_name:
+            if 32 <= keycode <= 126:
+                key_name = chr(keycode)
+            else:
+                key_name = f"key_{keycode}"
+
+        key_str = f"{mod_str}+{key_name}" if mod_str else key_name
+
+        for defn in definitions:
+            bindings.append((defn.definition, key_str))
+
+    # Deduplicate: group by key, keep shortest action name
+    by_key = {}
+    for action, key_str in bindings:
+        if key_str not in by_key or len(action) < len(by_key[key_str]):
+            by_key[key_str] = action
+
+    deduped = [(action, key_str) for key_str, action in by_key.items()]
+
+    # Geometry and tab-related action prefixes
+    geometry_prefixes = (
+        "first_window", "second_window", "third_window", "fourth_window",
+        "fifth_window", "sixth_window", "seventh_window", "eighth_window",
+        "ninth_window", "tenth_window", "next_window", "previous_window",
+        "move_window", "swap_with_window", "focus_visible_window",
+        "start_resizing_window", "next_layout", "toggle_fullscreen",
+        "toggle_maximized", "new_window", "close_window",
+        "new_tab", "close_tab", "next_tab", "previous_tab",
+        "move_tab", "set_tab_title", "new_os_window",
+    )
+
+    # Numbered window actions to consolidate
+    numbered_windows = (
+        "first_window", "second_window", "third_window", "fourth_window",
+        "fifth_window", "sixth_window", "seventh_window", "eighth_window",
+        "ninth_window", "tenth_window",
+    )
+
+    regular = []
+    has_numbered_windows = False
+    for action, key_str in deduped:
+        if action in numbered_windows:
+            has_numbered_windows = True
+            continue
+        elif action.split()[0] in geometry_prefixes or action.startswith(geometry_prefixes):
+            geometry.append((action, key_str))
+        else:
+            regular.append((action, key_str))
+
+    if has_numbered_windows:
+        geometry.append(("focus window 1-10", "ctrl+shift+1-0"))
+
+    # Logical ordering for geometry/tabs (most used first)
+    geometry_order = [
+        "new_tab", "new_window", "new_os_window",
+        "next_tab", "previous_tab", "next_window", "previous_window",
+        "focus window 1-10", "focus_visible_window",
+        "close_tab", "close_window",
+        "next_layout", "toggle_fullscreen", "toggle_maximized",
+        "move_tab_forward", "move_tab_backward",
+        "move_window_forward", "move_window_backward", "move_window_to_top",
+        "swap_with_window", "start_resizing_window", "set_tab_title",
+    ]
+
+    # Sort geometry using index lookup
+    sorted_geometry = []
+    for item in geometry:
+        action, key_str = item
+        idx = 999
+        for i, prefix in enumerate(geometry_order):
+            if action == prefix or action.startswith(prefix):
+                idx = i
+                break
+        sorted_geometry.append((idx, action, key_str))
+    sorted_geometry.sort()
+
+    if sorted_geometry:
+        print("=" * 60)
+        print("WINDOW GEOMETRY & TABS")
+        print("=" * 60)
+        for _, action, key_str in sorted_geometry:
+            print(f"{action}: {key_str}")
+        print("")
+
+    # Logical ordering for other keybindings (most used first)
+    regular_order = [
+        "copy_to_clipboard", "paste_from_clipboard", "paste_from_selection",
+        "scroll_line_up", "scroll_line_down", "scroll_page_up", "scroll_page_down",
+        "scroll_home", "scroll_end", "scroll_to_prompt",
+        "search_scrollback", "show_scrollback", "show_last_command_output",
+        "change_font_size",
+        "clear_terminal",
+        "open_url_with_hints", "pass_selection_to_program",
+        "kitten", "kitty_shell",
+        "load_config_file", "edit_config_file", "debug_config",
+        "set_background_opacity", "show_kitty_doc",
+    ]
+
+    sorted_regular = []
+    for item in regular:
+        action, key_str = item
+        idx = 999
+        for i, prefix in enumerate(regular_order):
+            if action.startswith(prefix):
+                idx = i
+                break
+        sorted_regular.append((idx, action, key_str))
+    sorted_regular.sort()
+
+    print("=" * 60)
+    print("OTHER KEYBINDINGS")
+    print("=" * 60)
+    for _, action, key_str in sorted_regular:
+        print(f"{action}: {key_str}")
+
+# Mouse mappings
+BUTTON_NAMES = {0: "left", 1: "right", 2: "middle", 3: "b4", 4: "b5", 5: "b6", 6: "b7", 7: "b8"}
+
+if hasattr(opts, "mousemap") and opts.mousemap:
+    print("")
+    print("=" * 60)
+    print("MOUSE MAPPINGS")
+    print("=" * 60)
+
+    mouse_bindings = []
+    for event, action in opts.mousemap.items():
+        if event.grabbed or action == "discard_event":
+            continue
+
+        parts = []
+        if event.mods & GLFW_MOD_CONTROL:
+            parts.append("ctrl")
+        if event.mods & GLFW_MOD_SHIFT:
+            parts.append("shift")
+        if event.mods & GLFW_MOD_ALT:
+            parts.append("alt")
+        if event.mods & GLFW_MOD_SUPER:
+            parts.append("super")
+
+        btn = BUTTON_NAMES.get(event.button, f"b{event.button}")
+        parts.append(btn)
+
+        if event.repeat_count == -2:
+            parts.append("single click")
+        elif event.repeat_count == -3:
+            parts.append("double click")
+        elif event.repeat_count == -4:
+            parts.append("triple click")
+        elif event.repeat_count == 1:
+            parts.append("button down")
+        elif event.repeat_count == 2:
+            parts.append("double button down")
+        elif event.repeat_count == 3:
+            parts.append("triple button down")
+        elif event.repeat_count > 0:
+            parts.append(f"{event.repeat_count}x button down")
+
+        event_str = "+".join(parts)
+        mouse_bindings.append((action, event_str))
+
+    mouse_order = [
+        "mouse_selection normal", "mouse_selection word", "mouse_selection line",
+        "mouse_selection extend", "mouse_selection rectangle", "mouse_selection line_from_point",
+        "mouse_handle_click",
+        "paste_from_selection", "paste_selection",
+        "mouse_show_command_output",
+    ]
+
+    sorted_mouse = []
+    for item in mouse_bindings:
+        action, event_str = item
+        idx = 999
+        for i, prefix in enumerate(mouse_order):
+            if action.startswith(prefix):
+                idx = i
+                break
+        sorted_mouse.append((idx, action, event_str))
+    sorted_mouse.sort()
+
+    for _, action, event_str in sorted_mouse:
+        print(f"{action}: {event_str}")
+'

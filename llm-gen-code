@@ -1,0 +1,55 @@
+#!/bin/bash
+# Generate code snippet from description
+# Usage: llm-gen-code "description" [--lang LANG]
+# Examples:
+#   llm-gen-code "typescript function to debounce"
+#   llm-gen-code "java builder pattern for User class" --lang java
+#   echo "add equals and hashCode" | llm-gen-code --lang java
+
+set -euo pipefail
+
+# Capture stdin immediately if piped
+stdin_content=""
+if [[ ! -t 0 ]]; then
+    stdin_content=$(cat)
+fi
+
+source "$(dirname "$0")/ollama-lib"
+
+if ! ollama_ping; then
+    echo "Error: Cannot reach Ollama at $OLLAMA_HOST" >&2
+    exit 1
+fi
+
+# Parse args
+lang=""
+prompt=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --lang) lang="$2"; shift 2 ;;
+        *) prompt="$prompt $1"; shift ;;
+    esac
+done
+
+# Read from stdin if no prompt
+if [[ -z "${prompt// }" ]]; then
+    prompt="$stdin_content"
+fi
+
+if [[ -z "$prompt" ]]; then
+    echo "Usage: llm-gen-code \"description\" [--lang LANG]" >&2
+    exit 1
+fi
+
+lang_hint=""
+if [[ -n "$lang" ]]; then
+    lang_hint="Language: $lang"
+fi
+
+system="You are a code generator. Generate clean, idiomatic code for the request.
+$lang_hint
+
+Output ONLY the code, no explanations or markdown fences.
+Use proper indentation. Include necessary imports if obvious."
+
+ollama_generate "$MODEL_CODE" "$prompt" "$system"

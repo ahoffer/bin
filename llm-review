@@ -1,0 +1,45 @@
+#!/bin/bash
+# Quick code review / first-pass feedback
+# Usage: llm-review file.py
+#        git diff | llm-review
+#        llm-review < code.ts
+
+set -euo pipefail
+
+# Capture stdin immediately if piped
+stdin_content=""
+if [[ ! -t 0 ]]; then
+    stdin_content=$(cat)
+fi
+
+source "$(dirname "$0")/ollama-lib"
+
+if ! ollama_ping; then
+    echo "Error: Cannot reach Ollama at $OLLAMA_HOST" >&2
+    exit 1
+fi
+
+# Read input
+if [[ $# -gt 0 && -f "$1" ]]; then
+    input=$(cat "$1" | truncate_input 6000)
+    context="File: $1"
+elif [[ -n "$stdin_content" ]]; then
+    input=$(echo "$stdin_content" | truncate_input 6000)
+    context="Code diff or snippet"
+else
+    echo "No code provided" >&2
+    exit 1
+fi
+
+system="You are a code reviewer. Review this code for:
+1. Bugs or logic errors
+2. Security issues (injection, auth, secrets)
+3. Performance concerns
+4. Style issues (only if severe)
+
+Be concise. List issues as bullet points with line references if visible.
+If the code looks fine, say so briefly. Don't nitpick."
+
+echo "Reviewing: $context"
+echo "---"
+ollama_generate "$MODEL_CODE" "$input" "$system"

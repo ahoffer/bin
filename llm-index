@@ -1,0 +1,134 @@
+#!/bin/bash
+# Index codebase for semantic search
+# Usage: llm-index [dir]           # Index directory (default: cwd)
+#        llm-index --search "query" # Search indexed content
+#        llm-index --status         # Show index stats
+
+set -euo pipefail
+source "$(dirname "$0")/ollama-lib"
+
+INDEX_DIR="${LLM_INDEX_DIR:-$HOME/.cache/llm-index}"
+mkdir -p "$INDEX_DIR"
+
+index_file() {
+    local file="$1"
+    local relpath="$2"
+    local content
+    content=$(head -c 8000 "$file" 2>/dev/null | tr '\n' ' ' | tr -s ' ')
+
+    if [[ -z "$content" ]]; then
+        return
+    fi
+
+    local embedding
+    embedding=$(ollama_embed "$MODEL_EMBED" "$content")
+
+    if [[ -n "$embedding" && "$embedding" != "null" ]]; then
+        local hash
+        hash=$(echo "$relpath" | md5sum | cut -d' ' -f1)
+        echo "{\"path\":\"$relpath\",\"embedding\":$embedding}" > "$INDEX_DIR/$hash.json"
+        echo "  Indexed: $relpath"
+    fi
+}
+
+cosine_similarity() {
+    # Compare two embedding vectors using jq
+    local emb1="$1"
+    local emb2="$2"
+    jq -n --argjson a "$emb1" --argjson b "$emb2" '
+        ($a | map(. * .) | add | sqrt) as $mag_a |
+        ($b | map(. * .) | add | sqrt) as $mag_b |
+        ([$a, $b] | transpose | map(.[0] * .[1]) | add) as $dot |
+        ($dot / ($mag_a * $mag_b))
+    '
+}
+
+do_index() {
+    local dir="${1:-.}"
+
+    if ! ollama_ping; then
+        echo "Error: Cannot reach Ollama" >&2
+        exit 1
+    fi
+
+    echo "Indexing $dir..."
+
+    # Find code files
+    find "$dir" -type f \( \
+        -name "*.py" -o -name "*.js" -o -name "*.ts" -o -name "*.tsx" \
+        -o -name "*.java" -o -name "*.go" -o -name "*.rs" -o -name "*.rb" \
+        -o -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.hpp" \
+        -o -name "*.sh" -o -name "*.yaml" -o -name "*.yml" -o -name "*.json" \
+        -o -name "*.md" -o -name "*.txt" \
+    \) ! -path "*/node_modules/*" ! -path "*/.git/*" ! -path "*/target/*" \
+       ! -path "*/dist/*" ! -path "*/build/*" ! -path "*/__pycache__/*" \
+    2>/dev/null | while read -r file; do
+        relpath=$(realpath --relative-to="$dir" "$file" 2>/dev/null || echo "$file")
+        index_file "$file" "$relpath"
+    done
+
+    echo "Done. Index stored in $INDEX_DIR"
+}
+
+do_search() {
+    local query="$1"
+    local limit="${2:-5}"
+
+    if ! ollama_ping; then
+        echo "Error: Cannot reach Ollama" >&2
+        exit 1
+    fi
+
+    # Get query embedding
+    local query_emb
+    query_emb=$(ollama_embed "$MODEL_EMBED" "$query")
+
+    if [[ -z "$query_emb" || "$query_emb" == "null" ]]; then
+        echo "Failed to embed query" >&2
+        exit 1
+    fi
+
+    # Score all indexed files
+    local results=()
+    for idx_file in "$INDEX_DIR"/*.json; do
+        [[ -f "$idx_file" ]] || continue
+        local path emb score
+        path=$(jq -r '.path' "$idx_file")
+        emb=$(jq -c '.embedding' "$idx_file")
+        score=$(cosine_similarity "$query_emb" "$emb")
+        results+=("$score|$path")
+    done
+
+    # Sort and show top results
+    printf '%s\n' "${results[@]}" | sort -t'|' -k1 -rn | head -n "$limit" | while IFS='|' read -r score path; do
+        printf "%.4f  %s\n" "$score" "$path"
+    done
+}
+
+do_status() {
+    local count
+    count=$(find "$INDEX_DIR" -name "*.json" 2>/dev/null | wc -l)
+    echo "Index location: $INDEX_DIR"
+    echo "Indexed files: $count"
+    if [[ $count -gt 0 ]]; then
+        echo "Sample files:"
+        find "$INDEX_DIR" -name "*.json" -print0 2>/dev/null | head -z -n 5 | xargs -0 -I{} jq -r '.path' {} 2>/dev/null | sed 's/^/  /'
+    fi
+}
+
+case "${1:-}" in
+    --search)
+        shift
+        do_search "$*"
+        ;;
+    --status)
+        do_status
+        ;;
+    --clear)
+        rm -rf "$INDEX_DIR"/*.json
+        echo "Index cleared"
+        ;;
+    *)
+        do_index "${1:-.}"
+        ;;
+esac

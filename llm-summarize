@@ -1,0 +1,40 @@
+#!/bin/bash
+# Summarize text/logs/output via Ollama
+# Usage: llm-summarize [file]    OR    command | llm-summarize
+# Examples:
+#   mvn test 2>&1 | llm-summarize
+#   llm-summarize build.log
+#   git diff | llm-summarize
+
+set -euo pipefail
+
+# Capture stdin immediately if piped
+stdin_content=""
+if [[ ! -t 0 ]]; then
+    stdin_content=$(cat)
+fi
+
+source "$(dirname "$0")/ollama-lib"
+
+if ! ollama_ping; then
+    echo "Error: Cannot reach Ollama at $OLLAMA_HOST" >&2
+    exit 1
+fi
+
+# Read input
+if [[ $# -gt 0 && -f "$1" ]]; then
+    input=$(cat "$1" | truncate_input 6000)
+elif [[ -n "$stdin_content" ]]; then
+    input=$(echo "$stdin_content" | truncate_input 6000)
+else
+    echo "No input provided" >&2
+    exit 1
+fi
+
+system="You are a concise technical summarizer. Summarize the key points, focusing on:
+- Errors, failures, warnings (most important)
+- Key actions taken or changes made
+- Final status/outcome
+Keep it brief - bullet points preferred. Skip boilerplate and verbose output."
+
+ollama_generate "$MODEL_CHAT" "$input" "$system"

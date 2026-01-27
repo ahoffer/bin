@@ -1,0 +1,40 @@
+#!/bin/bash
+# Generate shell command from natural language
+# Usage: llm-shell "find files modified today"
+#        llm-shell "compress all pngs in current dir"
+
+set -euo pipefail
+source "$(dirname "$0")/ollama-lib"
+
+if ! ollama_ping; then
+    echo "Error: Cannot reach Ollama at $OLLAMA_HOST" >&2
+    exit 1
+fi
+
+if [[ $# -eq 0 ]]; then
+    echo "Usage: llm-shell \"description of what you want to do\"" >&2
+    exit 1
+fi
+
+prompt="$*"
+
+system="You are a shell command generator for Linux (bash).
+Generate a single command or pipeline that accomplishes the task.
+Output ONLY the command, nothing else.
+Prefer standard tools (find, grep, awk, sed, xargs).
+Use safe options where available (e.g., -i for interactive prompts on destructive ops)."
+
+cmd=$(ollama_generate "$MODEL_CHAT" "$prompt" "$system")
+
+if [[ -z "$cmd" ]]; then
+    echo "Failed to generate command" >&2
+    exit 1
+fi
+
+echo "Command: $cmd"
+echo ""
+read -p "Execute? [y/N] " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    eval "$cmd"
+fi

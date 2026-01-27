@@ -1,0 +1,39 @@
+#!/bin/bash
+# Explain an error message or stack trace
+# Usage: command 2>&1 | llm-explain-error
+#        llm-explain-error "error message"
+#        llm-explain-error < stacktrace.txt
+
+set -euo pipefail
+
+# Capture stdin immediately if piped
+stdin_content=""
+if [[ ! -t 0 ]]; then
+    stdin_content=$(cat)
+fi
+
+source "$(dirname "$0")/ollama-lib"
+
+if ! ollama_ping; then
+    echo "Error: Cannot reach Ollama at $OLLAMA_HOST" >&2
+    exit 1
+fi
+
+# Read input from arg or stdin
+if [[ $# -gt 0 ]]; then
+    input="$*"
+elif [[ -n "$stdin_content" ]]; then
+    input=$(echo "$stdin_content" | truncate_input 4000)
+else
+    echo "No error provided" >&2
+    exit 1
+fi
+
+system="You are a helpful developer assistant. Analyze this error/stack trace and explain:
+1. What the error means (1 sentence)
+2. Most likely cause
+3. How to fix it (specific steps)
+
+Be concise and practical. If you recognize the error, give the common fix."
+
+ollama_generate "$MODEL_CHAT" "$input" "$system"

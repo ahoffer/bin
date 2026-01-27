@@ -1,0 +1,96 @@
+#!/bin/bash
+# Ollama shared library - source this in other scripts
+# Usage: source ollama-lib
+
+OLLAMA_HOST="${OLLAMA_HOST:-http://bigfish:11434}"
+OLLAMA_TIMEOUT="${OLLAMA_TIMEOUT:-120}"
+
+# Models
+MODEL_CHAT="${OLLAMA_MODEL_CHAT:-llama3.2:latest}"
+MODEL_CODE="${OLLAMA_MODEL_CODE:-qwen2.5-coder:7b}"
+MODEL_EMBED="${OLLAMA_MODEL_EMBED:-nomic-embed-text:latest}"
+MODEL_VISION="${OLLAMA_MODEL_VISION:-llama3.2-vision:11b}"
+
+# Check if Ollama is reachable
+ollama_ping() {
+    curl -s --connect-timeout 2 "$OLLAMA_HOST/api/tags" </dev/null >/dev/null 2>&1
+}
+
+# Generate completion (streaming disabled for scripting)
+# Args: model, prompt, [system_prompt]
+ollama_generate() {
+    local model="$1"
+    local prompt="$2"
+    local system="${3:-}"
+
+    local payload
+    if [[ -n "$system" ]]; then
+        payload=$(jq -n --arg model "$model" --arg prompt "$prompt" --arg system "$system" \
+            '{model: $model, prompt: $prompt, system: $system, stream: false}')
+    else
+        payload=$(jq -n --arg model "$model" --arg prompt "$prompt" \
+            '{model: $model, prompt: $prompt, stream: false}')
+    fi
+
+    local response
+    response=$(curl -s --max-time "$OLLAMA_TIMEOUT" \
+        -H "Content-Type: application/json" \
+        -d "$payload" \
+        "$OLLAMA_HOST/api/generate" 2>/dev/null)
+
+    local exit_code=$?
+    if [[ $exit_code -ne 0 ]]; then
+        echo "Error: Ollama request failed (curl exit: $exit_code)" >&2
+        return 1
+    fi
+
+    # Extract response text
+    echo "$response" | jq -r '.response // empty'
+}
+
+# Chat completion with messages array
+# Args: model, messages_json
+ollama_chat() {
+    local model="$1"
+    local messages="$2"
+
+    local payload
+    payload=$(jq -n --arg model "$model" --argjson messages "$messages" \
+        '{model: $model, messages: $messages, stream: false}')
+
+    local response
+    response=$(curl -s --max-time "$OLLAMA_TIMEOUT" \
+        -H "Content-Type: application/json" \
+        -d "$payload" \
+        "$OLLAMA_HOST/api/chat" 2>/dev/null)
+
+    if [[ $? -ne 0 ]]; then
+        echo "Error: Ollama chat request failed" >&2
+        return 1
+    fi
+
+    echo "$response" | jq -r '.message.content // empty'
+}
+
+# Get embeddings
+# Args: model, text
+ollama_embed() {
+    local model="$1"
+    local text="$2"
+
+    local payload
+    payload=$(jq -n --arg model "$model" --arg input "$text" \
+        '{model: $model, input: $input}')
+
+    curl -s --max-time "$OLLAMA_TIMEOUT" \
+        -H "Content-Type: application/json" \
+        -d "$payload" \
+        "$OLLAMA_HOST/api/embed" 2>/dev/null | jq -c '.embeddings[0] // empty'
+}
+
+# Truncate input to approximate token limit (rough: 4 chars = 1 token)
+truncate_input() {
+    local max_tokens="${1:-4000}"
+    local max_chars=$((max_tokens * 4))
+    head -c "$max_chars"
+}
