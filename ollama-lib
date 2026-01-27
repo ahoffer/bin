@@ -36,7 +36,7 @@ ollama_generate() {
     response=$(curl -s --max-time "$OLLAMA_TIMEOUT" \
         -H "Content-Type: application/json" \
         -d "$payload" \
-        "$OLLAMA_HOST/api/generate" 2>/dev/null)
+        "$OLLAMA_HOST/api/generate" </dev/null 2>/dev/null)
 
     local exit_code=$?
     if [[ $exit_code -ne 0 ]]; then
@@ -62,7 +62,7 @@ ollama_chat() {
     response=$(curl -s --max-time "$OLLAMA_TIMEOUT" \
         -H "Content-Type: application/json" \
         -d "$payload" \
-        "$OLLAMA_HOST/api/chat" 2>/dev/null)
+        "$OLLAMA_HOST/api/chat" </dev/null 2>/dev/null)
 
     if [[ $? -ne 0 ]]; then
         echo "Error: Ollama chat request failed" >&2
@@ -85,7 +85,7 @@ ollama_embed() {
     curl -s --max-time "$OLLAMA_TIMEOUT" \
         -H "Content-Type: application/json" \
         -d "$payload" \
-        "$OLLAMA_HOST/api/embed" 2>/dev/null | jq -c '.embeddings[0] // empty'
+        "$OLLAMA_HOST/api/embed" </dev/null 2>/dev/null | jq -c '.embeddings[0] // empty'
 }
 
 # Truncate input to approximate token limit (rough: 4 chars = 1 token)

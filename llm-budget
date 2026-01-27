@@ -1,0 +1,147 @@
+#!/bin/bash
+# Token budget tracker for Claude Code sessions
+# Usage: llm-budget              # Show today's usage
+#        llm-budget --daily      # Show daily breakdown
+#        llm-budget --alert 1000 # Alert if today exceeds N messages
+#        llm-budget --reset      # Reset alerts for today
+
+set -euo pipefail
+
+STATS_FILE="$HOME/.claude/stats-cache.json"
+BUDGET_FILE="$HOME/.cache/llm-budget.json"
+mkdir -p "$(dirname "$BUDGET_FILE")"
+
+# Initialize budget file if needed
+if [[ ! -f "$BUDGET_FILE" ]]; then
+    echo '{"daily_limit": 500, "alert_threshold": 0.8, "alerts_sent": {}}' > "$BUDGET_FILE"
+fi
+
+get_today_stats() {
+    local today=$(date +%Y-%m-%d)
+    if [[ -f "$STATS_FILE" ]]; then
+        jq -r --arg date "$today" '.dailyActivity[] | select(.date == $date) | "\(.messageCount) \(.toolCallCount) \(.sessionCount)"' "$STATS_FILE" 2>/dev/null || echo "0 0 0"
+    else
+        echo "0 0 0"
+    fi
+}
+
+show_usage() {
+    local today=$(date +%Y-%m-%d)
+    read -r messages tools sessions <<< "$(get_today_stats)"
+
+    local daily_limit=$(jq -r '.daily_limit' "$BUDGET_FILE")
+    local pct=$((messages * 100 / (daily_limit > 0 ? daily_limit : 1)))
+
+    echo "═══════════════════════════════════════"
+    echo "  Claude Code Usage - $today"
+    echo "═══════════════════════════════════════"
+    echo "  Messages:     $messages / $daily_limit ($pct%)"
+    echo "  Tool calls:   $tools"
+    echo "  Sessions:     $sessions"
+    echo "───────────────────────────────────────"
+
+    # Visual bar
+    local bar_width=30
+    local filled=$((pct * bar_width / 100))
+    [[ $filled -gt $bar_width ]] && filled=$bar_width
+    local empty=$((bar_width - filled))
+
+    printf "  ["
+    [[ $filled -gt 0 ]] && printf '%*s' "$filled" '' | tr ' ' '█'
+    [[ $empty -gt 0 ]] && printf '%*s' "$empty" '' | tr ' ' '░'
+    printf "] %d%%\n" "$pct"
+    echo "═══════════════════════════════════════"
+
+    # Warnings
+    if [[ $pct -ge 100 ]]; then
+        echo "  🔴 OVER BUDGET - Offload more to Ollama!"
+    elif [[ $pct -ge 80 ]]; then
+        echo "  🟡 Approaching limit - Use llm-* tools"
+    elif [[ $pct -ge 50 ]]; then
+        echo "  🟢 On track"
+    else
+        echo "  ✅ Low usage"
+    fi
+}
+
+show_daily() {
+    echo "Daily Usage (last 7 days):"
+    echo "────────────────────────────────────────────"
+    printf "%-12s %8s %8s %8s\n" "Date" "Messages" "Tools" "Sessions"
+    echo "────────────────────────────────────────────"
+
+    if [[ -f "$STATS_FILE" ]]; then
+        jq -r '.dailyActivity | sort_by(.date) | reverse | .[0:7] | .[] | "\(.date) \(.messageCount) \(.toolCallCount) \(.sessionCount)"' "$STATS_FILE" 2>/dev/null | \
+        while read -r date msgs tools sess; do
+            printf "%-12s %8s %8s %8s\n" "$date" "$msgs" "$tools" "$sess"
+        done
+    fi
+}
+
+check_alert() {
+    local threshold="$1"
+    local today=$(date +%Y-%m-%d)
+    read -r messages tools sessions <<< "$(get_today_stats)"
+
+    # Check if already alerted today
+    local alerted=$(jq -r --arg date "$today" '.alerts_sent[$date] // false' "$BUDGET_FILE")
+
+    if [[ "$messages" -ge "$threshold" && "$alerted" != "true" ]]; then
+        # Mark as alerted
+        jq --arg date "$today" '.alerts_sent[$date] = true' "$BUDGET_FILE" > "$BUDGET_FILE.tmp"
+        mv "$BUDGET_FILE.tmp" "$BUDGET_FILE"
+
+        echo "⚠️  BUDGET ALERT: $messages messages today (threshold: $threshold)"
+        echo "   Offload routine tasks to Ollama:"
+        echo "   • llm-summarize - for logs/output"
+        echo "   • llm-gen-code  - for boilerplate"
+        echo "   • llm-ask       - for simple questions"
+        return 1
+    fi
+    return 0
+}
+
+set_limit() {
+    local limit="$1"
+    jq --argjson limit "$limit" '.daily_limit = $limit' "$BUDGET_FILE" > "$BUDGET_FILE.tmp"
+    mv "$BUDGET_FILE.tmp" "$BUDGET_FILE"
+    echo "Daily limit set to $limit messages"
+}
+
+reset_alerts() {
+    jq '.alerts_sent = {}' "$BUDGET_FILE" > "$BUDGET_FILE.tmp"
+    mv "$BUDGET_FILE.tmp" "$BUDGET_FILE"
+    echo "Alerts reset"
+}
+
+case "${1:-}" in
+    --daily|-d)
+        show_daily
+        ;;
+    --alert|-a)
+        check_alert "${2:-500}"
+        ;;
+    --limit|-l)
+        set_limit "${2:-500}"
+        ;;
+    --reset|-r)
+        reset_alerts
+        ;;
+    --json|-j)
+        get_today_stats | awk '{print "{\"messages\":"$1",\"tools\":"$2",\"sessions\":"$3"}"}'
+        ;;
+    --help|-h)
+        echo "Usage: llm-budget [option]"
+        echo ""
+        echo "Options:"
+        echo "  (none)        Show today's usage"
+        echo "  --daily, -d   Show last 7 days"
+        echo "  --alert N     Alert if messages >= N"
+        echo "  --limit N     Set daily limit"
+        echo "  --reset       Reset today's alerts"
+        echo "  --json        Output as JSON"
+        ;;
+    *)
+        show_usage
+        ;;
+esac
