@@ -4,6 +4,14 @@
 
 OLLAMA_HOST="${OLLAMA_HOST:-http://bigfish:11434}"
 OLLAMA_TIMEOUT="${OLLAMA_TIMEOUT:-120}"
+OLLAMA_USAGE_LOG="${OLLAMA_USAGE_LOG:-$HOME/.cache/ollama-usage.jsonl}"
+
+# Read conversation ID from file if not set in environment
+OLLAMA_CONVO_FILE="$HOME/.cache/ollama-conversation-id"
+if [[ -z "${OLLAMA_CONVERSATION_ID:-}" && -f "$OLLAMA_CONVO_FILE" ]]; then
+    OLLAMA_CONVERSATION_ID=$(cat "$OLLAMA_CONVO_FILE")
+fi
+OLLAMA_CONVERSATION_ID="${OLLAMA_CONVERSATION_ID:-}"
 
 # Models
 MODEL_CHAT="${OLLAMA_MODEL_CHAT:-llama3.2:latest}"
@@ -11,17 +19,34 @@ MODEL_CODE="${OLLAMA_MODEL_CODE:-qwen2.5-coder:7b}"
 MODEL_EMBED="${OLLAMA_MODEL_EMBED:-nomic-embed-text:latest}"
 MODEL_VISION="${OLLAMA_MODEL_VISION:-llama3.2-vision:11b}"
 
+# Log usage after each call
+# Args: model, prompt_tokens, completion_tokens, tool_name
+_log_usage() {
+    local model="$1"
+    local prompt_tokens="${2:-0}"
+    local completion_tokens="${3:-0}"
+    local tool="${4:-unknown}"
+    local convo="${OLLAMA_CONVERSATION_ID:-}"
+    mkdir -p "$(dirname "$OLLAMA_USAGE_LOG")"
+    jq -nc --arg ts "$(date -Iseconds)" --arg model "$model" \
+           --argjson prompt "$prompt_tokens" --argjson completion "$completion_tokens" \
+           --arg tool "$tool" --arg convo "$convo" \
+           '{ts:$ts,model:$model,prompt_tokens:$prompt,completion_tokens:$completion,tool:$tool,convo:$convo}' \
+           >> "$OLLAMA_USAGE_LOG" 2>/dev/null || true
+}
+
 # Check if Ollama is reachable
 ollama_ping() {
     curl -s --connect-timeout 2 "$OLLAMA_HOST/api/tags" </dev/null >/dev/null 2>&1
 }
 
 # Generate completion (streaming disabled for scripting)
-# Args: model, prompt, [system_prompt]
+# Args: model, prompt, [system_prompt], [tool_name]
 ollama_generate() {
     local model="$1"
     local prompt="$2"
     local system="${3:-}"
+    local tool="${4:-${OLLAMA_TOOL_NAME:-generate}}"
 
     local payload
     if [[ -n "$system" ]]; then
@@ -44,15 +69,22 @@ ollama_generate() {
         return 1
     fi
 
+    # Log usage
+    local prompt_tokens completion_tokens
+    prompt_tokens=$(echo "$response" | jq -r '.prompt_eval_count // 0')
+    completion_tokens=$(echo "$response" | jq -r '.eval_count // 0')
+    _log_usage "$model" "$prompt_tokens" "$completion_tokens" "$tool"
+
     # Extract response text
     echo "$response" | jq -r '.response // empty'
 }
 
 # Chat completion with messages array
-# Args: model, messages_json
+# Args: model, messages_json, [tool_name]
 ollama_chat() {
     local model="$1"
     local messages="$2"
+    local tool="${3:-${OLLAMA_TOOL_NAME:-chat}}"
 
     local payload
     payload=$(jq -n --arg model "$model" --argjson messages "$messages" \
@@ -68,6 +100,12 @@ ollama_chat() {
         echo "Error: Ollama chat request failed" >&2
         return 1
     fi
+
+    # Log usage
+    local prompt_tokens completion_tokens
+    prompt_tokens=$(echo "$response" | jq -r '.prompt_eval_count // 0')
+    completion_tokens=$(echo "$response" | jq -r '.eval_count // 0')
+    _log_usage "$model" "$prompt_tokens" "$completion_tokens" "$tool"
 
     echo "$response" | jq -r '.message.content // empty'
 }

@@ -1,0 +1,125 @@
+#!/bin/bash
+# Show Ollama usage stats
+# Usage: llm-usage                    # Current conversation (if set) or all
+#        llm-usage --convo ID         # Specific conversation
+#        llm-usage --today            # Today's totals
+#        llm-usage --all              # All time
+#        llm-usage --json             # JSON output for hooks
+#        llm-usage --clear            # Clear log
+
+set -euo pipefail
+
+USAGE_LOG="${OLLAMA_USAGE_LOG:-$HOME/.cache/ollama-usage.jsonl}"
+CONVO_ID="${OLLAMA_CONVERSATION_ID:-}"
+
+if [[ ! -f "$USAGE_LOG" ]] || [[ ! -s "$USAGE_LOG" ]]; then
+    if [[ "${1:-}" == "--json" ]]; then
+        echo '{"calls":0,"tokens":0,"prompt_tokens":0,"completion_tokens":0}'
+    else
+        echo "No Ollama usage recorded yet"
+    fi
+    exit 0
+fi
+
+# Parse args
+filter_convo=""
+output_mode="default"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --convo) filter_convo="$2"; shift 2 ;;
+        --json) output_mode="json"; shift ;;
+        --today) output_mode="today"; shift ;;
+        --all) output_mode="all"; shift ;;
+        --clear) rm -f "$USAGE_LOG"; echo "Usage log cleared"; exit 0 ;;
+        *) shift ;;
+    esac
+done
+
+# Default: filter by current conversation if set
+if [[ -z "$filter_convo" && -n "$CONVO_ID" ]]; then
+    filter_convo="$CONVO_ID"
+fi
+
+# Build jq filter
+jq_filter='.'
+filter_desc="all time"
+if [[ -n "$filter_convo" ]]; then
+    jq_filter="map(select(.convo == \"$filter_convo\"))"
+    filter_desc="conversation $filter_convo"
+elif [[ "$output_mode" == "today" ]]; then
+    today=$(date +%Y-%m-%d)
+    jq_filter="map(select(.ts | startswith(\"$today\")))"
+    filter_desc="today"
+fi
+
+case "$output_mode" in
+    json)
+        jq -s "$jq_filter | {
+            calls: length,
+            tokens: (map(.prompt_tokens + .completion_tokens) | add // 0),
+            prompt_tokens: (map(.prompt_tokens) | add // 0),
+            completion_tokens: (map(.completion_tokens) | add // 0),
+            convo: (.[0].convo // null)
+        }" "$USAGE_LOG"
+        ;;
+    today)
+        today=$(date +%Y-%m-%d)
+        jq -s "map(select(.ts | startswith(\"$today\"))) | {
+            date: \"$today\",
+            calls: length,
+            tokens: (map(.prompt_tokens + .completion_tokens) | add // 0),
+            by_tool: (group_by(.tool) | map({
+                tool: .[0].tool,
+                calls: length,
+                tokens: (map(.prompt_tokens + .completion_tokens) | add // 0)
+            })),
+            by_convo: (group_by(.convo) | map({
+                convo: .[0].convo,
+                calls: length,
+                tokens: (map(.prompt_tokens + .completion_tokens) | add // 0)
+            }))
+        }" "$USAGE_LOG"
+        ;;
+    *)
+        stats=$(jq -s "$jq_filter | {
+            calls: length,
+            tokens: (map(.prompt_tokens + .completion_tokens) | add // 0),
+            prompt: (map(.prompt_tokens) | add // 0),
+            completion: (map(.completion_tokens) | add // 0)
+        }" "$USAGE_LOG")
+
+        calls=$(echo "$stats" | jq -r '.calls')
+        tokens=$(echo "$stats" | jq -r '.tokens')
+        prompt=$(echo "$stats" | jq -r '.prompt')
+        completion=$(echo "$stats" | jq -r '.completion')
+
+        if [[ "$calls" -eq 0 ]]; then
+            echo "No Ollama usage for $filter_desc"
+            exit 0
+        fi
+
+        # Format with commas
+        fmt_tokens=$(printf "%'d" "$tokens")
+        fmt_prompt=$(printf "%'d" "$prompt")
+        fmt_completion=$(printf "%'d" "$completion")
+
+        echo "Ollama usage ($filter_desc):"
+        echo "  Calls: $calls"
+        echo "  Total tokens: $fmt_tokens"
+        echo "    Prompt: $fmt_prompt | Completion: $fmt_completion"
+
+        # Show breakdown by tool if more than one type
+        tool_breakdown=$(jq -s "$jq_filter | group_by(.tool) | map({
+            tool: .[0].tool,
+            calls: length,
+            tokens: (map(.prompt_tokens + .completion_tokens) | add)
+        }) | sort_by(-.tokens)" "$USAGE_LOG")
+
+        tool_count=$(echo "$tool_breakdown" | jq 'length')
+        if [[ "$tool_count" -gt 1 ]]; then
+            echo ""
+            echo "By tool:"
+            echo "$tool_breakdown" | jq -r '.[] | "  \(.tool): \(.calls) calls, \(.tokens) tokens"'
+        fi
+        ;;
+esac

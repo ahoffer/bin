@@ -13,6 +13,7 @@ if [[ ! -t 0 ]]; then
 fi
 
 source "$(dirname "$0")/ollama-lib"
+OLLAMA_TOOL_NAME="test"
 
 if ! ollama_ping; then
     echo "Error: Cannot reach Ollama at $OLLAMA_HOST" >&2

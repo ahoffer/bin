@@ -6,6 +6,7 @@
 
 set -euo pipefail
 source "$(dirname "$0")/ollama-lib"
+OLLAMA_TOOL_NAME="regex"
 
 if ! ollama_ping; then
     echo "Error: Cannot reach Ollama at $OLLAMA_HOST" >&2
