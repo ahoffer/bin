@@ -60,6 +60,9 @@ alias jpick='. pickjava'
 
 
 # ----- EXPORT VARS HERE -----
+# Fix for SSHing from kitty terminal
+export TERM=xterm-256color
+
 export KUBECONFIG=~/.kube/config
 export YAMLLINT_CONFIG_FILE=/home/aaron/bin/.yamllint
 export VIMINIT='source $HOME/bin/.vimrc'
@@ -102,3 +105,4 @@ command -v regctl &>/dev/null && source <(regctl completion bash)
 complete -F __start_kubectl k
 
 
+export SYSTEMD_EDITOR=vim

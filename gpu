@@ -1,5 +1,5 @@
 #!/bin/bash
-echo "GPU                         GPU  BW   │  MEMORY      │ TEMP │ POWER  "
-echo "─────────────────────────── ──── ──── │ ─────────────│ ──── │ ───────"
+printf "%-27s %4s %4s │ %-14s │ %-5s │ %-7s\n" "GPU" "GPU" "BW" "MEMORY" "TEMP" "POWER"
+printf "%-27s %4s %4s │ %-14s │ %-5s │ %-7s\n" "───────────────────────────" "────" "────" "──────────────" "─────" "───────"
 nvidia-smi --query-gpu=name,utilization.gpu,utilization.memory,memory.used,memory.total,temperature.gpu,power.draw --format=csv,noheader,nounits | \
- awk -F', ' '{printf "%-27s %3s%% %3s%% │ %5.1f/%-5.1f GB │ %2s°C │ %6sW\n", substr($1,1,27), $2, $3, $4/1024, $5/1024, $6, $7}'
+ awk -F', ' '{printf "%-27s %4s%% %4s%% │ %5.1f/%-5.1f GB │ %3s°C │ %7sW\n", substr($1,1,27), $2, $3, $4/1024, $5/1024, $6, $7}'
