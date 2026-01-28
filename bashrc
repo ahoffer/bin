@@ -76,7 +76,8 @@ export CLAUDE_CODE_MAX_OUTPUT_TOKENS=16000
 export MAX_THINKING_TOKENS=5000
 export BASH_MAX_OUTPUT_LENGTH=4000
 export MAX_MCP_OUTPUT_TOKENS=12000
-export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=75
+export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=95
+export ENABLE_TOOL_SEARCH=true
 
 # Do not set JAVA_HOME here. It gets written and re-written in ~/.bashrc
 # export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"
