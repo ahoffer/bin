@@ -1,0 +1,19 @@
+#!/bin/bash
+# Semantic code search (wrapper for llm-index --search)
+# Usage: llm-search "query" [limit]
+# Examples:
+#   llm-search "error handling"
+#   llm-search "authentication" 10
+
+set -euo pipefail
+
+if [[ $# -eq 0 ]]; then
+    echo "Usage: llm-search \"query\" [limit]" >&2
+    echo "       (Run llm-index first to build the index)" >&2
+    exit 1
+fi
+
+query="$1"
+limit="${2:-5}"
+
+exec llm-index --search "$query" "$limit"
