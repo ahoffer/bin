@@ -1,19 +1,48 @@
 #!/bin/bash
-# Semantic code search (wrapper for llm-index --search)
-# Usage: llm-search "query" [limit]
-# Examples:
-#   llm-search "error handling"
-#   llm-search "authentication" 10
+# Web search with Ollama summarization
+# Usage: llm-search "your query"
+#        llm-search --raw "your query"   # show raw results only
 
 set -euo pipefail
+source "$(dirname "$0")/ollama-lib"
+OLLAMA_TOOL_NAME="search"
+
+RAW_MODE=false
+if [[ "${1:-}" == "--raw" ]]; then
+    RAW_MODE=true
+    shift
+fi
 
 if [[ $# -eq 0 ]]; then
-    echo "Usage: llm-search \"query\" [limit]" >&2
-    echo "       (Run llm-index first to build the index)" >&2
+    echo "Usage: llm-search [--raw] \"your query\"" >&2
+    echo "  --raw  Show raw search results without summarization" >&2
     exit 1
 fi
 
-query="$1"
-limit="${2:-5}"
+query="$*"
 
-exec llm-index --search "$query" "$limit"
+# Get search results from DuckDuckGo via ddgr
+results=$(ddgr --json --num 5 "$query" 2>/dev/null | jq -r '.[] | "Title: \(.title)\nURL: \(.url)\nSnippet: \(.abstract)\n"')
+
+if [[ -z "$results" ]]; then
+    echo "No results found for: $query" >&2
+    exit 1
+fi
+
+if $RAW_MODE; then
+    echo "$results"
+    exit 0
+fi
+
+# Summarize with Ollama
+system="You are a search assistant. Given search results, provide a concise, accurate answer to the query.
+Synthesize information from multiple sources. Be direct and factual. If results are insufficient, say so."
+
+prompt="Query: $query
+
+Search results:
+$results
+
+Answer the query based on these results:"
+
+ollama_generate "$MODEL_CHAT" "$prompt" "$system"
