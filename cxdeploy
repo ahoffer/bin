@@ -45,7 +45,18 @@ readonly IMAGE=$("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" image "$COMPONENT")
 readonly DEPLOY=$("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" deploy "$COMPONENT")
 readonly TIMEOUT=$("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" timeout "$COMPONENT")
 
-IMAGE_AGE=$("$SCRIPT_DIR/image-age" "$IMAGE" 2>/dev/null || echo "unknown")
+IMAGE_AGE=$("$SCRIPT_DIR/image-age" "$IMAGE")
+
+# Warn if local image matches what's already deployed
+LOCAL_HASH=$(docker inspect --format='{{.Id}}' "$IMAGE" 2>/dev/null || echo "")
+REMOTE_HASH=$(ssh "$remote_host" "sudo nerdctl -n k8s.io inspect --format='{{.Id}}' '$IMAGE' 2>/dev/null" || echo "")
+
+if [[ -n "$LOCAL_HASH" && "$LOCAL_HASH" == "$REMOTE_HASH" ]]; then
+  echo "WARNING: Image unchanged from deployed version - did you forget to build?"
+  read -p "Continue anyway? [y/N] " -n 1 -r
+  echo
+  [[ ! $REPLY =~ ^[Yy]$ ]] && exit 1
+fi
 
 echo "==> Deploying $COMPONENT"
 echo "    App $("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" app)"
