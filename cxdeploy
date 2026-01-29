@@ -1,35 +1,49 @@
 #!/bin/bash
 set -euo pipefail
 
-# Deploy a cx-search component to k3s
-# Usage: cxdeploy [-r host] [-n namespace] <component>
-# Examples:
-#   cxdeploy graphql                  # Deploy graphql component
-#   cxdeploy -r node2 edge            # Deploy to alternate host
+# Deploy a component to k3s (push image + restart pods + verify)
+#
+# Usage: cxdeploy [-a app] [-r host] [-n namespace] <component>
+#
+# Options:
+#   -a, --app APP           Application: cx or marrs (default: auto-detect from project root)
+#   -r, --remote HOST       Target k3s node (default: bigfish)
+#   -n, --namespace NS      Kubernetes namespace (default: auto from app)
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
-  sed -n '4,7p' "$0"
-  echo -e "\nComponents: $(cxconfig components | tr '\n' ' ')"
+  sed -n '3,11p' "$0"
+  local app_flag=""
+  [[ -n "${app:-}" ]] && app_flag="-a $app"
+  echo -e "\nComponents: $("$SCRIPT_DIR/cxconfig" $app_flag components | tr '\n' ' ')"
   exit 0
 }
 
+app=""
 remote_host="bigfish"
-namespace="octocx"
+namespace=""
 while [[ $# -gt 0 && "$1" == -* ]]; do
   case "$1" in
     -h|--help) usage ;;
+    -a|--app) app="$2"; shift 2 ;;
     -r|--remote) remote_host="$2"; shift 2 ;;
     -n|--namespace) namespace="$2"; shift 2 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
 
-readonly COMPONENT="${1:?Usage: cxdeploy [-r host] [-n namespace] <component>}"
-readonly IMAGE=$("$SCRIPT_DIR/cxconfig" image "$COMPONENT")
-readonly DEPLOY=$("$SCRIPT_DIR/cxconfig" deploy "$COMPONENT")
-readonly TIMEOUT=$("$SCRIPT_DIR/cxconfig" timeout "$COMPONENT")
+# Build cxconfig args
+cfg_args=()
+[[ -n "$app" ]] && cfg_args+=(-a "$app")
+
+# Get namespace from cxconfig if not explicitly set
+[[ -z "$namespace" ]] && namespace=$("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" namespace)
+
+readonly COMPONENT="${1:?Usage: cxdeploy [-a app] [-r host] [-n namespace] <component>}"
+readonly IMAGE=$("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" image "$COMPONENT")
+readonly DEPLOY=$("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" deploy "$COMPONENT")
+readonly TIMEOUT=$("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" timeout "$COMPONENT")
 
 IMAGE_AGE=$("$SCRIPT_DIR/image-age" "$IMAGE" 2>/dev/null || echo "unknown")
 

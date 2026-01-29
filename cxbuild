@@ -1,32 +1,55 @@
 #!/bin/bash
 set -euo pipefail
 
-# Build a cx-search component
-# Usage: cxbuild [-p project_root] <component>
+# Build a component's Docker image
+#
+# This script ONLY builds the image. It does NOT push or deploy.
+# After building, use cxdeploy to push the image and restart the pods.
+#
+# Usage: cxbuild [-a app] [-p project_root] <component>
+#
+# Options:
+#   -a, --app APP       Application: cx or marrs (default: auto-detect from project root)
+#   -p, --project DIR   Project root (default: auto from app, or CX_PROJECT_ROOT)
+#
 # Examples:
-#   cxbuild graphql                       # Build graphql component
-#   cxbuild -p /builds/cx-search edge     # Build from alternate project
+#   cxbuild graphql              # Build graphql component
+#   cxbuild -p /builds/marrs     # Build from alternate project
+#   cxbuild -a marrs edge        # Build edge for marrs
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
-  sed -n '4,7p' "$0"
-  echo -e "\nComponents: $(cxconfig components | tr '\n' ' ')"
+  sed -n '3,17p' "$0"
+  local app_flag=""
+  [[ -n "${app:-}" ]] && app_flag="-a $app"
+  echo -e "\nComponents: $("$SCRIPT_DIR/cxconfig" $app_flag components | tr '\n' ' ')"
   exit 0
 }
 
-project_root="${CX_PROJECT_ROOT:-/projects/cx-search}"
+app=""
+project_root=""
 while [[ $# -gt 0 && "$1" == -* ]]; do
   case "$1" in
     -h|--help) usage ;;
+    -a|--app) app="$2"; shift 2 ;;
     -p|--project) project_root="$2"; shift 2 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
 
-readonly COMPONENT="${1:?Usage: cxbuild [-p project_root] <component>}"
+# Build cxconfig args
+cfg_args=()
+[[ -n "$app" ]] && cfg_args+=(-a "$app")
+
+# Get project root: explicit > env var > auto from app
+if [[ -z "$project_root" ]]; then
+  project_root="${CX_PROJECT_ROOT:-$("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" root)}"
+fi
+
+readonly COMPONENT="${1:?Usage: cxbuild [-a app] [-p project_root] <component>}"
 readonly PROJECT_ROOT="$project_root"
-readonly DOCKER_DIR=$("$SCRIPT_DIR/cxconfig" dir "$COMPONENT")
+readonly DOCKER_DIR=$("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" dir "$COMPONENT")
 
 if [[ ! -d "$PROJECT_ROOT/docker/$DOCKER_DIR" ]]; then
   echo "Error: Directory not found: $PROJECT_ROOT/docker/$DOCKER_DIR" >&2

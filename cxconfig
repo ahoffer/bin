@@ -1,23 +1,76 @@
 #!/bin/bash
 set -euo pipefail
 
-# Query cx-search project configuration
-# Usage: cxconfig <command> [args]
+# Query component configuration for cx or marrs projects
+#
+# Used by cxbuild to find docker dirs
+# Used by cxdeploy (to find image/deploy/timeout)
+#
+# Usage: cxconfig [-a app] <command> [args]
+#
+# Options:
+#   -a, --app APP       Application: cx or marrs (default: auto-detect from project root)
+#
 # Commands:
 #   components          List all component names
 #   dir <component>     Get docker directory for component
-#   deploy <component>  Get deployment name for component
-#   image <component>   Get full image:tag for component
-#   timeout <component> Get rollout timeout (seconds) for component
-#   registry            Get the container registry
-#   version             Get the current version
-
-readonly CONFIG="${CX_CONFIG:-$HOME/.config/cx-search/components.conf}"
+#   deploy <component>  Get k8s deployment name for component
+#   image <component>   Get full image:tag (registry/dir:version)
+#   timeout <component> Get rollout timeout in seconds
+#   registry            Get the container registry URL
+#   version             Get the current build version
+#   namespace           Get the k8s namespace for this app
+#   app                 Get the detected/selected app name
+#   root                Get the default project root
 
 usage() {
-  sed -n '4,11p' "$0"
+  sed -n '3,21p' "$0"
   exit 0
 }
+
+# Find project root by walking up looking for pom.xml
+find_project_root() {
+  local dir="$PWD"
+  local last_with_pom=""
+  while [[ "$dir" != "/" ]]; do
+    if [[ -f "$dir/pom.xml" ]]; then
+      last_with_pom="$dir"
+    fi
+    dir="$(dirname "$dir")"
+  done
+  echo "$last_with_pom"
+}
+
+# Auto-detect app from project root directory name
+detect_app() {
+  local root
+  root=$(find_project_root)
+  if [[ -z "$root" ]]; then
+    echo "cx"  # default when not in a project
+    return
+  fi
+  local dirname
+  dirname=$(basename "$root")
+  case "$dirname" in
+    marrs) echo "marrs" ;;
+    cx-search) echo "cx" ;;
+    *) echo "cx" ;;  # default
+  esac
+}
+
+app=""
+while [[ $# -gt 0 && "$1" == -* ]]; do
+  case "$1" in
+    -h|--help) usage ;;
+    -a|--app) app="$2"; shift 2 ;;
+    *) break ;;  # let command handle unknown options
+  esac
+done
+
+[[ -z "$app" ]] && app=$(detect_app)
+
+readonly APP="$app"
+readonly CONFIG="$HOME/.config/$APP/components.conf"
 
 [[ $# -eq 0 || "$1" == "-h" || "$1" == "--help" ]] && usage
 
@@ -45,6 +98,40 @@ get_component_dir() {
   echo "$dir"
 }
 
+get_namespace() {
+  case "$APP" in
+    cx) echo "octocx" ;;
+    marrs) echo "marrs" ;;
+    *) echo "$APP" ;;
+  esac
+}
+
+get_deploy_prefix() {
+  case "$APP" in
+    cx) echo "cx" ;;
+    marrs) echo "marrs" ;;
+    *) echo "$APP" ;;
+  esac
+}
+
+get_default_root() {
+  case "$APP" in
+    cx) echo "/projects/cx-search" ;;
+    marrs) echo "/projects/marrs" ;;
+    *) echo "/projects/$APP" ;;
+  esac
+}
+
+get_version() {
+  local root
+  root=$(get_default_root)
+  if [[ -f "$root/pom.xml" ]]; then
+    grep -m1 '<version>' "$root/pom.xml" | sed 's/.*<version>\(.*\)<\/version>.*/\1/'
+  else
+    get_setting version  # fallback to config
+  fi
+}
+
 case "$1" in
   components)
     grep -E '^[a-z].*:' "$CONFIG" | cut -d: -f1
@@ -54,12 +141,21 @@ case "$1" in
     ;;
   deploy)
     dir=$(get_component_dir "${2:?Usage: cxconfig deploy <component>}")
-    echo "cx-${dir#cx-}"  # strip cx- prefix if present, then add it back
+    prefix=$(get_deploy_prefix)
+    # strip any existing prefix, then add the correct one
+    dir="${dir#cx-}"
+    dir="${dir#marrs-}"
+    # avoid "marrs-marrs" → just "marrs"
+    if [[ "$dir" == "$prefix" ]]; then
+      echo "$prefix"
+    else
+      echo "${prefix}-${dir}"
+    fi
     ;;
   image)
     dir=$(get_component_dir "${2:?Usage: cxconfig image <component>}")
     registry=$(get_setting registry)
-    version=$(get_setting version)
+    version=$(get_version)
     echo "$registry/$dir:$version"
     ;;
   timeout)
@@ -72,7 +168,16 @@ case "$1" in
     get_setting registry
     ;;
   version)
-    get_setting version
+    get_version
+    ;;
+  namespace)
+    get_namespace
+    ;;
+  app)
+    echo "$APP"
+    ;;
+  root)
+    get_default_root
     ;;
   *)
     echo "Unknown command: $1" >&2
