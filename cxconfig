@@ -9,7 +9,7 @@ set -euo pipefail
 # Usage: cxconfig [-a app] <command> [args]
 #
 # Options:
-#   -a, --app APP       Application: cx or marrs (default: auto-detect from project root)
+#   -a, --app APP      cx or marrs. Attempts autodetect
 #
 # Commands:
 #   components          List all component names

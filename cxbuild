@@ -10,7 +10,7 @@ set -euo pipefail
 #
 # Options:
 #   -a, --app APP       Application: cx or marrs (default: auto-detect from project root)
-#   -p, --project DIR   Project root (default: auto from app, or CX_PROJECT_ROOT)
+#   -p, --project DIR   Project root (default: auto from app)
 #
 # Examples:
 #   cxbuild graphql              # Build graphql component
@@ -42,9 +42,9 @@ done
 cfg_args=()
 [[ -n "$app" ]] && cfg_args+=(-a "$app")
 
-# Get project root: explicit > env var > auto from app
+# Get project root: explicit flag > auto from app
 if [[ -z "$project_root" ]]; then
-  project_root="${CX_PROJECT_ROOT:-$("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" root)}"
+  project_root=$("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" root)
 fi
 
 readonly COMPONENT="${1:?Usage: cxbuild [-a app] [-p project_root] <component>}"
@@ -56,6 +56,41 @@ if [[ ! -d "$PROJECT_ROOT/docker/$DOCKER_DIR" ]]; then
   exit 1
 fi
 
-echo "==> Building $COMPONENT ($PROJECT_ROOT/docker/$DOCKER_DIR)"
+# Run maven build in a directory
+mvn_build() {
+  local dir="$1"
+  if [[ ! -d "$dir" ]]; then
+    echo "Error: Directory not found: $dir" >&2
+    exit 1
+  fi
+  echo "==> Maven build $dir"
+  (cd "$dir" && mvn clean install -DskipTests -T6)
+}
+
+# Component-specific pre-build steps
+prebuild() {
+  case "$COMPONENT" in
+    graphql)
+      mvn_build "$PROJECT_ROOT/frontend/graphql"
+      ;;
+    app)
+      mvn_build "$PROJECT_ROOT/frontend/app"
+      ;;
+    edge|redirect|video-streaming)
+      mvn_build "$PROJECT_ROOT/backend"
+      mvn_build "$PROJECT_ROOT/distributions"
+      ;;
+    docs)
+      mvn_build "$PROJECT_ROOT/docs"
+      ;;
+  esac
+}
+
+echo "==> Building $COMPONENT"
+echo "    App $("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" app)"
+echo "    Project root $PROJECT_ROOT"
+echo "    Docker $PROJECT_ROOT/docker/$DOCKER_DIR"
+prebuild
+echo "==> Docker build $PROJECT_ROOT/docker/$DOCKER_DIR"
 (cd "$PROJECT_ROOT/docker/$DOCKER_DIR" && mvn install -DskipTests)
 echo "==> Build complete"

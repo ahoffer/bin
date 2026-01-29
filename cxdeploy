@@ -48,9 +48,12 @@ readonly TIMEOUT=$("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" timeout "$COMPONENT")
 IMAGE_AGE=$("$SCRIPT_DIR/image-age" "$IMAGE" 2>/dev/null || echo "unknown")
 
 echo "==> Deploying $COMPONENT"
-echo "    Image:      $IMAGE"
-echo "    Image age:  $IMAGE_AGE"
-echo "    Deployment: $DEPLOY"
-echo "    Timeout:    ${TIMEOUT}s"
+echo "    App $("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" app)"
+echo "    Remote $remote_host"
+echo "    Namespace $namespace"
+echo "    Image $IMAGE"
+echo "    Image age $IMAGE_AGE"
+echo "    Deployment $DEPLOY"
+echo "    Timeout ${TIMEOUT}s"
 
 "$SCRIPT_DIR/deploy-image.sh" -r "$remote_host" -n "$namespace" -t "$TIMEOUT" "$IMAGE" "$DEPLOY"
