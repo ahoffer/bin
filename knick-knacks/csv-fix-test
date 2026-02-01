@@ -1,0 +1,254 @@
+#!/usr/bin/env python3
+"""
+Test suite for csv-fix-multiline.
+
+Validates that the CSV fixing tool:
+1. Preserves column count
+2. Doesn't split dates from description fields
+3. Properly handles embedded newlines
+4. Maintains data integrity
+"""
+
+import csv
+import sys
+import os
+import tempfile
+import subprocess
+import re
+
+# Colors for output
+GREEN = '\033[92m'
+RED = '\033[91m'
+YELLOW = '\033[93m'
+RESET = '\033[0m'
+
+
+def run_csv_fix(input_file, date_sep=False):
+    """Run csv-fix-multiline and return the output file path."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+        output_file = f.name
+
+    cmd = ['csv-fix-multiline', input_file, '-o', output_file]
+    if date_sep:
+        cmd.append('--date-sep')
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"{RED}FAIL{RESET}: csv-fix-multiline failed: {result.stderr}")
+        return None
+
+    return output_file
+
+
+def count_fields(csv_file):
+    """Count fields per row and return distribution."""
+    distribution = {}
+    with open(csv_file, 'r', newline='') as f:
+        reader = csv.reader(f)
+        for row in reader:
+            n = len(row)
+            distribution[n] = distribution.get(n, 0) + 1
+    return distribution
+
+
+def get_header_count(csv_file):
+    """Get the number of columns from the header."""
+    with open(csv_file, 'r', newline='') as f:
+        reader = csv.reader(f)
+        header = next(reader)
+        return len(header)
+
+
+def check_dates_in_descriptions(original_file, fixed_file):
+    """Verify dates that were in descriptions stay in descriptions."""
+    date_pattern = re.compile(r'\d{1,2}/\d{1,2}/\d{2,4}')
+
+    issues = []
+
+    with open(original_file, 'r', newline='') as f1, open(fixed_file, 'r', newline='') as f2:
+        reader1 = csv.reader(f1)
+        reader2 = csv.reader(f2)
+
+        header1 = next(reader1)
+        header2 = next(reader2)
+
+        # Find description column index
+        desc_idx = None
+        for i, col in enumerate(header1):
+            if 'description' in col.lower():
+                desc_idx = i
+                break
+
+        if desc_idx is None:
+            return []  # No description column
+
+        for row_num, (row1, row2) in enumerate(zip(reader1, reader2), start=2):
+            if len(row1) <= desc_idx or len(row2) <= desc_idx:
+                continue
+
+            orig_desc = row1[desc_idx]
+            fixed_desc = row2[desc_idx]
+
+            # Find dates in original description
+            orig_dates = set(date_pattern.findall(orig_desc))
+
+            # Check if they're still in the fixed description
+            for date in orig_dates:
+                if date not in fixed_desc:
+                    issues.append({
+                        'row': row_num,
+                        'date': date,
+                        'issue': 'Date removed from description'
+                    })
+
+    return issues
+
+
+def check_no_newlines(fixed_file):
+    """Verify no embedded newlines remain in fields."""
+    issues = []
+    with open(fixed_file, 'r', newline='') as f:
+        reader = csv.reader(f)
+        header = next(reader)
+        for row_num, row in enumerate(reader, start=2):
+            for col_idx, field in enumerate(row):
+                if '\n' in field or '\r' in field:
+                    issues.append({
+                        'row': row_num,
+                        'column': header[col_idx] if col_idx < len(header) else f'col_{col_idx}',
+                        'issue': 'Embedded newline found'
+                    })
+    return issues
+
+
+def check_data_integrity(original_file, fixed_file):
+    """Verify key data fields are preserved."""
+    issues = []
+
+    with open(original_file, 'r', newline='') as f1, open(fixed_file, 'r', newline='') as f2:
+        reader1 = csv.reader(f1)
+        reader2 = csv.reader(f2)
+
+        header1 = next(reader1)
+        header2 = next(reader2)
+
+        # Find key column indices
+        key_cols = ['vulnerability_id', 'severity', 'package_names']
+        key_indices = {}
+        for col in key_cols:
+            for i, h in enumerate(header1):
+                if col in h.lower():
+                    key_indices[col] = i
+                    break
+
+        for row_num, (row1, row2) in enumerate(zip(reader1, reader2), start=2):
+            for col, idx in key_indices.items():
+                if idx < len(row1) and idx < len(row2):
+                    # Normalize whitespace for comparison
+                    val1 = ' '.join(row1[idx].split())
+                    val2 = ' '.join(row2[idx].split())
+                    if val1 != val2:
+                        issues.append({
+                            'row': row_num,
+                            'column': col,
+                            'original': val1[:50],
+                            'fixed': val2[:50],
+                            'issue': 'Data mismatch'
+                        })
+
+    return issues
+
+
+def run_tests(input_file):
+    """Run all tests and report results."""
+    print(f"Testing csv-fix-multiline with: {input_file}")
+    print("=" * 60)
+
+    all_passed = True
+    expected_cols = get_header_count(input_file)
+    print(f"Expected columns: {expected_cols}")
+    print()
+
+    # Test 1: Without --date-sep
+    print("Test 1: Without --date-sep")
+    print("-" * 40)
+    fixed_file = run_csv_fix(input_file, date_sep=False)
+    if fixed_file:
+        dist = count_fields(fixed_file)
+        if len(dist) == 1 and expected_cols in dist:
+            print(f"  {GREEN}PASS{RESET}: All rows have {expected_cols} fields")
+        else:
+            print(f"  {RED}FAIL{RESET}: Field count distribution: {dist}")
+            all_passed = False
+
+        newline_issues = check_no_newlines(fixed_file)
+        if not newline_issues:
+            print(f"  {GREEN}PASS{RESET}: No embedded newlines")
+        else:
+            print(f"  {RED}FAIL{RESET}: {len(newline_issues)} fields with embedded newlines")
+            all_passed = False
+
+        integrity_issues = check_data_integrity(input_file, fixed_file)
+        if not integrity_issues:
+            print(f"  {GREEN}PASS{RESET}: Data integrity preserved")
+        else:
+            print(f"  {RED}FAIL{RESET}: {len(integrity_issues)} data mismatches")
+            all_passed = False
+
+        os.unlink(fixed_file)
+    else:
+        all_passed = False
+    print()
+
+    # Test 2: With --date-sep
+    print("Test 2: With --date-sep")
+    print("-" * 40)
+    fixed_file = run_csv_fix(input_file, date_sep=True)
+    if fixed_file:
+        dist = count_fields(fixed_file)
+        if len(dist) == 1 and expected_cols in dist:
+            print(f"  {GREEN}PASS{RESET}: All rows have {expected_cols} fields (look-ahead worked)")
+        else:
+            print(f"  {RED}FAIL{RESET}: Field count distribution: {dist}")
+            all_passed = False
+
+        date_issues = check_dates_in_descriptions(input_file, fixed_file)
+        if not date_issues:
+            print(f"  {GREEN}PASS{RESET}: Dates preserved in descriptions")
+        else:
+            print(f"  {YELLOW}WARN{RESET}: {len(date_issues)} dates removed from descriptions")
+            for issue in date_issues[:3]:
+                print(f"    Row {issue['row']}: {issue['date']}")
+
+        os.unlink(fixed_file)
+    else:
+        all_passed = False
+    print()
+
+    # Summary
+    print("=" * 60)
+    if all_passed:
+        print(f"{GREEN}ALL TESTS PASSED{RESET}")
+        return 0
+    else:
+        print(f"{RED}SOME TESTS FAILED{RESET}")
+        return 1
+
+
+def main():
+    if len(sys.argv) != 2:
+        print(f"Usage: {sys.argv[0]} <csv_file>")
+        print()
+        print("Tests csv-fix-multiline output for correctness.")
+        sys.exit(1)
+
+    input_file = sys.argv[1]
+    if not os.path.exists(input_file):
+        print(f"Error: File not found: {input_file}")
+        sys.exit(1)
+
+    sys.exit(run_tests(input_file))
+
+
+if __name__ == '__main__':
+    main()

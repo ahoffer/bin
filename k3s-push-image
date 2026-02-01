@@ -78,22 +78,21 @@ resolve_source() {
   echo "docker://$image"
 }
 
-$quiet || echo "==> Pushing ${#images[@]} image(s) to $HOST..." >&2
+$quiet || echo -n "    Pushing image..." >&2
 for image in "${images[@]}"; do
   source_ref="$(resolve_source "$image")"
-  $quiet || echo "==> Importing $image ($source_ref)..." >&2
   if [[ "$source_ref" == docker-daemon:* ]]; then
     if docker image inspect "$image" >/dev/null 2>&1; then
-      docker save "$image" | ssh "$HOST" 'sudo k3s ctr images import -'
+      docker save "$image" 2>/dev/null | ssh "$HOST" 'sudo k3s ctr images import - >/dev/null 2>&1'
     elif sudo -n docker image inspect "$image" >/dev/null 2>&1; then
-      sudo -n docker save "$image" | ssh "$HOST" 'sudo k3s ctr images import -'
+      sudo -n docker save "$image" 2>/dev/null | ssh "$HOST" 'sudo k3s ctr images import - >/dev/null 2>&1'
     else
       echo "Local image not found or docker access denied: $image" >&2
       exit 1
     fi
   else
-    docker pull "$image"
-    docker save "$image" | ssh "$HOST" 'sudo k3s ctr images import -'
+    docker pull "$image" >/dev/null 2>&1
+    docker save "$image" 2>/dev/null | ssh "$HOST" 'sudo k3s ctr images import - >/dev/null 2>&1'
   fi
 done
-$quiet || echo "==> Done" >&2
+$quiet || echo " done" >&2

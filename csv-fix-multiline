@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+"""
+Fix CSV files with embedded newlines and Windows line endings.
+
+Reads a CSV, removes embedded newlines from fields (replaces with space),
+strips Windows line endings, and writes properly quoted output.
+
+Uses look-ahead heuristics to avoid incorrectly splitting dates that are
+part of description fields.
+"""
+
+import csv
+import sys
+import argparse
+import re
+
+
+# Pattern to match dates like M/D/YYYY, MM/DD/YYYY, M/D/YY, etc.
+DATE_PATTERN = re.compile(
+    r'(?<![.\d])(\d{1,2}/\d{1,2}/\d{2,4})(?![.\d])'
+)
+
+# Pattern to detect if text looks like descriptive content
+# - Starts with a letter or bracket
+# - Has multiple words
+# - Is reasonably long
+DESCRIPTION_PATTERN = re.compile(r'^[\[A-Za-z].*\s+\w+', re.DOTALL)
+
+
+def looks_like_description(text):
+    """Check if text looks like descriptive content rather than a data field."""
+    if not text:
+        return False
+    text = text.strip()
+    # Descriptive text is usually long and starts with a letter/bracket
+    if len(text) < 30:
+        return False
+    return bool(DESCRIPTION_PATTERN.match(text))
+
+
+def looks_like_data_field(text):
+    """Check if text looks like a short data field (version, ID, score, etc.)."""
+    if not text:
+        return True  # Empty is a data field
+    text = text.strip()
+    # Short values are likely data fields
+    if len(text) < 50:
+        return True
+    # URLs are data fields
+    if text.startswith('http'):
+        return True
+    return False
+
+
+def should_separate_date_from_field(field, prev_field, next_field):
+    """
+    Decide if dates should be separated from this field.
+
+    Returns False (don't separate) if:
+    - Current field looks like descriptive text (long prose)
+
+    Returns True (do separate) if:
+    - Current field looks like it should be a data field but has a date embedded
+    - Previous field is empty AND current starts with date AND rest looks like description
+      (this suggests the date got merged with description from next column)
+    """
+    field = field.strip() if field else ""
+
+    # If the field looks like descriptive prose, don't split dates out of it
+    if looks_like_description(field):
+        return False
+
+    # If previous field is empty and current starts with a date,
+    # check if everything after the date looks like a description
+    if not prev_field or len(prev_field.strip()) <= 3:
+        match = DATE_PATTERN.match(field)
+        if match:
+            after_date = field[match.end():].strip()
+            if looks_like_description(after_date):
+                # This looks like: empty_field, "date + description"
+                # The date should be separated to fix column alignment
+                return True
+
+    # For short fields with dates, separate them
+    if len(field) < 100 and DATE_PATTERN.search(field):
+        return True
+
+    return False
+
+
+def separate_dates_in_field(field):
+    """
+    Separate date values from adjacent text in a single field.
+
+    Returns a list of fields - if a date is found embedded in text,
+    returns [before_text, date, after_text] (filtering empty strings).
+    If no embedded date, returns [field].
+    """
+    field = field.strip()
+    if not field:
+        return [field]
+
+    match = DATE_PATTERN.search(field)
+    if match:
+        date = match.group(1)
+        start, end = match.span(1)
+        before = field[:start].strip()
+        after = field[end:].strip()
+
+        # Only split if date is actually embedded (has text before or after)
+        if before or after:
+            result = []
+            if before:
+                result.extend(separate_dates_in_field(before))
+            result.append(date)
+            if after:
+                result.extend(separate_dates_in_field(after))
+            return result
+
+    return [field]
+
+
+def clean_field(field):
+    """Remove embedded newlines and normalize whitespace."""
+    cleaned = field.replace('\r\n', ' ').replace('\n', ' ').replace('\r', ' ')
+    # Collapse multiple spaces
+    while '  ' in cleaned:
+        cleaned = cleaned.replace('  ', ' ')
+    return cleaned.strip()
+
+
+def fix_csv(input_file, output_file=None, delimiter=',', separate_date_fields=False):
+    """Fix a CSV file by removing embedded newlines and normalizing line endings."""
+
+    if output_file is None:
+        out = sys.stdout
+    else:
+        out = open(output_file, 'w', newline='')
+
+    try:
+        with open(input_file, 'r', newline='') as f:
+            reader = csv.reader(f, delimiter=delimiter)
+            writer = csv.writer(out, delimiter=delimiter, quoting=csv.QUOTE_ALL)
+
+            for row in reader:
+                # First pass: clean all fields
+                cleaned_fields = [clean_field(field) for field in row]
+
+                if not separate_date_fields:
+                    # No date separation - just output cleaned fields
+                    writer.writerow(cleaned_fields)
+                    continue
+
+                # Second pass: apply date separation with look-ahead
+                output_row = []
+                for i, field in enumerate(cleaned_fields):
+                    prev_field = cleaned_fields[i - 1] if i > 0 else ""
+                    next_field = cleaned_fields[i + 1] if i < len(cleaned_fields) - 1 else ""
+
+                    # Check if we should separate dates in this field
+                    if should_separate_date_from_field(field, prev_field, next_field):
+                        output_row.extend(separate_dates_in_field(field))
+                    else:
+                        output_row.append(field)
+
+                writer.writerow(output_row)
+    finally:
+        if output_file is not None:
+            out.close()
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Fix CSV files with embedded newlines and Windows line endings.',
+        epilog='''Output is quoted CSV suitable for spreadsheet import.
+
+TIP: When importing into Excel/LibreOffice, select "Text" format for columns
+adjacent to date fields to prevent date field delimiting errors.''',
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument('input', help='Input CSV file')
+    parser.add_argument('-o', '--output', help='Output file (default: stdout)')
+    parser.add_argument('-d', '--delimiter', default=',', help='Field delimiter (default: comma)')
+    parser.add_argument('--date-sep', action='store_true',
+                        help='Separate dates embedded in text into their own fields (uses look-ahead heuristics)')
+
+    args = parser.parse_args()
+    fix_csv(args.input, args.output, args.delimiter, separate_date_fields=args.date_sep)
+
+
+if __name__ == '__main__':
+    main()

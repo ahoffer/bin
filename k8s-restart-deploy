@@ -15,9 +15,11 @@ usage() {
 
 namespace="octocx"
 timeout="120s"
+quiet=false
 while [[ $# -gt 0 && "$1" == -* ]]; do
   case "$1" in
     -h|--help) usage ;;
+    -q|--quiet) quiet=true; shift ;;
     -n|--namespace) namespace="$2"; shift 2 ;;
     -t|--timeout) timeout="$2"; shift 2 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
@@ -36,11 +38,15 @@ if ! kubectl get deployment "$DEPLOY" -n "$NAMESPACE" >/dev/null 2>&1; then
   fi
 fi
 
-echo "==> Restarting deployment $DEPLOY in $NAMESPACE..."
-kubectl rollout restart deployment "$DEPLOY" -n "$NAMESPACE"
+$quiet || echo -n "    Restarting..."
+kubectl rollout restart deployment "$DEPLOY" -n "$NAMESPACE" >/dev/null
 
-echo "==> Waiting for rollout (timeout: $TIMEOUT)..."
-kubectl rollout status deployment "$DEPLOY" -n "$NAMESPACE" --timeout="$TIMEOUT"
-
-echo "==> Rollout complete"
-true
+if $quiet; then
+  kubectl rollout status deployment "$DEPLOY" -n "$NAMESPACE" --timeout="$TIMEOUT" >/dev/null
+else
+  # Show progress on single line
+  kubectl rollout status deployment "$DEPLOY" -n "$NAMESPACE" --timeout="$TIMEOUT" 2>&1 | while read -r line; do
+    printf "\r    Rollout: %-60s" "${line:0:60}"
+  done
+  printf "\r    Rollout: done%-56s\n" ""
+fi

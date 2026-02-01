@@ -23,15 +23,20 @@ usage() {
 remote_host="bigfish"
 namespace="octocx"
 timeout=60
+quiet=false
 while [[ $# -gt 0 && "$1" == -* ]]; do
   case "$1" in
     -h|--help) usage ;;
+    -q|--quiet) quiet=true; shift ;;
     -r|--remote) remote_host="$2"; shift 2 ;;
     -n|--namespace) namespace="$2"; shift 2 ;;
     -t|--timeout) timeout="$2"; shift 2 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
+
+q_flag=""
+$quiet && q_flag="-q"
 
 readonly IMAGE="${1:?Usage: deploy-image.sh [-r host] [-n namespace] <image:tag> [deployment]}"
 if [[ -n "${2:-}" ]]; then
@@ -42,12 +47,12 @@ else
 fi
 
 # Push image to remote k3s node
-"$SCRIPT_DIR/k3s-push-image" -H "$remote_host" "$IMAGE"
+"$SCRIPT_DIR/k3s-push-image" $q_flag -H "$remote_host" "$IMAGE"
 
 # Restart deployment and wait for rollout
-"$SCRIPT_DIR/k8s-restart-deploy" -n "$namespace" -t "${timeout}s" "$DEPLOY"
+"$SCRIPT_DIR/k8s-restart-deploy" $q_flag -n "$namespace" -t "${timeout}s" "$DEPLOY"
 
 # Verify pods are running the correct image
-"$SCRIPT_DIR/k8s-verify-image" -n "$namespace" -r "$remote_host" -t "$timeout" "$IMAGE" "$DEPLOY"
+"$SCRIPT_DIR/k8s-verify-image" $q_flag -n "$namespace" -r "$remote_host" -t "$timeout" "$IMAGE" "$DEPLOY"
 
-echo "==> Deploy complete"
+$quiet || echo "==> Deploy complete"

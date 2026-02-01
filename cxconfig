@@ -124,7 +124,8 @@ get_default_root() {
 
 get_version() {
   local root
-  root=$(get_default_root)
+  root=$(find_project_root)
+  [[ -z "$root" ]] && root=$(get_default_root)
   if [[ -f "$root/pom.xml" ]]; then
     grep -m1 '<version>' "$root/pom.xml" | sed 's/.*<version>\(.*\)<\/version>.*/\1/'
   else

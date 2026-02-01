@@ -1,0 +1,421 @@
+#!/usr/bin/env python3
+"""
+CSV Validation Tool
+
+Checks CSV files for parsing, quoting, and delimiter issues.
+Detects problems that may indicate incorrect field separation.
+"""
+
+import csv
+import sys
+import argparse
+import re
+from collections import Counter, defaultdict
+
+
+class CSVValidator:
+    """Validate CSV files for structural and content issues."""
+
+    # Common data type patterns
+    PATTERNS = {
+        'url': re.compile(r'^https?://[^\s]+$'),
+        'url_fragment': re.compile(r'https?://[^\s]*'),
+        'iso_timestamp': re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}'),
+        'cve_id': re.compile(r'^CVE-\d{4}-\d+$'),
+        'advisory_id': re.compile(r'^(CVE-\d{4}-\d+|GHSA-[a-z0-9-]+|DLA-\d+-\d|DSA-\d+-\d|RUSTSEC-\d+-\d+)$'),
+        'version': re.compile(r'^[\d][\d\w\.\-\+:~]*$'),
+        'numeric': re.compile(r'^-?\d+\.?\d*$'),
+        'hex_address': re.compile(r'\+0x[0-9a-f]+/0x[0-9a-f]+$'),
+        'truncation_marker': re.compile(r'---\s*truncated\s*---', re.IGNORECASE),
+    }
+
+    # Common severity/status values (for security reports)
+    KNOWN_SEVERITIES = {'CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNSPECIFIED', 'UNKNOWN', ''}
+    KNOWN_STATUSES = {'ACTIVE', 'FIXED', 'SUPPRESSED', 'IN_GRACE_PERIOD', 'RESOLVED', ''}
+
+    def __init__(self, delimiter=',', expected_columns=None):
+        self.delimiter = delimiter
+        self.expected_columns = expected_columns
+        self.issues = {
+            'structure': [],
+            'field_content': [],
+            'column_consistency': [],
+            'data_quality': [],
+        }
+        self.stats = {}
+
+    def detect_field_type(self, value):
+        """Detect the likely data type of a field value."""
+        if not value or not value.strip():
+            return 'empty'
+
+        value = value.strip()
+
+        if self.PATTERNS['url'].match(value):
+            return 'url'
+        if self.PATTERNS['iso_timestamp'].match(value):
+            return 'timestamp'
+        if self.PATTERNS['advisory_id'].match(value):
+            return 'advisory_id'
+        if self.PATTERNS['numeric'].match(value):
+            return 'numeric'
+        if self.PATTERNS['version'].match(value):
+            return 'version'
+        if len(value) > 100:
+            return 'text_long'
+        return 'text_short'
+
+    def check_unbalanced_quotes(self, value, row_num, col_name):
+        """Check for unbalanced quotes that may indicate parsing issues."""
+        double_count = value.count('"')
+        if double_count % 2 != 0:
+            self.issues['field_content'].append({
+                'row': row_num,
+                'column': col_name,
+                'issue': 'unbalanced_double_quotes',
+                'detail': f'{double_count} quotes found',
+                'sample': value[:100] + '...' if len(value) > 100 else value
+            })
+
+    def check_column_bleeding(self, value, row_num, col_name, col_idx, col_types):
+        """Check if a field contains data that looks like it belongs elsewhere."""
+        value_type = self.detect_field_type(value)
+
+        # URL fragment in non-URL field (but not at start, which could be legit)
+        if col_types.get(col_idx) != 'url':
+            if self.PATTERNS['url_fragment'].search(value) and not value.startswith('http'):
+                # Check if it's a false positive (package name like httplib2)
+                if not re.match(r'^https?[a-z0-9_-]*\s', value):
+                    self.issues['field_content'].append({
+                        'row': row_num,
+                        'column': col_name,
+                        'issue': 'embedded_url',
+                        'sample': value[:100]
+                    })
+
+        # Timestamp embedded in text field
+        if value_type == 'text_long':
+            if self.PATTERNS['iso_timestamp'].search(value[20:]):  # Skip first 20 chars
+                self.issues['field_content'].append({
+                    'row': row_num,
+                    'column': col_name,
+                    'issue': 'embedded_timestamp',
+                    'sample': value[:100]
+                })
+
+    def check_text_field_integrity(self, value, row_num, col_name):
+        """Check text fields for signs of truncation or corruption."""
+        if not value or len(value) < 20:
+            return
+
+        # Explicit truncation markers
+        if self.PATTERNS['truncation_marker'].search(value):
+            self.issues['data_quality'].append({
+                'row': row_num,
+                'column': col_name,
+                'issue': 'explicit_truncation',
+                'sample': value[-60:]
+            })
+
+        # Kernel stack trace endings (not an error, but worth noting)
+        if self.PATTERNS['hex_address'].search(value):
+            self.issues['data_quality'].append({
+                'row': row_num,
+                'column': col_name,
+                'issue': 'stack_trace_ending',
+                'sample': value[-60:]
+            })
+
+    def check_version_field(self, value, row_num, col_name):
+        """Check if version field contains unexpected content."""
+        if not value:
+            return
+
+        # Version fields shouldn't contain URLs
+        if 'http' in value.lower() and not value.startswith('http'):
+            self.issues['field_content'].append({
+                'row': row_num,
+                'column': col_name,
+                'issue': 'version_contains_url',
+                'sample': value[:60]
+            })
+
+        # Version fields shouldn't contain CVE IDs
+        if 'CVE-' in value.upper():
+            self.issues['field_content'].append({
+                'row': row_num,
+                'column': col_name,
+                'issue': 'version_contains_cve',
+                'sample': value[:60]
+            })
+
+        # Unusually long "version" might be description bleed
+        if len(value) > 100:
+            self.issues['field_content'].append({
+                'row': row_num,
+                'column': col_name,
+                'issue': 'version_too_long',
+                'sample': value[:60] + '...'
+            })
+
+    def check_url_field(self, value, row_num, col_name):
+        """Check URL fields for issues."""
+        if not value:
+            return
+
+        # Non-URL content in URL field
+        if not value.startswith('http') and len(value) > 50:
+            self.issues['field_content'].append({
+                'row': row_num,
+                'column': col_name,
+                'issue': 'non_url_in_url_field',
+                'sample': value[:100]
+            })
+
+    def analyze_column_types(self, rows, header):
+        """Determine dominant type for each column."""
+        col_types = {}
+        type_counts = defaultdict(Counter)
+
+        for row in rows[:1000]:  # Sample first 1000 rows
+            for i, value in enumerate(row):
+                if i < len(header):
+                    type_counts[i][self.detect_field_type(value)] += 1
+
+        for col_idx, counts in type_counts.items():
+            non_empty = {k: v for k, v in counts.items() if k != 'empty'}
+            if non_empty:
+                col_types[col_idx] = max(non_empty, key=non_empty.get)
+            else:
+                col_types[col_idx] = 'empty'
+
+        return col_types
+
+    def validate(self, input_file):
+        """Main validation function."""
+        try:
+            with open(input_file, 'r', newline='', encoding='utf-8', errors='replace') as f:
+                reader = csv.reader(f, delimiter=self.delimiter)
+
+                # Read header
+                try:
+                    header = next(reader)
+                except StopIteration:
+                    self.issues['structure'].append({'row': 0, 'issue': 'empty_file'})
+                    return
+
+                num_columns = len(header)
+                if self.expected_columns and num_columns != self.expected_columns:
+                    self.issues['structure'].append({
+                        'row': 1,
+                        'issue': 'header_column_count_mismatch',
+                        'expected': self.expected_columns,
+                        'found': num_columns
+                    })
+
+                # Read all rows for analysis
+                all_rows = list(reader)
+                row_count = len(all_rows)
+
+                # Analyze column types
+                col_types = self.analyze_column_types(all_rows, header)
+
+                # Identify likely version and URL columns by name
+                version_cols = set()
+                url_cols = set()
+                text_cols = set()
+                for i, name in enumerate(header):
+                    name_lower = name.lower()
+                    if 'version' in name_lower:
+                        version_cols.add(i)
+                    if 'url' in name_lower or 'reference' in name_lower:
+                        url_cols.add(i)
+                    if 'description' in name_lower or 'text' in name_lower or 'comment' in name_lower:
+                        text_cols.add(i)
+
+                # Track field count distribution
+                field_count_dist = Counter()
+
+                # Process rows
+                for row_idx, row in enumerate(all_rows):
+                    row_num = row_idx + 2  # Account for header and 1-indexing
+                    field_count = len(row)
+                    field_count_dist[field_count] += 1
+
+                    # Check column count
+                    if field_count != num_columns:
+                        self.issues['structure'].append({
+                            'row': row_num,
+                            'issue': 'column_count_mismatch',
+                            'expected': num_columns,
+                            'found': field_count,
+                            'sample': [v[:30] for v in row[:5]]
+                        })
+                        continue  # Skip detailed checks for malformed rows
+
+                    # Check each field
+                    for col_idx, value in enumerate(row):
+                        col_name = header[col_idx] if col_idx < len(header) else f'col_{col_idx}'
+
+                        # Unbalanced quotes
+                        self.check_unbalanced_quotes(value, row_num, col_name)
+
+                        # Column bleeding
+                        self.check_column_bleeding(value, row_num, col_name, col_idx, col_types)
+
+                        # Type-specific checks
+                        if col_idx in version_cols:
+                            self.check_version_field(value, row_num, col_name)
+                        if col_idx in url_cols:
+                            self.check_url_field(value, row_num, col_name)
+                        if col_idx in text_cols:
+                            self.check_text_field_integrity(value, row_num, col_name)
+
+                # Compile stats
+                self.stats = {
+                    'total_rows': row_count,
+                    'header_columns': num_columns,
+                    'field_count_distribution': dict(field_count_dist),
+                    'rows_with_wrong_field_count': sum(v for k, v in field_count_dist.items() if k != num_columns),
+                    'structure_issues': len(self.issues['structure']),
+                    'field_content_issues': len(self.issues['field_content']),
+                    'data_quality_issues': len(self.issues['data_quality']),
+                }
+
+        except Exception as e:
+            self.issues['structure'].append({'row': 0, 'issue': 'read_error', 'error': str(e)})
+
+    def print_report(self, verbose=False):
+        """Print a formatted validation report."""
+        print("=" * 60)
+        print("CSV VALIDATION REPORT")
+        print("=" * 60)
+        print()
+
+        # Summary
+        print("SUMMARY")
+        print("-" * 40)
+        print(f"Total rows:              {self.stats.get('total_rows', 'N/A')}")
+        print(f"Header columns:          {self.stats.get('header_columns', 'N/A')}")
+        print(f"Rows with wrong count:   {self.stats.get('rows_with_wrong_field_count', 0)}")
+        print(f"Structure issues:        {self.stats.get('structure_issues', 0)}")
+        print(f"Field content issues:    {self.stats.get('field_content_issues', 0)}")
+        print(f"Data quality issues:     {self.stats.get('data_quality_issues', 0)}")
+        print()
+
+        # Field count distribution
+        dist = self.stats.get('field_count_distribution', {})
+        if dist:
+            print("FIELD COUNT DISTRIBUTION")
+            print("-" * 40)
+            expected = self.stats.get('header_columns')
+            for count, num_rows in sorted(dist.items()):
+                marker = "" if count == expected else " <-- MISMATCH"
+                print(f"  {count} fields: {num_rows} rows{marker}")
+            print()
+
+        # Structure issues
+        if self.issues['structure']:
+            print("STRUCTURE ISSUES (comma/quote parsing problems)")
+            print("-" * 40)
+            for issue in self.issues['structure'][:20]:
+                print(f"  Row {issue.get('row')}: {issue.get('issue')}")
+                if 'expected' in issue:
+                    print(f"    Expected {issue['expected']} fields, found {issue['found']}")
+                if verbose and 'sample' in issue:
+                    print(f"    Sample: {issue['sample']}")
+            if len(self.issues['structure']) > 20:
+                print(f"  ... and {len(self.issues['structure']) - 20} more")
+            print()
+
+        # Field content issues
+        if self.issues['field_content']:
+            print("FIELD CONTENT ISSUES (potential column bleeding)")
+            print("-" * 40)
+            by_type = defaultdict(list)
+            for issue in self.issues['field_content']:
+                by_type[issue['issue']].append(issue)
+
+            for issue_type, items in sorted(by_type.items()):
+                print(f"  {issue_type}: {len(items)} occurrences")
+                if verbose:
+                    for item in items[:3]:
+                        print(f"    Row {item['row']}, {item['column']}: {item.get('sample', '')[:50]}")
+                    if len(items) > 3:
+                        print(f"    ... and {len(items) - 3} more")
+            print()
+
+        # Data quality issues (informational)
+        if self.issues['data_quality'] and verbose:
+            print("DATA QUALITY ISSUES (informational, not parsing errors)")
+            print("-" * 40)
+            by_type = defaultdict(list)
+            for issue in self.issues['data_quality']:
+                by_type[issue['issue']].append(issue)
+
+            for issue_type, items in sorted(by_type.items()):
+                print(f"  {issue_type}: {len(items)} occurrences")
+            print()
+
+        # Assessment
+        print("ASSESSMENT")
+        print("-" * 40)
+        wrong_count = self.stats.get('rows_with_wrong_field_count', 0)
+        struct_issues = self.stats.get('structure_issues', 0)
+
+        if wrong_count > 0:
+            print("  STRUCTURAL ISSUES DETECTED")
+            print("  -> Field count mismatches indicate comma/quote parsing problems")
+            print("  -> Review rows with wrong field counts for unquoted commas")
+        elif struct_issues > 0:
+            print("  STRUCTURAL ISSUES DETECTED")
+            print("  -> Check the structure issues above for details")
+        else:
+            print("  CSV structure is VALID")
+            print("  -> All rows have consistent field counts")
+            print("  -> No comma/quote parsing errors detected")
+
+        if self.issues['field_content']:
+            print()
+            print("  Note: Field content issues found - these may indicate")
+            print("  data quality problems but not necessarily parsing errors")
+
+        print()
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Validate CSV files for parsing and quoting issues',
+        epilog='Exit codes: 0=valid, 1=structural issues, 2=error'
+    )
+    parser.add_argument('input', help='Input CSV file')
+    parser.add_argument('-d', '--delimiter', default=',', help='Field delimiter (default: comma)')
+    parser.add_argument('-c', '--columns', type=int, help='Expected number of columns')
+    parser.add_argument('-v', '--verbose', action='store_true', help='Show detailed output')
+    parser.add_argument('--json', action='store_true', help='Output as JSON')
+
+    args = parser.parse_args()
+
+    validator = CSVValidator(delimiter=args.delimiter, expected_columns=args.columns)
+    validator.validate(args.input)
+
+    if args.json:
+        import json
+        output = {
+            'stats': validator.stats,
+            'issues': validator.issues
+        }
+        print(json.dumps(output, indent=2))
+    else:
+        validator.print_report(verbose=args.verbose)
+
+    # Exit code based on structural issues
+    if validator.stats.get('rows_with_wrong_field_count', 0) > 0:
+        sys.exit(1)
+    if validator.stats.get('structure_issues', 0) > 0:
+        sys.exit(1)
+    sys.exit(0)
+
+
+if __name__ == '__main__':
+    main()

@@ -6,65 +6,60 @@ set -euo pipefail
 # Usage: cxdeploy [-a app] [-r host] [-n namespace] <component>
 #
 # Options:
-#   -a, --app APP           Application: cx or marrs (default: auto-detect from project root)
-#   -r, --remote HOST       Target k3s node (default: bigfish)
-#   -n, --namespace NS      Kubernetes namespace (default: auto from app)
+#   -a, --app APP       Application: cx or marrs (default: auto-detect)
+#   -r, --remote HOST   Target k3s node (default: bigfish)
+#   -n, --namespace NS  Kubernetes namespace (default: auto from app)
 
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source cx-lib.sh
 
 usage() {
   sed -n '3,11p' "$0"
-  local app_flag=""
-  [[ -n "${app:-}" ]] && app_flag="-a $app"
-  echo -e "\nComponents: $("$SCRIPT_DIR/cxconfig" $app_flag components | tr '\n' ' ')"
+  echo -e "\nComponents: $(cx_list_components "${app:-}")"
   exit 0
 }
 
 app=""
 remote_host="bigfish"
 namespace=""
-while [[ $# -gt 0 && "$1" == -* ]]; do
+
+while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage ;;
     -a|--app) app="$2"; shift 2 ;;
     -r|--remote) remote_host="$2"; shift 2 ;;
     -n|--namespace) namespace="$2"; shift 2 ;;
-    *) echo "Unknown option: $1" >&2; exit 1 ;;
+    -*) echo "Unknown option: $1" >&2; exit 1 ;;
+    *) break ;;
   esac
 done
+
+component="${1:?Usage: cxdeploy [-a app] [-r host] [-n namespace] <component>}"
 
 # Build cxconfig args
 cfg_args=()
 [[ -n "$app" ]] && cfg_args+=(-a "$app")
 
-# Get namespace from cxconfig if not explicitly set
-[[ -z "$namespace" ]] && namespace=$("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" namespace)
+[[ -z "$namespace" ]] && namespace=$(cxconfig "${cfg_args[@]}" namespace)
 
-readonly COMPONENT="${1:?Usage: cxdeploy [-a app] [-r host] [-n namespace] <component>}"
-readonly IMAGE=$("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" image "$COMPONENT")
-readonly DEPLOY=$("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" deploy "$COMPONENT")
-readonly TIMEOUT=$("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" timeout "$COMPONENT")
+image=$(cxconfig "${cfg_args[@]}" image "$component")
+deploy=$(cxconfig "${cfg_args[@]}" deploy "$component")
+timeout=$(cxconfig "${cfg_args[@]}" timeout "$component")
+image_age=$(image-age "$image")
 
-IMAGE_AGE=$("$SCRIPT_DIR/image-age" "$IMAGE")
+# Check local image exists
+local_hash=$(docker inspect --format='{{.Id}}' "$image" 2>/dev/null) || local_hash=""
+[[ -z "$local_hash" ]] && { echo "ERROR: Local image not found - build first" >&2; exit 1; }
 
-# Warn if local image matches what's already deployed
-LOCAL_HASH=$(docker inspect --format='{{.Id}}' "$IMAGE" 2>/dev/null || echo "")
-REMOTE_HASH=$(ssh "$remote_host" "sudo nerdctl -n k8s.io inspect --format='{{.Id}}' '$IMAGE' 2>/dev/null" || echo "")
-
-if [[ -n "$LOCAL_HASH" && "$LOCAL_HASH" == "$REMOTE_HASH" ]]; then
-  echo "WARNING: Image unchanged from deployed version - did you forget to build?"
-  read -p "Continue anyway? [y/N] " -n 1 -r
-  echo
-  [[ ! $REPLY =~ ^[Yy]$ ]] && exit 1
+# Warn if local image matches deployed version
+if ssh -o ConnectTimeout=5 -o BatchMode=yes "$remote_host" true 2>/dev/null; then
+  remote_hash=$(ssh "$remote_host" "sudo nerdctl -n k8s.io inspect --format='{{.Id}}' '$image'" 2>/dev/null) || remote_hash=""
+  if [[ -n "$remote_hash" && "$local_hash" == "$remote_hash" ]]; then
+    echo "WARNING: Image unchanged from deployed version - did you forget to build?"
+    read -p "Continue anyway? [y/N] " -n 1 -r
+    echo
+    [[ ! $REPLY =~ ^[Yy]$ ]] && exit 1
+  fi
 fi
 
-echo "==> Deploying $COMPONENT"
-echo "    App $("$SCRIPT_DIR/cxconfig" "${cfg_args[@]}" app)"
-echo "    Remote $remote_host"
-echo "    Namespace $namespace"
-echo "    Image $IMAGE"
-echo "    Image age $IMAGE_AGE"
-echo "    Deployment $DEPLOY"
-echo "    Timeout ${TIMEOUT}s"
-
-"$SCRIPT_DIR/deploy-image.sh" -r "$remote_host" -n "$namespace" -t "$TIMEOUT" "$IMAGE" "$DEPLOY"
+echo "==> Deploying $component ($deploy, $image_age old)"
+deploy-image.sh -q -r "$remote_host" -n "$namespace" -t "$timeout" "$image" "$deploy"

@@ -1,0 +1,155 @@
+#!/bin/bash
+set -uo pipefail  # no -e: continue on errors, report all at end
+
+# Build and deploy components (unattended)
+#
+# Usage: cxbuild-deploy-all [options] [component...]
+#        cxbuild-deploy-all --all
+#        cxbuild-deploy-all edge
+#        cxbuild-deploy-all edge app graphql
+#
+# Options:
+#   --all               Build and deploy all components
+#   -a, --app APP       Application: cx or marrs (default: auto-detect)
+#   -p, --project DIR   Project root (default: auto from app)
+#   -r, --remote HOST   Target k3s node (default: bigfish)
+#   -n, --namespace NS  Kubernetes namespace (default: auto from app)
+
+source cx-lib.sh
+
+usage() {
+  sed -n '3,15p' "$0"
+  echo -e "\nComponents: $(cx_list_components "${app:-}")"
+  exit 0
+}
+
+app=""
+project_root=""
+remote_host="bigfish"
+namespace=""
+build_all=""
+declare -a components=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help) usage ;;
+    --all) build_all=1; shift ;;
+    -a|--app) app="$2"; shift 2 ;;
+    -p|--project) project_root="$2"; shift 2 ;;
+    -r|--remote) remote_host="$2"; shift 2 ;;
+    -n|--namespace) namespace="$2"; shift 2 ;;
+    -*) echo "Unknown option: $1" >&2; exit 1 ;;
+    *) components+=("$1"); shift ;;
+  esac
+done
+
+# Build cxconfig args
+cfg_args=()
+[[ -n "$app" ]] && cfg_args+=(-a "$app")
+
+# Get config values
+app=$(cxconfig "${cfg_args[@]}" app)
+[[ -z "$project_root" ]] && project_root=$(cxconfig "${cfg_args[@]}" root)
+[[ -z "$namespace" ]] && namespace=$(cxconfig "${cfg_args[@]}" namespace)
+
+# Get available components
+mapfile -t all_components < <(cxconfig "${cfg_args[@]}" components)
+
+# Determine which components to build
+if [[ -n "$build_all" ]]; then
+  components=("${all_components[@]}")
+elif [[ ${#components[@]} -eq 0 ]]; then
+  echo "Error: Specify components or use --all" >&2
+  echo "Available: ${all_components[*]}" >&2
+  exit 1
+fi
+
+# Validate components using associative array
+declare -A valid_components
+for c in "${all_components[@]}"; do valid_components[$c]=1; done
+for c in "${components[@]}"; do
+  [[ ${valid_components[$c]:-} ]] || { echo "Error: Unknown component '$c'" >&2; exit 1; }
+done
+
+# Track failures
+declare -a failures=()
+
+echo "==> Build and Deploy"
+echo "    App: $app"
+echo "    Project: $project_root"
+echo "    Remote: $remote_host"
+echo "    Namespace: $namespace"
+echo "    Components: ${components[*]}"
+
+# Determine which Maven modules need building
+needs_backend="" needs_graphql="" needs_app="" needs_docs=""
+for c in "${components[@]}"; do
+  case "$c" in
+    edge|redirect|video-streaming) needs_backend=1 ;;
+    graphql) needs_graphql=1 ;;
+    app) needs_app=1 ;;
+    docs) needs_docs=1 ;;
+  esac
+done
+
+# Phase 1: Build source code (sequential)
+echo
+echo "========================================"
+echo "Phase 1: Building source code (Maven)"
+echo "========================================"
+
+if [[ -n "$needs_backend" ]]; then
+  cx_mvn_build "$project_root/backend" "backend" || failures+=("maven:backend")
+  cx_mvn_build "$project_root/distributions" "distributions" || failures+=("maven:distributions")
+fi
+[[ -n "$needs_graphql" ]] && { cx_mvn_build "$project_root/frontend/graphql" "graphql" || failures+=("maven:graphql"); }
+[[ -n "$needs_app" ]] && { cx_mvn_build "$project_root/frontend/app" "app" || failures+=("maven:app"); }
+[[ -n "$needs_docs" ]] && { cx_mvn_build "$project_root/docs" "docs" || failures+=("maven:docs"); }
+
+# Phase 2: Docker build + deploy (parallel)
+echo
+echo "========================================"
+echo "Phase 2: Docker build + deploy (parallel)"
+echo "========================================"
+
+deploy_args=()
+[[ -n "$app" ]] && deploy_args+=(-a "$app")
+deploy_args+=(-r "$remote_host" -n "$namespace")
+
+declare -A pids=()
+for component in "${components[@]}"; do
+  (
+    logfile="/tmp/cxbuild-deploy-${component}.log"
+    {
+      echo "==> [$component] Docker build"
+      docker_dir=$(cxconfig "${cfg_args[@]}" dir "$component")
+      (cd "$project_root/docker/$docker_dir" && mvn install -DskipTests)
+      echo "==> [$component] Deploying"
+      yes y 2>/dev/null | cxdeploy "${deploy_args[@]}" "$component"
+      echo "==> [$component] Complete"
+    } > "$logfile" 2>&1
+    status=$?
+    [[ $status -eq 0 ]] && echo "[OK] $component" || echo "[FAIL] $component - see $logfile"
+    exit $status
+  ) &
+  pids[$component]=$!
+done
+
+for component in "${!pids[@]}"; do
+  wait "${pids[$component]}" || failures+=("deploy:$component")
+done
+
+# Summary
+echo
+echo "========================================"
+echo "Summary"
+echo "========================================"
+
+if [[ ${#failures[@]} -eq 0 ]]; then
+  echo "SUCCESS: ${#components[@]} component(s) built and deployed"
+else
+  echo "FAILURES: ${#failures[@]} task(s) failed:"
+  printf '  - %s\n' "${failures[@]}"
+  echo -e "\nLogs: /tmp/cxbuild-deploy-*.log"
+  exit 1
+fi

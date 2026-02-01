@@ -17,9 +17,11 @@ namespace="octocx"
 remote_host="bigfish"
 timeout=60
 interval=2
+quiet=false
 while [[ $# -gt 0 && "$1" == -* ]]; do
   case "$1" in
     -h|--help) usage ;;
+    -q|--quiet) quiet=true; shift ;;
     -n|--namespace) namespace="$2"; shift 2 ;;
     -r|--remote) remote_host="$2"; shift 2 ;;
     -t|--timeout) timeout="$2"; shift 2 ;;
@@ -76,21 +78,23 @@ verify_pod_images() {
   return "$result"
 }
 
-echo "==> Getting expected image hash from $REMOTE_HOST..."
+$quiet || echo -n "    Verifying..."
 EXPECTED_HASH=$(ssh "$REMOTE_HOST" "sudo k3s crictl inspecti '$IMAGE' 2>/dev/null" | jq -r '.status.id')
 : "${EXPECTED_HASH:?ERROR: Could not get image hash for $IMAGE}"
-echo "Expected: $EXPECTED_HASH"
 
-echo "==> Verifying pod images..."
 SELECTOR=$(get_pod_selector)
 SECONDS=0
 
 while ! output=$(verify_pod_images "$EXPECTED_HASH" "$SELECTOR"); do
-  ((SECONDS >= RETRY_TIMEOUT)) && { echo "$output"; echo "ERROR: Image verification failed after ${RETRY_TIMEOUT}s" >&2; exit 1; }
+  if ((SECONDS >= RETRY_TIMEOUT)); then
+    $quiet || printf "\r    Verify: FAILED%-54s\n" ""
+    echo "$output"
+    echo "ERROR: Image verification failed after ${RETRY_TIMEOUT}s" >&2
+    exit 1
+  fi
   check_pod_failures "$SELECTOR" || exit 1
-  echo "Pods not yet running expected image, retrying in ${RETRY_INTERVAL}s... (${SECONDS}s/${RETRY_TIMEOUT}s)" >&2
+  $quiet || printf "\r    Verifying... %ds" "$SECONDS"
   sleep "$RETRY_INTERVAL"
 done
 
-echo "$output"
-echo "==> All pods verified"
+$quiet || printf "\r    Verified %-58s\n" ""
