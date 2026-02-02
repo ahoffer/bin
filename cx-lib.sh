@@ -18,12 +18,13 @@ cx_mvn_build() {
   return $status
 }
 
-# Build cxconfig args array from $app variable
-# Usage: local -a cfg_args; cx_cfg_args cfg_args
+# Build cxconfig args array from app value
+# Usage: local -a cfg_args; cx_cfg_args cfg_args "$app"
 cx_cfg_args() {
   local -n arr=$1
+  local app_value="${2:-}"
   arr=()
-  [[ -n "${app:-}" ]] && arr+=(-a "$app")
+  [[ -n "$app_value" ]] && arr+=(-a "$app_value")
 }
 
 # List components as space-separated string

@@ -43,7 +43,7 @@ done
 
 # Build cxconfig args
 cfg_args=()
-[[ -n "$app" ]] && cfg_args+=(-a "$app")
+cx_cfg_args cfg_args "$app"
 
 # Get config values
 app=$(cxconfig "${cfg_args[@]}" app)
@@ -62,11 +62,9 @@ elif [[ ${#components[@]} -eq 0 ]]; then
   exit 1
 fi
 
-# Validate components using associative array
-declare -A valid_components
-for c in "${all_components[@]}"; do valid_components[$c]=1; done
+# Validate components
 for c in "${components[@]}"; do
-  [[ ${valid_components[$c]:-} ]] || { echo "Error: Unknown component '$c'" >&2; exit 1; }
+  cx_valid_component "$c" all_components || { echo "Error: Unknown component '$c'" >&2; exit 1; }
 done
 
 # Track failures

@@ -9,17 +9,17 @@ NAMESPACE="${1:-octocx}"
 echo "Deleting edge and Solr workloads in namespace: $NAMESPACE"
 
 # Delete the edge deployment (releases the PVCs)
-kubectl delete deployment cx-edge -n "$NAMESPACE" --ignore-not-found
+kubectl delete deployment cx-edge -n "$NAMESPACE" --ignore-not-found --wait=false
 
 # Delete Solr (the operator manages these)
-kubectl delete solrcloud cx-solrcloud -n "$NAMESPACE" --ignore-not-found
+kubectl delete solrcloud cx-solrcloud -n "$NAMESPACE" --ignore-not-found --wait=false
 
 echo "Waiting for pods to terminate..."
 kubectl wait --for=delete pod -l app=cx-edge -n "$NAMESPACE" --timeout=60s 2>/dev/null || true
 kubectl wait --for=delete pod -l solr-cloud=cx-solrcloud -n "$NAMESPACE" --timeout=60s 2>/dev/null || true
 
 echo "Deleting PVCs..."
-kubectl delete pvc cx-edge-content-claim cx-edge-keysets-claim -n "$NAMESPACE" --ignore-not-found
-kubectl delete pvc data-cx-solrcloud-0 data-cx-solrcloud-zookeeper-0 -n "$NAMESPACE" --ignore-not-found
+kubectl delete pvc cx-edge-content-claim cx-edge-keysets-claim -n "$NAMESPACE" --ignore-not-found --wait=false
+kubectl delete pvc data-cx-solrcloud-0 data-cx-solrcloud-zookeeper-0 -n "$NAMESPACE" --ignore-not-found --wait=false
 
 echo "Done. Redeploy via helm to recreate fresh storage."

@@ -37,7 +37,7 @@ component="${1:?Usage: cxdeploy [-a app] [-r host] [-n namespace] <component>}"
 
 # Build cxconfig args
 cfg_args=()
-[[ -n "$app" ]] && cfg_args+=(-a "$app")
+cx_cfg_args cfg_args "$app"
 
 [[ -z "$namespace" ]] && namespace=$(cxconfig "${cfg_args[@]}" namespace)
 

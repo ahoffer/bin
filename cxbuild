@@ -39,7 +39,7 @@ component="${1:?Usage: cxbuild [-a app] <component>}"
 
 # Build cxconfig args
 cfg_args=()
-[[ -n "$app" ]] && cfg_args+=(-a "$app")
+cx_cfg_args cfg_args "$app"
 
 project_root=$(cxconfig "${cfg_args[@]}" root)
 
