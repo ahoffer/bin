@@ -3,29 +3,29 @@ set -euo pipefail
 
 # Deploy a component to k3s (push image + restart pods + verify)
 #
-# Usage: cxdeploy [-a app] [-r host] [-n namespace] <component>
+# Must be run from within a project directory (walks up to find pom.xml).
+# App is auto-detected from the project root directory name.
+#
+# Usage: cxdeploy [-r host] [-n namespace] <component>
 #
 # Options:
-#   -a, --app APP       Application: cx or marrs (default: auto-detect)
 #   -r, --remote HOST   Target k3s node (default: bigfish)
 #   -n, --namespace NS  Kubernetes namespace (default: auto from app)
 
 source cx-lib.sh
 
 usage() {
-  sed -n '3,11p' "$0"
-  echo -e "\nComponents: $(cx_list_components "${app:-}")"
+  sed -n '4,13p' "$0"
+  echo -e "\nComponents: $(cx_list_components)"
   exit 0
 }
 
-app=""
 remote_host="bigfish"
 namespace=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage ;;
-    -a|--app) app="$2"; shift 2 ;;
     -r|--remote) remote_host="$2"; shift 2 ;;
     -n|--namespace) namespace="$2"; shift 2 ;;
     -*) echo "Unknown option: $1" >&2; exit 1 ;;
@@ -33,20 +33,16 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-component="${1:?Usage: cxdeploy [-a app] [-r host] [-n namespace] <component>}"
+component="${1:?Usage: cxdeploy [-r host] [-n namespace] <component>}"
 
 # Verify we're in a project directory (walks up tree like git)
 cx_require_project_root
 
-# Build cxconfig args
-cfg_args=()
-cx_cfg_args cfg_args "$app"
+[[ -z "$namespace" ]] && namespace=$(cxconfig namespace)
 
-[[ -z "$namespace" ]] && namespace=$(cxconfig "${cfg_args[@]}" namespace)
-
-image=$(cxconfig "${cfg_args[@]}" image "$component")
-deploy=$(cxconfig "${cfg_args[@]}" deploy "$component")
-timeout=$(cxconfig "${cfg_args[@]}" timeout "$component")
+image=$(cxconfig image "$component")
+deploy=$(cxconfig deploy "$component")
+timeout=$(cxconfig timeout "$component")
 image_age=$(image-age "$image")
 
 # Check local image exists

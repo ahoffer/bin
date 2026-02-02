@@ -3,6 +3,7 @@ set -uo pipefail  # no -e: continue on errors, report all at end
 
 # Build and deploy components (unattended)
 # Must be run from within a project directory (walks up to find pom.xml).
+# App is auto-detected from the project root directory name.
 #
 # Usage: cxbuild-deploy-all [options] [component...]
 #        cxbuild-deploy-all --all
@@ -11,19 +12,17 @@ set -uo pipefail  # no -e: continue on errors, report all at end
 #
 # Options:
 #   --all               Build and deploy all components
-#   -a, --app APP       Application: cx or marrs (default: auto-detect)
 #   -r, --remote HOST   Target k3s node (default: bigfish)
 #   -n, --namespace NS  Kubernetes namespace (default: auto from app)
 
 source cx-lib.sh
 
 usage() {
-  sed -n '3,15p' "$0"
-  echo -e "\nComponents: $(cx_list_components "${app:-}")"
+  sed -n '4,16p' "$0"
+  echo -e "\nComponents: $(cx_list_components)"
   exit 0
 }
 
-app=""
 remote_host="bigfish"
 namespace=""
 build_all=""
@@ -33,7 +32,6 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage ;;
     --all) build_all=1; shift ;;
-    -a|--app) app="$2"; shift 2 ;;
     -r|--remote) remote_host="$2"; shift 2 ;;
     -n|--namespace) namespace="$2"; shift 2 ;;
     -*) echo "Unknown option: $1" >&2; exit 1 ;;
@@ -44,17 +42,13 @@ done
 # Verify we're in a project directory (walks up tree like git)
 cx_require_project_root
 
-# Build cxconfig args
-cfg_args=()
-cx_cfg_args cfg_args "$app"
-
 # Get config values
-app=$(cxconfig "${cfg_args[@]}" app)
-project_root=$(cxconfig "${cfg_args[@]}" root)
-[[ -z "$namespace" ]] && namespace=$(cxconfig "${cfg_args[@]}" namespace)
+app=$(cxconfig app)
+project_root=$(cxconfig root)
+[[ -z "$namespace" ]] && namespace=$(cxconfig namespace)
 
 # Get available components
-mapfile -t all_components < <(cxconfig "${cfg_args[@]}" components)
+mapfile -t all_components < <(cxconfig components)
 
 # Determine which components to build
 if [[ -n "$build_all" ]]; then
@@ -129,9 +123,7 @@ echo "========================================"
 echo "Phase 2: Docker build + deploy (parallel)"
 echo "========================================"
 
-deploy_args=()
-[[ -n "$app" ]] && deploy_args+=(-a "$app")
-deploy_args+=(-r "$remote_host" -n "$namespace")
+deploy_args=(-r "$remote_host" -n "$namespace")
 
 declare -A pids=()
 for component in "${components[@]}"; do
@@ -139,7 +131,7 @@ for component in "${components[@]}"; do
     logfile="/tmp/cxbuild-deploy-${component}.log"
     {
       echo "==> [$component] Docker build"
-      docker_dir=$(cxconfig "${cfg_args[@]}" dir "$component")
+      docker_dir=$(cxconfig dir "$component")
       (cd "$project_root/docker/$docker_dir" && mvn install -DskipTests)
       echo "==> [$component] Deploying"
       yes y 2>/dev/null | cxdeploy "${deploy_args[@]}" "$component"

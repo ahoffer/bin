@@ -44,23 +44,11 @@ cx_mvn_build() {
   return $status
 }
 
-# Build cxconfig args array from app value
-# Usage: local -a cfg_args; cx_cfg_args cfg_args "$app"
-cx_cfg_args() {
-  local -n arr=$1
-  local app_value="${2:-}"
-  arr=()
-  if [[ -n "$app_value" ]]; then
-    arr+=(-a "$app_value")
-  fi
-}
-
 # List components as space-separated string
-# Usage: cx_list_components [app]
+# Returns empty string if not in a project directory
+# Usage: cx_list_components
 cx_list_components() {
-  local app_flag=""
-  [[ -n "${1:-}" ]] && app_flag="-a $1"
-  cxconfig $app_flag components | tr '\n' ' '
+  cxconfig components 2>/dev/null | tr '\n' ' '
 }
 
 # Validate component exists
