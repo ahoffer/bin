@@ -11,31 +11,29 @@ import sys
 import argparse
 import re
 from collections import Counter, defaultdict
+from re import Pattern
 
 
 class CSVValidator:
     """Validate CSV files for structural and content issues."""
 
     # Common data type patterns
-    PATTERNS = {
-        'url': re.compile(r'^https?://[^\s]+$'),
-        'url_fragment': re.compile(r'https?://[^\s]*'),
-        'iso_timestamp': re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}'),
-        'cve_id': re.compile(r'^CVE-\d{4}-\d+$'),
-        'advisory_id': re.compile(r'^(CVE-\d{4}-\d+|GHSA-[a-z0-9-]+|DLA-\d+-\d|DSA-\d+-\d|RUSTSEC-\d+-\d+)$'),
-        'version': re.compile(r'^[\d][\d\w\.\-\+:~]*$'),
-        'numeric': re.compile(r'^-?\d+\.?\d*$'),
-        'hex_address': re.compile(r'\+0x[0-9a-f]+/0x[0-9a-f]+$'),
-        'truncation_marker': re.compile(r'---\s*truncated\s*---', re.IGNORECASE),
-    }
+    PATTERNS: dict[str, Pattern[str]] = dict(url=re.compile(r'^https?://\S+$'), url_fragment=re.compile(r'https?://\S*'),
+                    iso_timestamp=re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}'),
+                    cve_id=re.compile(r'^CVE-\d{4}-\d+$'),
+                    advisory_id=re.compile(r'^(CVE-\d{4}-\d+|GHSA-[a-z0-9-]+|DLA-\d+-\d|DSA-\d+-\d|RUSTSEC-\d+-\d+)$'),
+                    version=re.compile(r'^\d[\w.\-+:~]*$'), numeric=re.compile(r'^-?\d+\.?\d*$'),
+                    hex_address=re.compile(r'\+0x[0-9a-f]+/0x[0-9a-f]+$'),
+                    truncation_marker=re.compile(r'---\s*truncated\s*---', re.IGNORECASE))
 
     # Common severity/status values (for security reports)
     KNOWN_SEVERITIES = {'CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNSPECIFIED', 'UNKNOWN', ''}
     KNOWN_STATUSES = {'ACTIVE', 'FIXED', 'SUPPRESSED', 'IN_GRACE_PERIOD', 'RESOLVED', ''}
 
-    def __init__(self, delimiter=',', expected_columns=None):
+    def __init__(self, delimiter=',', expected_columns=None, enable_heuristics=True):
         self.delimiter = delimiter
         self.expected_columns = expected_columns
+        self.enable_heuristics = enable_heuristics
         self.issues = {
             'structure': [],
             'field_content': [],
@@ -45,7 +43,7 @@ class CSVValidator:
         self.stats = {}
 
     def detect_field_type(self, value):
-        """Detect the likely data type of a field value."""
+        """Detect the likely data type of field value."""
         if not value or not value.strip():
             return 'empty'
 
@@ -213,12 +211,16 @@ class CSVValidator:
                         'found': num_columns
                     })
 
-                # Read all rows for analysis
-                all_rows = list(reader)
-                row_count = len(all_rows)
+                # Read a bounded sample for type analysis
+                sample_rows = []
+                for _ in range(1000):
+                    try:
+                        sample_rows.append(next(reader))
+                    except StopIteration:
+                        break
 
-                # Analyze column types
-                col_types = self.analyze_column_types(all_rows, header)
+                # Analyze column types based on sample
+                col_types = self.analyze_column_types(sample_rows, header)
 
                 # Identify likely version and URL columns by name
                 version_cols = set()
@@ -236,40 +238,53 @@ class CSVValidator:
                 # Track field count distribution
                 field_count_dist = Counter()
 
-                # Process rows
-                for row_idx, row in enumerate(all_rows):
-                    row_num = row_idx + 2  # Account for header and 1-indexing
-                    field_count = len(row)
+                def process_row(row_x, row_num_x):
+                    field_count = len(row_x)
                     field_count_dist[field_count] += 1
 
                     # Check column count
                     if field_count != num_columns:
                         self.issues['structure'].append({
-                            'row': row_num,
+                            'row': row_num_x,
                             'issue': 'column_count_mismatch',
                             'expected': num_columns,
                             'found': field_count,
-                            'sample': [v[:30] for v in row[:5]]
+                            'sample': [v[:30] for v in row_x[:5]]
                         })
-                        continue  # Skip detailed checks for malformed rows
+                        return
 
                     # Check each field
-                    for col_idx, value in enumerate(row):
+                    for col_idx, value in enumerate(row_x):
                         col_name = header[col_idx] if col_idx < len(header) else f'col_{col_idx}'
 
                         # Unbalanced quotes
-                        self.check_unbalanced_quotes(value, row_num, col_name)
+                        self.check_unbalanced_quotes(value, row_num_x, col_name)
 
-                        # Column bleeding
-                        self.check_column_bleeding(value, row_num, col_name, col_idx, col_types)
+                        # Column bleeding heuristics
+                        if self.enable_heuristics:
+                            self.check_column_bleeding(value, row_num_x, col_name, col_idx, col_types)
 
                         # Type-specific checks
                         if col_idx in version_cols:
-                            self.check_version_field(value, row_num, col_name)
+                            self.check_version_field(value, row_num_x, col_name)
                         if col_idx in url_cols:
-                            self.check_url_field(value, row_num, col_name)
+                            self.check_url_field(value, row_num_x, col_name)
                         if col_idx in text_cols:
-                            self.check_text_field_integrity(value, row_num, col_name)
+                            self.check_text_field_integrity(value, row_num_x, col_name)
+
+                row_count = 0
+
+                # Process sampled rows first
+                for row_idx, row in enumerate(sample_rows):
+                    row_num = row_idx + 2  # Account for header and 1-indexing
+                    process_row(row, row_num)
+                    row_count += 1
+
+                # Process remaining rows without loading into memory
+                for row in reader:
+                    row_num = row_count + 2
+                    process_row(row, row_num)
+                    row_count += 1
 
                 # Compile stats
                 self.stats = {
@@ -393,10 +408,15 @@ def main():
     parser.add_argument('-c', '--columns', type=int, help='Expected number of columns')
     parser.add_argument('-v', '--verbose', action='store_true', help='Show detailed output')
     parser.add_argument('--json', action='store_true', help='Output as JSON')
+    parser.add_argument('--no-heuristics', action='store_true', help='Disable column bleeding heuristics')
 
     args = parser.parse_args()
 
-    validator = CSVValidator(delimiter=args.delimiter, expected_columns=args.columns)
+    validator = CSVValidator(
+        delimiter=args.delimiter,
+        expected_columns=args.columns,
+        enable_heuristics=not args.no_heuristics
+    )
     validator.validate(args.input)
 
     if args.json:
@@ -410,6 +430,8 @@ def main():
         validator.print_report(verbose=args.verbose)
 
     # Exit code based on structural issues
+    if any(i.get('issue') == 'read_error' for i in validator.issues.get('structure', [])):
+        sys.exit(2)
     if validator.stats.get('rows_with_wrong_field_count', 0) > 0:
         sys.exit(1)
     if validator.stats.get('structure_issues', 0) > 0:

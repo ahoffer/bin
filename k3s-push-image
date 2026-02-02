@@ -83,16 +83,28 @@ for image in "${images[@]}"; do
   source_ref="$(resolve_source "$image")"
   if [[ "$source_ref" == docker-daemon:* ]]; then
     if docker image inspect "$image" >/dev/null 2>&1; then
-      docker save "$image" 2>/dev/null | ssh "$HOST" 'sudo k3s ctr images import - >/dev/null 2>&1'
+      if ! docker save "$image" 2>/dev/null | ssh "$HOST" 'sudo k3s ctr images import - >/dev/null 2>&1'; then
+        echo "Failed to push image from local docker daemon: $image" >&2
+        exit 1
+      fi
     elif sudo -n docker image inspect "$image" >/dev/null 2>&1; then
-      sudo -n docker save "$image" 2>/dev/null | ssh "$HOST" 'sudo k3s ctr images import - >/dev/null 2>&1'
+      if ! sudo -n docker save "$image" 2>/dev/null | ssh "$HOST" 'sudo k3s ctr images import - >/dev/null 2>&1'; then
+        echo "Failed to push image with sudo docker daemon: $image" >&2
+        exit 1
+      fi
     else
       echo "Local image not found or docker access denied: $image" >&2
       exit 1
     fi
   else
-    docker pull "$image" >/dev/null 2>&1
-    docker save "$image" 2>/dev/null | ssh "$HOST" 'sudo k3s ctr images import - >/dev/null 2>&1'
+    if ! docker pull "$image" >/dev/null 2>&1; then
+      echo "Failed to pull image: $image" >&2
+      exit 1
+    fi
+    if ! docker save "$image" 2>/dev/null | ssh "$HOST" 'sudo k3s ctr images import - >/dev/null 2>&1'; then
+      echo "Failed to push image after pull: $image" >&2
+      exit 1
+    fi
   fi
 done
 $quiet || echo " done" >&2

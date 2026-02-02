@@ -22,9 +22,9 @@ then
 else
 	NAME="$1"
 fi
-echo Setting backup name to $NAME
+echo "Setting backup name to $NAME"
 
-TAR_FILENAME=/tmp/backup-$1.tar.gz
+TAR_FILENAME="/tmp/backup-$NAME.tar.gz"
 CHANGE_TO=/home/aaron
 
 # BACKINGUP is a the directory (or file) relative to the CHANGE_TO
@@ -33,28 +33,28 @@ CHANGE_TO=/home/aaron
 # an archive is created for the entire CHANGE_TO directory.
 
 BACKINGUP=.
-ENCRYPT_FILENAME=$TAR_FILENAME.aes
+ENCRYPT_FILENAME="$TAR_FILENAME.aes"
 EXT_FOLDER=/media/aaron/HOFFER_BACKUP
-PASSWORD=`cat /home/aaron/password`
+PASSWORD=$(cat /home/aaron/password)
 
 # Save the scripts that handle the backup and restore. 
-mkdir -p /media/aaron/HOFFER_BACKUP/scripts && cp /home/aaron/.local/bin/{backup,restore} /media/aaron/HOFFER_BACKUP/scripts
+mkdir -p "$EXT_FOLDER/scripts" && cp /home/aaron/.local/bin/{backup,restore} "$EXT_FOLDER/scripts"
 
 
-echo ...Backing up $BACKINGUP to $TAR_FILENAME
+echo "...Backing up $BACKINGUP to $TAR_FILENAME"
 
 # The option "C" tells tar to change directory so the package content will be unpacked there
-tar cz --verbose -C $CHANGE_TO -f $TAR_FILENAME --exclude='.m2/repository' --exclude='.cache' --exclude='.local/share/Trash'  --exclude='VirtualBox VMs' $BACKINGUP
+tar cz --verbose -C "$CHANGE_TO" -f "$TAR_FILENAME" --exclude='.m2/repository' --exclude='.cache' --exclude='.local/share/Trash' --exclude='VirtualBox VMs' "$BACKINGUP"
 
 if [ $? -eq 2 ]; then
 	echo Tar command failed. Exiting now.
 	exit 1
 fi
 
-echo ...Created `ls -sh $TAR_FILENAME` ...
+echo "...Created $(ls -sh "$TAR_FILENAME") ..."
 
-echo ...Encrypting file as $ENCRYPT_FILENAME
-aescrypt -e -p $PASSWORD -o $ENCRYPT_FILENAME $TAR_FILENAME 
+echo "...Encrypting file as $ENCRYPT_FILENAME"
+aescrypt -e -p $PASSWORD -o "$ENCRYPT_FILENAME" "$TAR_FILENAME" 
 if [ $? -ne 0 ]; then
 	echo Encryption failed. Exiting now.
 	exit 2
@@ -62,8 +62,8 @@ fi
 
 #TODO Use rsync instead of copy because it is resumable.
 # Change move to copy. It's nice to have the latest on the local drive in case an ext drive is not handy
-echo ...Copy $ENCRYPT_FILENAME to $EXT_FOLDER
-cp -f $ENCRYPT_FILENAME $EXT_FOLDER
+echo "...Copy $ENCRYPT_FILENAME to $EXT_FOLDER"
+cp -f "$ENCRYPT_FILENAME" "$EXT_FOLDER"
 if [ $? -ne 0 ]; then
 	echo Could not move file to backup folder. Exiting now.
 	exit 3
