@@ -1,4 +1,10 @@
 #!/bin/bash
+set -euo pipefail
+
+if [[ "$(id -u)" -ne 0 ]]; then
+  echo "Error: run as root (sudo)" >&2
+  exit 1
+fi
 
 # Script to completely remove snap packages and snapd from Ubuntu
 # Run with: sudo bash remove_snap.sh
@@ -7,9 +13,9 @@ echo "Starting snap removal process..."
 
 # Step 1: Remove all snap packages
 echo "Removing all installed snap packages..."
-for snap in $(snap list | awk '{if(NR>1)print $1}'); do
-    echo "Removing $snap..."
-    snap remove --purge "$snap"
+snap list | awk 'NR>1 {print $1}' | while read -r snap; do
+  echo "Removing $snap..."
+  snap remove --purge "$snap"
 done
 
 # Step 2: Remove snapd itself
@@ -29,6 +35,9 @@ rm -rf /var/lib/snapd
 
 # Step 4: Prevent snap from being reinstalled
 echo "Preventing snap reinstallation..."
+if [ -f /etc/apt/preferences.d/nosnap.pref ]; then
+  cp /etc/apt/preferences.d/nosnap.pref /etc/apt/preferences.d/nosnap.pref.bak
+fi
 cat << 'EOF' > /etc/apt/preferences.d/nosnap.pref
 # To prevent repository packages from triggering the installation of Snap,
 # this file forbids snapd from being installed by APT.

@@ -124,6 +124,7 @@ jobs_wait failures "maven"
 
 phase_header "2/4" "Docker build"
 run_component_jobs "docker" "cxbuild-docker" docker_job
+phase_done "2/4"
 
 phase_header "3/4" "Push images to k3s"
 run_component_jobs "push" "cxbuild-push" push_job

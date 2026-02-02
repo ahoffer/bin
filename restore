@@ -36,7 +36,7 @@ def validate_input():
 
 def validate_aescrypt():
     if not shutil.which('aescrypt'):
-        printf('Could not find aescrypt. Please install it first')
+        print('Could not find aescrypt. Please install it first')
         exit(4)
 
 # TODO Add progress indicator
@@ -66,8 +66,8 @@ def decrypt_file(password, encrypted_file_path):
 
 # TODO Add progress indicator
 def untar_file(file_path):
-    print(f'Untarring "{file_path}"')
-    untar_result = subprocess.run(['tar', '-vxz', '-f', file_path, '-C', '/home/aaron'],
+    print(f'Untarring "{file_path}" into "/home/aaron"')
+    untar_result = subprocess.run(['tar', '-xzf', '-f', file_path, '-C', '/home/aaron'],
                               capture_output=True, text=True)
     if untar_result.returncode != 0:
         print(f'ERROR {untar_result.stderr}')
@@ -76,6 +76,7 @@ def untar_file(file_path):
 # BEGIN MAIN FUNCTION
 parser = argparse.ArgumentParser()
 parser.add_argument("backupfile")
+parser.add_argument("--dry-run", action="store_true", help="Show actions without extracting")
 args = parser.parse_args()
 backup_file_path = Path(args.backupfile)
 validate_aescrypt()
@@ -88,5 +89,8 @@ copied_file_str = copy_file_to('/tmp')
 password = get_password(Path('/home/aaron/password'))
 
 tar_file_path = decrypt_file(password, Path('/tmp', copied_file_str))
-untar_file(tar_file_path)
+if args.dry_run:
+    print(f'[DRY RUN] Would untar "{tar_file_path}" to "/home/aaron"')
+else:
+    untar_file(tar_file_path)
 print('...Done!')

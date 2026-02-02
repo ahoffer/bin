@@ -4,19 +4,25 @@ set -euo pipefail
 OPENSSL_VER="3.5.0"
 PREFIX="/opt/openssl-3.5"
 PKGNAME="openssl-3.5"
+OPENSSL_TARBALL="openssl-${OPENSSL_VER}.tar.gz"
+: "${OPENSSL_SHA256:?Set OPENSSL_SHA256 to the official sha256 for ${OPENSSL_TARBALL}}"
 
 echo "Updating apt and installing build deps..."
-sudo apt update
-sudo apt install -y build-essential checkinstall wget
+sudo -v
+sudo DEBIAN_FRONTEND=noninteractive apt update
+sudo DEBIAN_FRONTEND=noninteractive apt install -y build-essential checkinstall wget
 
 TMPDIR=$(mktemp -d)
+cleanup() { rm -rf "$TMPDIR"; }
+trap cleanup EXIT
 cd "$TMPDIR"
 
 echo "Downloading OpenSSL $OPENSSL_VER..."
-wget "https://www.openssl.org/source/openssl-${OPENSSL_VER}.tar.gz"
+wget "https://www.openssl.org/source/${OPENSSL_TARBALL}"
+echo "${OPENSSL_SHA256}  ${OPENSSL_TARBALL}" | sha256sum -c -
 
 echo "Extracting..."
-tar xf "openssl-${OPENSSL_VER}.tar.gz"
+tar xf "${OPENSSL_TARBALL}"
 cd "openssl-${OPENSSL_VER}"
 
 echo "Configuring..."
@@ -54,5 +60,4 @@ echo
 echo "To remove:"
 echo "  sudo dpkg -r ${PKGNAME}"
 echo
-
 

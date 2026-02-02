@@ -15,14 +15,16 @@ fi
 
 # Parse args
 flavor="PCRE/JavaScript"
-desc=""
+desc_parts=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --flavor) flavor="$2"; shift 2 ;;
-        *) desc="$desc $1"; shift ;;
+        --) shift; desc_parts+=("$@"); break ;;
+        *) desc_parts+=("$1"); shift ;;
     esac
 done
 
+desc="${desc_parts[*]}"
 if [[ -z "${desc// }" ]]; then
     echo "Usage: llm-regex \"description\" [--flavor python|js|go|...]" >&2
     exit 1
@@ -38,4 +40,9 @@ EXAMPLES: <2-3 example matches>
 
 Be precise. Avoid overly permissive patterns."
 
-ollama_generate "$MODEL_CHAT" "$desc" "$system"
+output=$(ollama_generate "$MODEL_CHAT" "$(echo "$desc" | truncate_input 4000)" "$system")
+if [[ -z "$output" ]]; then
+    echo "Failed to generate regex" >&2
+    exit 1
+fi
+echo "$output"

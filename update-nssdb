@@ -31,19 +31,13 @@ if [ ! -d "/etc/ssl/certs" ]; then
 fi
 
 # 2) Loop over every hash symlink in /etc/ssl/certs
-for link in /etc/ssl/certs/*.0; do
+for link in /etc/ssl/certs/*.0 /etc/ssl/certs/*.pem; do
   # Skip if no files match the pattern
   [ -e "$link" ] || continue
-  
+
   # Resolve the real certificate file
   certfile=$(readlink -f "$link")
   [ -f "$certfile" ] || continue
-
-  # Validate that the file is actually a certificate
-  if ! openssl x509 -in "$certfile" -text -noout >/dev/null 2>&1; then
-    echo "Warning: Skipping invalid certificate file: $certfile"
-    continue
-  fi
 
   # Derive a nickname from the filename (strip extension)
   nick=$(basename "$certfile" | sed 's/\.[^.]*$//')
@@ -51,6 +45,12 @@ for link in /etc/ssl/certs/*.0; do
   # 3) Skip if already imported
   if certutil -d sql:"$DB" -L -n "$nick" &>/dev/null; then
     echo "OK: $nick already trusted"
+    continue
+  fi
+
+  # Validate that the file is actually a certificate
+  if ! openssl x509 -in "$certfile" -text -noout >/dev/null 2>&1; then
+    echo "Warning: Skipping invalid certificate file: $certfile"
     continue
   fi
 
@@ -69,4 +69,3 @@ done
 
 echo
 echo "SUCCESS: All OS CAs are now registered in NSS DB at $DB."
-

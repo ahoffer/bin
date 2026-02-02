@@ -38,6 +38,15 @@ fi
 ip_part="${input_cidr%%/*}"
 prefix="${input_cidr##*/}"
 
+# Validate octet ranges
+IFS='.' read -r o1 o2 o3 o4 <<< "$ip_part"
+for o in "$o1" "$o2" "$o3" "$o4"; do
+  if (( o < 0 || o > 255 )); then
+    echo "Invalid IP octet in: $ip_part"
+    exit 1
+  fi
+done
+
 # 3) Ensure prefix is in [0..32]
 if (( prefix < 0 || prefix > 32 )); then
   echo "CIDR prefix out of range: $prefix"
@@ -50,7 +59,7 @@ fi
 ip2int() {
   local IFS=. a b c d
   read -r a b c d <<< "$1"
-  echo $(( (a << 24) | (b << 16) | (c << 8) | d ))
+  printf '%u\n' $(( (a << 24) | (b << 16) | (c << 8) | d ))
 }
 
 int2ip() {
@@ -101,6 +110,16 @@ MAX_CONCURRENT=100
 # -----------------------------------------------------------------------------
 # 5) scan_host(): for a single IP, do 1 s ping + 1 s nc‐ssh check
 # -----------------------------------------------------------------------------
+nc_probe() {
+  local ip_addr="$1"
+  local port="$2"
+  if command -v timeout >/dev/null 2>&1; then
+    timeout 1 nc -z "$ip_addr" "$port" &>/dev/null
+  else
+    nc -z -w 1 "$ip_addr" "$port" &>/dev/null
+  fi
+}
+
 scan_host() {
   local ip_addr="$1"
   local ping_res ssh_res dns_res
@@ -113,14 +132,14 @@ scan_host() {
   fi
 
   # 1s timeout for SSH (zero-I/O TCP connect)
-  if nc -zvw1 "$ip_addr" 22 &>/dev/null; then
+  if nc_probe "$ip_addr" 22; then
     ssh_res="OPEN"
   else
     ssh_res="-"
   fi
 
   # 1s timeout for DNS (TCP port 53)
-  if nc -zvw1 "$ip_addr" 53 &>/dev/null; then
+  if nc_probe "$ip_addr" 53; then
     dns_res="OPEN"
   else
     dns_res="-"
@@ -134,6 +153,9 @@ scan_host() {
 # -----------------------------------------------------------------------------
 # 6) Iterate from first_ip to last_ip, spawning background job per IP
 # -----------------------------------------------------------------------------
+cleanup() { jobs -pr | xargs -r kill; }
+trap cleanup INT TERM
+
 for ip_num in $(seq "$first_ip" "$last_ip"); do
   ip_candidate=$(int2ip "$ip_num")
 
@@ -147,4 +169,3 @@ done
 
 # 7) Wait for all background jobs to finish
 wait
-

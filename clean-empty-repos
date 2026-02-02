@@ -10,7 +10,18 @@ set -euo pipefail
 
 CONTAINER_NAME="docker-registry"   # change if your container has a different name
 DRY=0
-[[ "${1:-}" == "--dry-run" ]] && DRY=1
+CONFIG_OVERRIDE=""
+DATA_OVERRIDE=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run) DRY=1; shift ;;
+    --container) CONTAINER_NAME="${2:-}"; shift 2 ;;
+    --config) CONFIG_OVERRIDE="${2:-}"; shift 2 ;;
+    --data) DATA_OVERRIDE="${2:-}"; shift 2 ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
 
 log(){ echo "[$(date +%H:%M:%S)] $*"; }
 need(){ command -v "$1" >/dev/null || { echo "[ERROR] $1 is required" >&2; exit 1; }; }
@@ -52,6 +63,13 @@ REG_DATA_HOST="$(jq -r '
   | .Source
 ' <<<"$inspect_json" | head -n1 || true)"
 
+if [[ -n "$CONFIG_OVERRIDE" ]]; then
+  CONFIG_PATH="$CONFIG_OVERRIDE"
+fi
+if [[ -n "$DATA_OVERRIDE" ]]; then
+  REG_DATA_HOST="$DATA_OVERRIDE"
+fi
+
 if [[ -z "$REG_DATA_HOST" || "$REG_DATA_HOST" == "null" ]]; then
   echo "[ERROR] Could not locate host-side bind mount for /var/lib/registry" >&2
   exit 1
@@ -81,8 +99,11 @@ log "Data:   $REG_DATA_HOST"
 if (( DRY )); then
   echo "[DRY] du -sh '$REG_DATA_HOST'"
 else
-  BEFORE="$(du -sh "$REG_DATA_HOST" 2>/dev/null | awk '{print $1}')"
-  log "Data size before GC: ${BEFORE:-unknown}"
+  if BEFORE="$(du -sh "$REG_DATA_HOST" 2>/dev/null | awk '{print $1}')"; then
+    log "Data size before GC: ${BEFORE:-unknown}"
+  else
+    log "Data size before GC: unknown (du failed)"
+  fi
 fi
 
 # Run garbage-collect in a one-shot registry:2 container
@@ -102,8 +123,11 @@ fi
 if (( DRY )); then
   echo "[DRY] du -sh '$REG_DATA_HOST'"
 else
-  AFTER="$(du -sh "$REG_DATA_HOST" 2>/dev/null | awk '{print $1}')"
-  log "Data size after  GC: ${AFTER:-unknown}"
+  if AFTER="$(du -sh "$REG_DATA_HOST" 2>/dev/null | awk '{print $1}')"; then
+    log "Data size after  GC: ${AFTER:-unknown}"
+  else
+    log "Data size after  GC: unknown (du failed)"
+  fi
   if (( COPIED_TMP )); then
     log "Removing temporary config: $CONFIG_PATH"
     rm -f -- "$CONFIG_PATH" || true
@@ -111,4 +135,3 @@ else
 fi
 
 log "Done."
-
