@@ -114,23 +114,11 @@ get_deploy_prefix() {
   esac
 }
 
-get_default_root() {
-  case "$APP" in
-    cx) echo "/projects/cx-search" ;;
-    marrs) echo "/projects/marrs" ;;
-    *) echo "/projects/$APP" ;;
-  esac
-}
-
 get_version() {
   local root
   root=$(find_project_root)
-  [[ -z "$root" ]] && root=$(get_default_root)
-  if [[ -f "$root/pom.xml" ]]; then
-    grep -m1 '<version>' "$root/pom.xml" | sed 's/.*<version>\(.*\)<\/version>.*/\1/'
-  else
-    get_setting version  # fallback to config
-  fi
+  [[ -z "$root" ]] && { echo "Error: Not in a project (no pom.xml found)" >&2; exit 1; }
+  grep -m1 '<version>' "$root/pom.xml" | sed 's/.*<version>\(.*\)<\/version>.*/\1/'
 }
 
 case "$1" in
@@ -178,7 +166,9 @@ case "$1" in
     echo "$APP"
     ;;
   root)
-    get_default_root
+    root=$(find_project_root)
+    [[ -z "$root" ]] && { echo "Error: Not in a project (no pom.xml found)" >&2; exit 1; }
+    echo "$root"
     ;;
   *)
     echo "Unknown command: $1" >&2

@@ -5,12 +5,17 @@
 
 # Run maven build in a directory
 # Usage: cx_mvn_build <dir> [name]
+# Logs written to /tmp/cxbuild-mvn-<name>.log
 cx_mvn_build() {
   local dir="$1"
   local name="${2:-$dir}"
+  local logfile="/tmp/cxbuild-mvn-${name}.log"
   [[ -d "$dir" ]] || { echo "Error: Directory not found: $dir" >&2; return 1; }
-  echo "==> Maven build: $name"
-  (cd "$dir" && mvn clean install -DskipTests -T6)
+  echo "==> Maven build: $name -> $logfile"
+  (cd "$dir" && mvn clean install -DskipTests -T6) > "$logfile" 2>&1
+  local status=$?
+  [[ $status -eq 0 ]] && echo "    [OK] $name" || echo "    [FAIL] $name - see $logfile"
+  return $status
 }
 
 # Build cxconfig args array from $app variable

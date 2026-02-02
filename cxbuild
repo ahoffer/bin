@@ -5,12 +5,12 @@ set -euo pipefail
 #
 # This script ONLY builds the image. It does NOT push or deploy.
 # After building, use cxdeploy to push the image and restart the pods.
+# Must be run from within a project directory (walks up to find pom.xml).
 #
-# Usage: cxbuild [-a app] [-p project] <component>
+# Usage: cxbuild [-a app] <component>
 #
 # Options:
 #   -a, --app APP       Application: cx or marrs (default: auto-detect)
-#   -p, --project DIR   Project root (default: auto from app)
 #
 # Examples:
 #   cxbuild graphql
@@ -25,25 +25,23 @@ usage() {
 }
 
 app=""
-project_root=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage ;;
     -a|--app) app="$2"; shift 2 ;;
-    -p|--project) project_root="$2"; shift 2 ;;
     -*) echo "Unknown option: $1" >&2; exit 1 ;;
     *) break ;;
   esac
 done
 
-component="${1:?Usage: cxbuild [-a app] [-p project] <component>}"
+component="${1:?Usage: cxbuild [-a app] <component>}"
 
 # Build cxconfig args
 cfg_args=()
 [[ -n "$app" ]] && cfg_args+=(-a "$app")
 
-[[ -z "$project_root" ]] && project_root=$(cxconfig "${cfg_args[@]}" root)
+project_root=$(cxconfig "${cfg_args[@]}" root)
 
 docker_dir=$(cxconfig "${cfg_args[@]}" dir "$component")
 

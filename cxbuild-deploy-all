@@ -2,6 +2,7 @@
 set -uo pipefail  # no -e: continue on errors, report all at end
 
 # Build and deploy components (unattended)
+# Must be run from within a project directory (walks up to find pom.xml).
 #
 # Usage: cxbuild-deploy-all [options] [component...]
 #        cxbuild-deploy-all --all
@@ -11,7 +12,6 @@ set -uo pipefail  # no -e: continue on errors, report all at end
 # Options:
 #   --all               Build and deploy all components
 #   -a, --app APP       Application: cx or marrs (default: auto-detect)
-#   -p, --project DIR   Project root (default: auto from app)
 #   -r, --remote HOST   Target k3s node (default: bigfish)
 #   -n, --namespace NS  Kubernetes namespace (default: auto from app)
 
@@ -24,7 +24,6 @@ usage() {
 }
 
 app=""
-project_root=""
 remote_host="bigfish"
 namespace=""
 build_all=""
@@ -35,7 +34,6 @@ while [[ $# -gt 0 ]]; do
     -h|--help) usage ;;
     --all) build_all=1; shift ;;
     -a|--app) app="$2"; shift 2 ;;
-    -p|--project) project_root="$2"; shift 2 ;;
     -r|--remote) remote_host="$2"; shift 2 ;;
     -n|--namespace) namespace="$2"; shift 2 ;;
     -*) echo "Unknown option: $1" >&2; exit 1 ;;
@@ -49,7 +47,7 @@ cfg_args=()
 
 # Get config values
 app=$(cxconfig "${cfg_args[@]}" app)
-[[ -z "$project_root" ]] && project_root=$(cxconfig "${cfg_args[@]}" root)
+project_root=$(cxconfig "${cfg_args[@]}" root)
 [[ -z "$namespace" ]] && namespace=$(cxconfig "${cfg_args[@]}" namespace)
 
 # Get available components
@@ -92,19 +90,37 @@ for c in "${components[@]}"; do
   esac
 done
 
-# Phase 1: Build source code (sequential)
+# Phase 1: Build source code (parallel, backend→distributions sequential)
 echo
 echo "========================================"
 echo "Phase 1: Building source code (Maven)"
 echo "========================================"
 
+declare -A mvn_pids=()
+
 if [[ -n "$needs_backend" ]]; then
-  cx_mvn_build "$project_root/backend" "backend" || failures+=("maven:backend")
-  cx_mvn_build "$project_root/distributions" "distributions" || failures+=("maven:distributions")
+  (
+    cx_mvn_build "$project_root/backend" "backend" && \
+    cx_mvn_build "$project_root/distributions" "distributions"
+  ) &
+  mvn_pids[backend]=$!
 fi
-[[ -n "$needs_graphql" ]] && { cx_mvn_build "$project_root/frontend/graphql" "graphql" || failures+=("maven:graphql"); }
-[[ -n "$needs_app" ]] && { cx_mvn_build "$project_root/frontend/app" "app" || failures+=("maven:app"); }
-[[ -n "$needs_docs" ]] && { cx_mvn_build "$project_root/docs" "docs" || failures+=("maven:docs"); }
+if [[ -n "$needs_graphql" ]]; then
+  cx_mvn_build "$project_root/frontend/graphql" "graphql" &
+  mvn_pids[graphql]=$!
+fi
+if [[ -n "$needs_app" ]]; then
+  cx_mvn_build "$project_root/frontend/app" "app" &
+  mvn_pids[app]=$!
+fi
+if [[ -n "$needs_docs" ]]; then
+  cx_mvn_build "$project_root/docs" "docs" &
+  mvn_pids[docs]=$!
+fi
+
+for job in "${!mvn_pids[@]}"; do
+  wait "${mvn_pids[$job]}" || failures+=("maven:$job")
+done
 
 # Phase 2: Docker build + deploy (parallel)
 echo

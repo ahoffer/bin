@@ -1,0 +1,22 @@
+  # Delete all helm releases in octocx namespace
+  helm uninstall core -n octocx
+  helm uninstall third-party -n octocx
+  helm uninstall local-only -n octocx
+  helm uninstall custom-resources -n octocx
+
+  # If you used multi-node, also:
+  helm uninstall pg-init -n octocx
+  helm uninstall redis-cluster -n octocx
+  helm uninstall redis-operator -n octocx
+  helm uninstall database -n octocx
+  helm uninstall cnpg -n cnpg-system
+
+  # Delete the namespace (removes secrets, configmaps, PVCs, etc.)
+  kubectl delete namespace octocx
+  kubectl delete namespace cnpg-system  # if multi-node
+
+  # Delete ingress
+  helm uninstall ingress-nginx -n ingress-nginx
+  kubectl delete namespace ingress-nginx
+
+
