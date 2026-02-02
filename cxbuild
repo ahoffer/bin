@@ -45,30 +45,17 @@ docker_dir=$(cxconfig dir "$component")
   exit 1
 }
 
-# Component-specific pre-build steps
-prebuild() {
-  case "$component" in
-    graphql)
-      mvn_build "$project_root/frontend/graphql" "graphql"
-      ;;
-    app)
-      mvn_build "$project_root/frontend/app" "app"
-      ;;
-    edge|redirect|video-streaming)
-      mvn_build "$project_root/backend" "backend"
-      mvn_build "$project_root/distributions" "distributions"
-      ;;
-    docs)
-      mvn_build "$project_root/docs" "docs"
-      ;;
-  esac
-}
-
 echo "==> Building $component"
 echo "    App: $(cxconfig app)"
 echo "    Project: $project_root"
 echo "    Docker: $project_root/docker/$docker_dir"
-prebuild
+# shellcheck disable=SC2034  # used via nameref in maven_modules_for_components
+components=("$component")
+mapfile -t maven_modules < <(maven_modules_for_components components)
+for module in "${maven_modules[@]}"; do
+  name=$(basename "$module")
+  mvn_build "$project_root/$module" "$name"
+done
 echo "==> Docker build: $docker_dir"
 log_file=$(logfile cxbuild "$docker_dir")
 if run_logged "$docker_dir" "$log_file" bash -c "cd '$project_root/docker/$docker_dir' && mvn install -DskipTests"; then

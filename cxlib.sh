@@ -27,7 +27,8 @@ _format_elapsed() {
 }
 
 timer_elapsed() {
-  local end=$(date +%s)
+  local end
+  end=$(date +%s)
   _format_elapsed $((end - _TIMER_START))
 }
 
@@ -42,7 +43,8 @@ phase_timer_start() {
 }
 
 phase_timer_elapsed() {
-  local end=$(date +%s)
+  local end
+  end=$(date +%s)
   _format_elapsed $((end - _PHASE_START))
 }
 
@@ -146,13 +148,41 @@ valid_component() {
 # Build helpers
 # ─────────────────────────────────────────────────────────────
 
+# Map components to Maven module paths, de-duplicated, in order.
+# Usage: maven_modules_for_components components_array
+maven_modules_for_components() {
+  local -n comps=$1
+  local -a modules=()
+  local comp
+  for comp in "${comps[@]}"; do
+    case "$comp" in
+      edge|redirect|video-streaming) modules+=("backend" "distributions") ;;
+      graphql) modules+=("frontend/graphql") ;;
+      app) modules+=("frontend/app") ;;
+      docs) modules+=("docs") ;;
+    esac
+  done
+
+  local -A seen=()
+  local -a uniq=()
+  local mod
+  for mod in "${modules[@]}"; do
+    [[ -n "${seen[$mod]:-}" ]] && continue
+    seen[$mod]=1
+    uniq+=("$mod")
+  done
+
+  printf '%s\n' "${uniq[@]}"
+}
+
 # Run maven build in a directory
 # Usage: mvn_build <dir> [name]
 mvn_build() {
   local dir="$1"
   local name="${2:-$dir}"
   local logfile="/tmp/cxbuild-mvn-${name}.log"
-  local start=$(date +%s)
+  local start
+  start=$(date +%s)
   [[ -d "$dir" ]] || { echo "Error: Directory not found: $dir" >&2; return 1; }
   echo "==> Maven build: $name -> $logfile"
   (cd "$dir" && mvn clean install -DskipTests -T6) > "$logfile" 2>&1
@@ -225,7 +255,8 @@ run_logged() {
 logfile() {
   local prefix="$1"
   local suffix="${2:-}"
-  local ts=$(date +%Y%m%d-%H%M%S)
+  local ts
+  ts=$(date +%Y%m%d-%H%M%S)
   if [[ -n "$suffix" ]]; then
     echo "/tmp/${prefix}-${suffix}-${ts}.log"
   else

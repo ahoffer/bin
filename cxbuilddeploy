@@ -76,63 +76,61 @@ echo "    Remote: $remote_host"
 echo "    Namespace: $namespace"
 echo "    Components: ${components[*]}"
 
-# Determine which Maven modules need building
-needs_backend="" needs_graphql="" needs_app="" needs_docs=""
-for c in "${components[@]}"; do
-  case "$c" in
-    edge|redirect|video-streaming) needs_backend=1 ;;
-    graphql) needs_graphql=1 ;;
-    app) needs_app=1 ;;
-    docs) needs_docs=1 ;;
-  esac
-done
-
-phase_header "1/4" "Building source code (Maven)"
-
-jobs_init
-[[ -n "$needs_backend" ]] && {
-  ( mvn_build "$project_root/backend" "backend" && \
-    mvn_build "$project_root/distributions" "distributions" ) &
-  _JOB_PIDS[backend]=$!
+run_component_jobs() {
+  local prefix="$1"
+  local log_prefix="$2"
+  local job_fn="$3"
+  jobs_init
+  for component in "${components[@]}"; do
+    job_start "$component" "$(logfile_simple "$log_prefix" "$component")" "$job_fn" "$component"
+  done
+  jobs_wait failures "$prefix"
 }
-[[ -n "$needs_graphql" ]] && { mvn_build "$project_root/frontend/graphql" "graphql" & _JOB_PIDS[graphql]=$!; }
-[[ -n "$needs_app" ]] && { mvn_build "$project_root/frontend/app" "app" & _JOB_PIDS[app]=$!; }
-[[ -n "$needs_docs" ]] && { mvn_build "$project_root/docs" "docs" & _JOB_PIDS[docs]=$!; }
-jobs_wait failures "maven"
 
-phase_header "2/4" "Docker build"
-
-jobs_init
-for component in "${components[@]}"; do
+docker_job() {
+  local component="$1"
+  local docker_dir
   docker_dir=$(cxconfig dir "$component")
-  job_start "$component" "$(logfile_simple cxbuild-docker "$component")" \
-    bash -c "cd '$project_root/docker/$docker_dir' && mvn install -DskipTests"
-done
-jobs_wait failures "docker"
+  bash -c "cd '$project_root/docker/$docker_dir' && mvn install -DskipTests"
+}
 
-phase_header "3/4" "Push images to k3s"
-
-jobs_init
-for component in "${components[@]}"; do
+push_job() {
+  local component="$1"
+  local image
   image=$(cxconfig image "$component")
-  job_start "$component" "$(logfile_simple cxbuild-push "$component")" \
-    k3s-push-image -H "$remote_host" "$image"
-done
-jobs_wait failures "push"
-phase_done "3/4"
+  k3s-push-image -H "$remote_host" "$image"
+}
 
-phase_header "4/4" "Deploy to pods"
-
-jobs_init
-for component in "${components[@]}"; do
+deploy_job() {
+  local component="$1"
+  local deploy timeout_val image
   deploy=$(cxconfig deploy "$component")
   timeout_val=$(cxconfig timeout "$component")
   image=$(cxconfig image "$component")
-  job_start "$component" "$(logfile_simple cxbuild-deploy "$component")" \
-    bash -c "k8s-restart-deploy -n '$namespace' -t '${timeout_val}s' '$deploy' && \
-             k8s-verify-image -n '$namespace' -r '$remote_host' -t '$timeout_val' '$image' '$deploy'"
+  k8s-restart-deploy -n "$namespace" -t "${timeout_val}s" "$deploy" && \
+    k8s-verify-image -n "$namespace" -r "$remote_host" -t "$timeout_val" "$image" "$deploy"
+}
+
+phase_header "1/4" "Building source code (Maven)"
+
+mapfile -t maven_modules < <(maven_modules_for_components components)
+jobs_init
+for module in "${maven_modules[@]}"; do
+  name=$(basename "$module")
+  mvn_build "$project_root/$module" "$name" &
+  _JOB_PIDS[$name]=$!
 done
-jobs_wait failures "deploy"
+jobs_wait failures "maven"
+
+phase_header "2/4" "Docker build"
+run_component_jobs "docker" "cxbuild-docker" docker_job
+
+phase_header "3/4" "Push images to k3s"
+run_component_jobs "push" "cxbuild-push" push_job
+phase_done "3/4"
+
+phase_header "4/4" "Deploy to pods"
+run_component_jobs "deploy" "cxbuild-deploy" deploy_job
 phase_done "4/4"
 
 # Summary
