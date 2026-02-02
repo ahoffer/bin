@@ -15,7 +15,8 @@ set -uo pipefail  # no -e: continue on errors, report all at end
 #   -r, --remote HOST   Target k3s node (default: bigfish)
 #   -n, --namespace NS  Kubernetes namespace (default: auto from app)
 
-source cx-lib.sh
+source cxlib.sh
+timer_start
 
 usage() {
   sed -n '4,16p' "$0"
@@ -85,68 +86,53 @@ for c in "${components[@]}"; do
   esac
 done
 
-# Phase 1: Build source code (parallel, backend→distributions sequential)
-echo
-echo "========================================"
-echo "Phase 1: Building source code (Maven)"
-echo "========================================"
+phase_header "1/4" "Building source code (Maven)"
 
-declare -A mvn_pids=()
+jobs_init
+[[ -n "$needs_backend" ]] && {
+  ( cx_mvn_build "$project_root/backend" "backend" && \
+    cx_mvn_build "$project_root/distributions" "distributions" ) &
+  _JOB_PIDS[backend]=$!
+}
+[[ -n "$needs_graphql" ]] && { cx_mvn_build "$project_root/frontend/graphql" "graphql" & _JOB_PIDS[graphql]=$!; }
+[[ -n "$needs_app" ]] && { cx_mvn_build "$project_root/frontend/app" "app" & _JOB_PIDS[app]=$!; }
+[[ -n "$needs_docs" ]] && { cx_mvn_build "$project_root/docs" "docs" & _JOB_PIDS[docs]=$!; }
+jobs_wait failures "maven"
 
-if [[ -n "$needs_backend" ]]; then
-  (
-    cx_mvn_build "$project_root/backend" "backend" && \
-    cx_mvn_build "$project_root/distributions" "distributions"
-  ) &
-  mvn_pids[backend]=$!
-fi
-if [[ -n "$needs_graphql" ]]; then
-  cx_mvn_build "$project_root/frontend/graphql" "graphql" &
-  mvn_pids[graphql]=$!
-fi
-if [[ -n "$needs_app" ]]; then
-  cx_mvn_build "$project_root/frontend/app" "app" &
-  mvn_pids[app]=$!
-fi
-if [[ -n "$needs_docs" ]]; then
-  cx_mvn_build "$project_root/docs" "docs" &
-  mvn_pids[docs]=$!
-fi
+phase_header "2/4" "Docker build"
 
-for job in "${!mvn_pids[@]}"; do
-  wait "${mvn_pids[$job]}" || failures+=("maven:$job")
-done
-
-# Phase 2: Docker build + deploy (parallel)
-echo
-echo "========================================"
-echo "Phase 2: Docker build + deploy (parallel)"
-echo "========================================"
-
-deploy_args=(-r "$remote_host" -n "$namespace")
-
-declare -A pids=()
+jobs_init
 for component in "${components[@]}"; do
-  (
-    logfile="/tmp/cxbuild-deploy-${component}.log"
-    {
-      echo "==> [$component] Docker build"
-      docker_dir=$(cxconfig dir "$component")
-      (cd "$project_root/docker/$docker_dir" && mvn install -DskipTests)
-      echo "==> [$component] Deploying"
-      yes y 2>/dev/null | cxdeploy "${deploy_args[@]}" "$component"
-      echo "==> [$component] Complete"
-    } > "$logfile" 2>&1
-    status=$?
-    [[ $status -eq 0 ]] && echo "[OK] $component" || echo "[FAIL] $component - see $logfile"
-    exit $status
-  ) &
-  pids[$component]=$!
+  docker_dir=$(cxconfig dir "$component")
+  job_start "$component" "$(logfile_simple cxbuild-docker "$component")" \
+    bash -c "cd '$project_root/docker/$docker_dir' && mvn install -DskipTests"
 done
+jobs_wait failures "docker"
 
-for component in "${!pids[@]}"; do
-  wait "${pids[$component]}" || failures+=("deploy:$component")
+phase_header "3/4" "Push images to k3s"
+
+jobs_init
+for component in "${components[@]}"; do
+  image=$(cxconfig image "$component")
+  job_start "$component" "$(logfile_simple cxbuild-push "$component")" \
+    k3s-push-image -H "$remote_host" "$image"
 done
+jobs_wait failures "push"
+phase_done "3/4"
+
+phase_header "4/4" "Deploy to pods"
+
+jobs_init
+for component in "${components[@]}"; do
+  deploy=$(cxconfig deploy "$component")
+  timeout_val=$(cxconfig timeout "$component")
+  image=$(cxconfig image "$component")
+  job_start "$component" "$(logfile_simple cxbuild-deploy "$component")" \
+    bash -c "k8s-restart-deploy -n '$namespace' -t '${timeout_val}s' '$deploy' && \
+             k8s-verify-image -n '$namespace' -r '$remote_host' -t '$timeout_val' '$image' '$deploy'"
+done
+jobs_wait failures "deploy"
+phase_done "4/4"
 
 # Summary
 echo
@@ -155,10 +141,11 @@ echo "Summary"
 echo "========================================"
 
 if [[ ${#failures[@]} -eq 0 ]]; then
-  echo "SUCCESS: ${#components[@]} component(s) built and deployed"
+  timer_end "SUCCESS: ${#components[@]} component(s) built and deployed"
 else
   echo "FAILURES: ${#failures[@]} task(s) failed:"
   printf '  - %s\n' "${failures[@]}"
   echo -e "\nLogs: /tmp/cxbuild-deploy-*.log"
+  timer_end "Completed with errors"
   exit 1
 fi

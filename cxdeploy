@@ -12,7 +12,8 @@ set -euo pipefail
 #   -r, --remote HOST   Target k3s node (default: bigfish)
 #   -n, --namespace NS  Kubernetes namespace (default: auto from app)
 
-source cx-lib.sh
+source cxlib.sh
+timer_start
 
 usage() {
   sed -n '4,13p' "$0"
@@ -62,3 +63,4 @@ fi
 
 echo "==> Deploying $component ($deploy, $image_age old)"
 deploy-image.sh -q -r "$remote_host" -n "$namespace" -t "$timeout" "$image" "$deploy"
+timer_end "Deploy complete"

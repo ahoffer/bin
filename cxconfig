@@ -23,7 +23,7 @@ set -euo pipefail
 #   app                 Get the detected app name
 #   root                Get the project root
 
-source cx-lib.sh
+source cxlib.sh
 
 usage() {
   sed -n '4,24p' "$0"

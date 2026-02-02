@@ -1,0 +1,8 @@
+#!/bin/bash
+# Delete all notification metacards from Solr
+
+kubectl exec deploy/cx-edge -- curl -s -X POST \
+  "http://cx-solrcloud-common:80/solr/catalog/update?commit=true" \
+  -H "Content-Type: application/json" \
+  -d '{"delete":{"query":"metacard-tags_txt:notification"}}' \
+  | jq -r '"Deleted notifications (status: \(.responseHeader.status), time: \(.responseHeader.QTime)ms)"'

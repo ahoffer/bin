@@ -14,7 +14,8 @@ set -euo pipefail
 #   cxbuild graphql
 #   cxbuild edge
 
-source cx-lib.sh
+source cxlib.sh
+timer_start
 
 usage() {
   sed -n '4,15p' "$0"
@@ -68,5 +69,10 @@ echo "    Project: $project_root"
 echo "    Docker: $project_root/docker/$docker_dir"
 prebuild
 echo "==> Docker build: $docker_dir"
-(cd "$project_root/docker/$docker_dir" && mvn install -DskipTests)
-echo "==> Build complete"
+log_file=$(logfile cxbuild "$docker_dir")
+if run_logged "$docker_dir" "$log_file" bash -c "cd '$project_root/docker/$docker_dir' && mvn install -DskipTests"; then
+  :
+else
+  exit 1
+fi
+timer_end "Build complete"
