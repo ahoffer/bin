@@ -20,7 +20,7 @@ timer_start
 
 usage() {
   sed -n '4,16p' "$0"
-  echo -e "\nComponents: $(cx_list_components)"
+  echo -e "\nComponents: $(list_components)"
   exit 0
 }
 
@@ -41,7 +41,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Verify we're in a project directory (walks up tree like git)
-cx_require_project_root
+require_project_root
+acquire_lock "builddeploy"
 
 # Get config values
 app=$(cxconfig app)
@@ -62,7 +63,7 @@ fi
 
 # Validate components
 for c in "${components[@]}"; do
-  cx_valid_component "$c" all_components || { echo "Error: Unknown component '$c'" >&2; exit 1; }
+  valid_component "$c" all_components || { echo "Error: Unknown component '$c'" >&2; exit 1; }
 done
 
 # Track failures
@@ -90,13 +91,13 @@ phase_header "1/4" "Building source code (Maven)"
 
 jobs_init
 [[ -n "$needs_backend" ]] && {
-  ( cx_mvn_build "$project_root/backend" "backend" && \
-    cx_mvn_build "$project_root/distributions" "distributions" ) &
+  ( mvn_build "$project_root/backend" "backend" && \
+    mvn_build "$project_root/distributions" "distributions" ) &
   _JOB_PIDS[backend]=$!
 }
-[[ -n "$needs_graphql" ]] && { cx_mvn_build "$project_root/frontend/graphql" "graphql" & _JOB_PIDS[graphql]=$!; }
-[[ -n "$needs_app" ]] && { cx_mvn_build "$project_root/frontend/app" "app" & _JOB_PIDS[app]=$!; }
-[[ -n "$needs_docs" ]] && { cx_mvn_build "$project_root/docs" "docs" & _JOB_PIDS[docs]=$!; }
+[[ -n "$needs_graphql" ]] && { mvn_build "$project_root/frontend/graphql" "graphql" & _JOB_PIDS[graphql]=$!; }
+[[ -n "$needs_app" ]] && { mvn_build "$project_root/frontend/app" "app" & _JOB_PIDS[app]=$!; }
+[[ -n "$needs_docs" ]] && { mvn_build "$project_root/docs" "docs" & _JOB_PIDS[docs]=$!; }
 jobs_wait failures "maven"
 
 phase_header "2/4" "Docker build"

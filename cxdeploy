@@ -17,7 +17,7 @@ timer_start
 
 usage() {
   sed -n '4,13p' "$0"
-  echo -e "\nComponents: $(cx_list_components)"
+  echo -e "\nComponents: $(list_components)"
   exit 0
 }
 
@@ -37,7 +37,8 @@ done
 component="${1:?Usage: cxdeploy [-r host] [-n namespace] <component>}"
 
 # Verify we're in a project directory (walks up tree like git)
-cx_require_project_root
+require_project_root
+acquire_lock "deploy"
 
 [[ -z "$namespace" ]] && namespace=$(cxconfig namespace)
 

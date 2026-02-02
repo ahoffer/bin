@@ -19,7 +19,7 @@ timer_start
 
 usage() {
   sed -n '4,15p' "$0"
-  echo -e "\nComponents: $(cx_list_components)"
+  echo -e "\nComponents: $(list_components)"
   exit 0
 }
 
@@ -34,7 +34,8 @@ done
 component="${1:?Usage: cxbuild <component>}"
 
 # Verify we're in a project directory (walks up tree like git)
-cx_require_project_root
+require_project_root
+acquire_lock "build"
 
 project_root=$(cxconfig root)
 docker_dir=$(cxconfig dir "$component")
@@ -48,17 +49,17 @@ docker_dir=$(cxconfig dir "$component")
 prebuild() {
   case "$component" in
     graphql)
-      cx_mvn_build "$project_root/frontend/graphql" "graphql"
+      mvn_build "$project_root/frontend/graphql" "graphql"
       ;;
     app)
-      cx_mvn_build "$project_root/frontend/app" "app"
+      mvn_build "$project_root/frontend/app" "app"
       ;;
     edge|redirect|video-streaming)
-      cx_mvn_build "$project_root/backend" "backend"
-      cx_mvn_build "$project_root/distributions" "distributions"
+      mvn_build "$project_root/backend" "backend"
+      mvn_build "$project_root/distributions" "distributions"
       ;;
     docs)
-      cx_mvn_build "$project_root/docs" "docs"
+      mvn_build "$project_root/docs" "docs"
       ;;
   esac
 }

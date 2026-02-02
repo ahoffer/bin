@@ -34,8 +34,8 @@ usage() {
 [[ "${1:-}" == "-h" || "${1:-}" == "--help" || $# -eq 0 ]] && usage
 
 # Require being in a project directory
-cx_require_project_root
-project_root="$CX_PROJECT_ROOT"
+require_project_root
+project_root="$PROJECT_ROOT"
 
 # Detect app from project root directory name
 detect_app() {
