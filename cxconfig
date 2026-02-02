@@ -23,28 +23,17 @@ set -euo pipefail
 #   app                 Get the detected/selected app name
 #   root                Get the default project root
 
+source cx-lib.sh
+
 usage() {
   sed -n '3,21p' "$0"
   exit 0
 }
 
-# Find project root by walking up looking for pom.xml
-find_project_root() {
-  local dir="$PWD"
-  local last_with_pom=""
-  while [[ "$dir" != "/" ]]; do
-    if [[ -f "$dir/pom.xml" ]]; then
-      last_with_pom="$dir"
-    fi
-    dir="$(dirname "$dir")"
-  done
-  echo "$last_with_pom"
-}
-
 # Auto-detect app from project root directory name
 detect_app() {
   local root
-  root=$(find_project_root)
+  root=$(cx_find_project_root)
   if [[ -z "$root" ]]; then
     echo "cx"  # default when not in a project
     return
@@ -116,7 +105,7 @@ get_deploy_prefix() {
 
 get_version() {
   local root
-  root=$(find_project_root)
+  root=$(cx_find_project_root)
   [[ -z "$root" ]] && { echo "Error: Not in a project (no pom.xml found)" >&2; exit 1; }
   grep -m1 '<version>' "$root/pom.xml" | sed 's/.*<version>\(.*\)<\/version>.*/\1/'
 }
@@ -166,7 +155,7 @@ case "$1" in
     echo "$APP"
     ;;
   root)
-    root=$(find_project_root)
+    root=$(cx_find_project_root)
     [[ -z "$root" ]] && { echo "Error: Not in a project (no pom.xml found)" >&2; exit 1; }
     echo "$root"
     ;;

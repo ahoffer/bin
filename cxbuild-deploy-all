@@ -41,6 +41,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Verify we're in a project directory (walks up tree like git)
+cx_require_project_root
+
 # Build cxconfig args
 cfg_args=()
 cx_cfg_args cfg_args "$app"

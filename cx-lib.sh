@@ -3,6 +3,32 @@
 #
 # Source this file: source cx-lib.sh
 
+# Find project root by walking up looking for pom.xml (like git does)
+# Returns the topmost directory containing pom.xml, or empty string if none found
+cx_find_project_root() {
+  local dir="$PWD"
+  local last_with_pom=""
+  while [[ "$dir" != "/" ]]; do
+    if [[ -f "$dir/pom.xml" ]]; then
+      last_with_pom="$dir"
+    fi
+    dir="$(dirname "$dir")"
+  done
+  echo "$last_with_pom"
+}
+
+# Require being in a project directory, exit with error if not
+# Usage: cx_require_project_root
+# Sets CX_PROJECT_ROOT variable on success
+cx_require_project_root() {
+  CX_PROJECT_ROOT=$(cx_find_project_root)
+  if [[ -z "$CX_PROJECT_ROOT" ]]; then
+    echo "ERROR: Not in a project directory (no pom.xml found)" >&2
+    echo "Run this command from a project root or subdirectory" >&2
+    exit 1
+  fi
+}
+
 # Run maven build in a directory
 # Usage: cx_mvn_build <dir> [name]
 # Logs written to /tmp/cxbuild-mvn-<name>.log
@@ -24,7 +50,9 @@ cx_cfg_args() {
   local -n arr=$1
   local app_value="${2:-}"
   arr=()
-  [[ -n "$app_value" ]] && arr+=(-a "$app_value")
+  if [[ -n "$app_value" ]]; then
+    arr+=(-a "$app_value")
+  fi
 }
 
 # List components as space-separated string
