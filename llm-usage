@@ -30,6 +30,7 @@ while [[ $# -gt 0 ]]; do
         --json) output_mode="json"; shift ;;
         --today) output_mode="today"; shift ;;
         --all) output_mode="all"; shift ;;
+        --oneline|-1) output_mode="oneline"; shift ;;
         --clear) rm -f "$USAGE_LOG"; echo "Usage log cleared"; exit 0 ;;
         *) shift ;;
     esac
@@ -53,6 +54,26 @@ elif [[ "$output_mode" == "today" ]]; then
 fi
 
 case "$output_mode" in
+    oneline)
+        stats=$(jq -s "$jq_filter | {
+            calls: length,
+            tokens: (map(.prompt_tokens + .completion_tokens) | add // 0),
+            by_tool: (group_by(.tool) | map({
+                tool: .[0].tool,
+                calls: length
+            }))
+        }" "$USAGE_LOG")
+
+        calls=$(echo "$stats" | jq -r '.calls')
+        tokens=$(echo "$stats" | jq -r '.tokens')
+        tools=$(echo "$stats" | jq -r '[.by_tool[] | "\(.tool):\(.calls)"] | join(", ")' 2>/dev/null || echo "")
+
+        if [[ -n "$tools" ]]; then
+            echo "Ollama: ${tokens} tokens (${calls} calls) [$tools]"
+        else
+            echo "Ollama: ${tokens} tokens (${calls} calls)"
+        fi
+        ;;
     json)
         jq -s "$jq_filter | {
             calls: length,

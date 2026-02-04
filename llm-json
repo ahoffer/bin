@@ -4,20 +4,9 @@
 #        echo '{"users":[...]}' | llm-json "extract emails"
 
 set -euo pipefail
-
-# Capture stdin immediately if piped
-stdin_content=""
-if [[ ! -t 0 ]]; then
-    stdin_content=$(cat | head -c 2000)
-fi
-
 source "$(dirname "$0")/ollama-lib"
-OLLAMA_TOOL_NAME="json"
-
-if ! ollama_ping; then
-    echo "Error: Cannot reach Ollama at $OLLAMA_HOST" >&2
-    exit 1
-fi
+ollama_capture_stdin 2000
+ollama_require
 
 if [[ $# -eq 0 ]]; then
     echo "Usage: llm-json \"what you want to extract\"" >&2
@@ -28,9 +17,9 @@ fi
 desc="$*"
 
 prompt="$desc"
-if [[ -n "$stdin_content" ]]; then
+if [[ -n "$OLLAMA_STDIN" ]]; then
     prompt="Given this JSON sample:
-$stdin_content
+$OLLAMA_STDIN
 
 $desc"
 fi

@@ -5,12 +5,7 @@
 
 set -euo pipefail
 source "$(dirname "$0")/ollama-lib"
-OLLAMA_TOOL_NAME="shell"
-
-if ! ollama_ping; then
-    echo "Error: Cannot reach Ollama at $OLLAMA_HOST" >&2
-    exit 1
-fi
+ollama_require
 
 if [[ $# -eq 0 ]]; then
     echo "Usage: llm-shell \"description of what you want to do\"" >&2

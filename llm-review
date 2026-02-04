@@ -5,36 +5,17 @@
 #        llm-review < code.ts
 
 set -euo pipefail
-
-# Capture stdin immediately if piped
-stdin_content=""
-if [[ ! -t 0 ]]; then
-    stdin_content=$(cat)
-fi
-
 source "$(dirname "$0")/ollama-lib"
-OLLAMA_TOOL_NAME="review"
-
-if ! ollama_ping; then
-    echo "Error: Cannot reach Ollama at $OLLAMA_HOST" >&2
-    exit 1
-fi
+ollama_capture_stdin
+ollama_require
 
 # Read input
 if [[ $# -gt 0 ]]; then
-    if [[ -f "$1" ]]; then
-        input=$(cat "$1" | truncate_input 6000)
-        context="File: $1"
-    else
-        echo "Not a file: $1" >&2
-        exit 1
-    fi
-elif [[ -n "$stdin_content" ]]; then
-    input=$(echo "$stdin_content" | truncate_input 6000)
-    context="Code diff or snippet"
+    input=$(ollama_read_input 6000 "$1" "code")
+    context="File: $1"
 else
-    echo "No code provided" >&2
-    exit 1
+    input=$(ollama_read_input 6000 "" "code")
+    context="Code diff or snippet"
 fi
 
 system="You are a code reviewer. Review this code for:

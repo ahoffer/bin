@@ -9,7 +9,7 @@ set -euo pipefail
 # Java 17, OSGi/Karaf, Spring, Solr, Docker, K8s, GitLab CI,
 # ActiveMQ, Codice/DDF, Codice/Alliance, Postgres, TypeScript/React.
 
-HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
+source "$(dirname "$0")/ollama-lib"
 
 # Comma-separated models.
 # First = generator, middle = verifier(s), last = reconciler.
@@ -71,72 +71,75 @@ Include fixes.
 Ask ONE question only if unavoidable.'
 $'\n\n'"$DOMAIN_CONTEXT"
 
-json_escape() {
-  python3 - <<'PY' "$1"
-import json,sys
-print(json.dumps(sys.argv[1]))
-PY
+# If the message references a file path, read and embed its contents.
+# Recognizes patterns like "review the file ~/path" or "review ~/path" or
+# "debug the file /absolute/path". Expands ~ and caps at 200KB.
+embed_file_content() {
+  local msg="$1"
+  local path=""
+
+  # Match file path after common verbs
+  if [[ "$msg" =~ (review|debug|explain|analyze|create)[[:space:]]+(the[[:space:]]+file[[:space:]]+)?([~/][^[:space:]]+) ]]; then
+    path="${BASH_REMATCH[3]}"
+  fi
+
+  if [[ -z "$path" ]]; then
+    printf '%s' "$msg"
+    return
+  fi
+
+  # Expand leading ~
+  path="${path/#\~/$HOME}"
+
+  if [[ ! -f "$path" ]]; then
+    printf '%s\n\n(File not found on this host: %s)' "$msg" "$path"
+    return
+  fi
+
+  local max_bytes=200000
+  local actual_bytes
+  actual_bytes="$(wc -c < "$path" | tr -d ' ')"
+  local content
+  if (( actual_bytes > max_bytes )); then
+    content="$(head -c "$max_bytes" "$path")"
+    printf '%s\n\n--- FILE: %s (truncated to %d bytes) ---\n%s\n--- END FILE ---' \
+      "$msg" "$path" "$max_bytes" "$content"
+  else
+    content="$(cat "$path")"
+    printf '%s\n\n--- FILE: %s ---\n%s\n--- END FILE ---' \
+      "$msg" "$path" "$content"
+  fi
 }
 
 split_models() {
-  python3 - <<'PY' "$MODELS_CSV"
-import sys
-models=[m.strip() for m in sys.argv[1].split(",") if m.strip()]
-if len(models) < 2:
-  raise SystemExit("Need at least 2 models (generator, reconciler).")
-print("\n".join(models))
-PY
+  local -a models
+  IFS=',' read -ra models <<< "$MODELS_CSV"
+  # Trim whitespace from each entry
+  local trimmed=()
+  for m in "${models[@]}"; do
+    m="${m#"${m%%[![:space:]]*}"}"
+    m="${m%"${m##*[![:space:]]}"}"
+    [[ -n "$m" ]] && trimmed+=("$m")
+  done
+  if [[ ${#trimmed[@]} -lt 2 ]]; then
+    echo "Need at least 2 models (generator, reconciler)." >&2
+    return 1
+  fi
+  printf '%s\n' "${trimmed[@]}"
 }
 
-call_chat() {
-  local model="$1"
-  local system="$2"
-  local user="$3"
-  local temperature="$4"
-
-  local payload
-  payload="$(python3 - "$model" "$system" "$user" "$NUM_PREDICT" "$temperature" "$TOP_P" "$REPEAT_PENALTY" "${STOP_SEQS[@]}" <<'PY'
-import json,sys
-model=sys.argv[1]
-system=sys.argv[2]
-user=sys.argv[3]
-num_predict=int(sys.argv[4])
-temperature=float(sys.argv[5])
-top_p=float(sys.argv[6])
-repeat_penalty=float(sys.argv[7])
-stop=list(sys.argv[8:])
-
-payload={
-  "model": model,
-  "messages": [
-    {"role":"system","content":system},
-    {"role":"user","content":user}
-  ],
-  "stream": False,
-  "options": {
-    "num_predict": num_predict,
-    "temperature": temperature,
-    "top_p": top_p,
-    "repeat_penalty": repeat_penalty,
-    "stop": stop
-  }
-}
-print(json.dumps(payload))
-PY
-)"
-
-  curl -sS "$HOST/api/chat" \
-    -H 'Content-Type: application/json' \
-    -d "$payload" \
-  | python3 - <<'PY'
-import json,sys
-data=json.load(sys.stdin)
-print((data.get("message") or {}).get("content","").rstrip())
-PY
+_build_chat_options() {
+  local temperature="$1"
+  local stop_json
+  stop_json=$(printf '%s\n' "${STOP_SEQS[@]}" | jq -R . | jq -sc .)
+  jq -n --argjson np "$NUM_PREDICT" --argjson temp "$temperature" \
+    --argjson tp "$TOP_P" --argjson rp "$REPEAT_PENALTY" \
+    --argjson stop "$stop_json" \
+    '{num_predict:$np, temperature:$temp, top_p:$tp, repeat_penalty:$rp, stop:$stop}'
 }
 
 print_opts() {
-  echo "HOST=$HOST"
+  echo "HOST=$OLLAMA_HOST"
   echo "MODELS=$MODELS_CSV"
   echo "TASK=$TASK"
   echo "NUM_PREDICT=$NUM_PREDICT"
@@ -145,6 +148,8 @@ print_opts() {
 
 panel_run() {
   local user_msg="$1"
+  local embedded
+  embedded="$(embed_file_content "$user_msg")"
 
   mapfile -t MODELS < <(split_models)
   local GEN="${MODELS[0]}"
@@ -153,23 +158,31 @@ panel_run() {
 
   local gen_out ver_outs reconcile_in final_out
 
-  gen_out="$(call_chat "$GEN" "$SYSTEM_GEN" "[TASK=$TASK]\n$user_msg" "$TEMP_GEN")"
+  local gen_opts ver_opts rec_opts
+  gen_opts=$(_build_chat_options "$TEMP_GEN")
+  ver_opts=$(_build_chat_options "$TEMP_VERIFY")
+  rec_opts=$(_build_chat_options "$TEMP_RECONCILE")
+
+  echo "[generator: $GEN]" >&2
+  gen_out="$(ollama_chat_simple "$GEN" "$SYSTEM_GEN" "[TASK=$TASK]"$'\n'"$embedded" "odev" "$gen_opts")"
 
   ver_outs=""
   for v in "${VERIFIERS[@]}"; do
+    echo "[verifier: $v]" >&2
     local vo
-    vo="$(call_chat "$v" "$SYSTEM_VERIFY" "USER REQUEST:\n$user_msg\n\nGENERATOR ANSWER:\n$gen_out" "$TEMP_VERIFY")"
+    vo="$(ollama_chat_simple "$v" "$SYSTEM_VERIFY" "USER REQUEST:"$'\n'"$embedded"$'\n\n'"GENERATOR ANSWER:"$'\n'"$gen_out" "odev" "$ver_opts")"
     ver_outs+=$'\n\n'"[VERIFIER: $v]"$'\n'"$vo"
   done
 
   reconcile_in="USER REQUEST:
-$user_msg
+$embedded
 
 GENERATOR:
 $gen_out
 $ver_outs"
 
-  final_out="$(call_chat "$REC" "$SYSTEM_RECONCILE" "$reconcile_in" "$TEMP_RECONCILE")"
+  echo "[reconciler: $REC]" >&2
+  final_out="$(ollama_chat_simple "$REC" "$SYSTEM_RECONCILE" "$reconcile_in" "odev" "$rec_opts")"
 
   echo "$final_out"
 }

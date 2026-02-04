@@ -5,7 +5,6 @@
 
 set -euo pipefail
 source "$(dirname "$0")/ollama-lib"
-OLLAMA_TOOL_NAME="search"
 
 RAW_MODE=false
 if [[ "${1:-}" == "--raw" ]]; then

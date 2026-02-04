@@ -5,13 +5,8 @@
 #        some_command | llm-watch          # Pipe mode
 
 set -euo pipefail
-
-stdin_content=""
-if [[ ! -t 0 ]]; then
-    stdin_content=$(cat)
-fi
-
 source "$(dirname "$0")/ollama-lib"
+ollama_capture_stdin
 
 SUMMARY_INTERVAL="${LLM_WATCH_INTERVAL:-60}"  # seconds between summaries for --tail
 
@@ -98,8 +93,8 @@ case "${1:-}" in
         echo "  LLM_WATCH_INTERVAL=60      Seconds between tail summaries"
         ;;
     *)
-        if [[ -n "$stdin_content" ]]; then
-            watch_pipe "$stdin_content"
+        if [[ -n "$OLLAMA_STDIN" ]]; then
+            watch_pipe "$OLLAMA_STDIN"
         elif [[ $# -gt 0 ]]; then
             watch_command "$@"
         else

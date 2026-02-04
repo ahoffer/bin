@@ -5,20 +5,9 @@
 #        cat class.java | llm-test --framework junit
 
 set -euo pipefail
-
-# Capture stdin immediately if piped (before sourcing library)
-stdin_content=""
-if [[ ! -t 0 ]]; then
-    stdin_content=$(cat)
-fi
-
 source "$(dirname "$0")/ollama-lib"
-OLLAMA_TOOL_NAME="test"
-
-if ! ollama_ping; then
-    echo "Error: Cannot reach Ollama at $OLLAMA_HOST" >&2
-    exit 1
-fi
+ollama_capture_stdin
+ollama_require
 
 # Parse args
 framework=""
@@ -30,23 +19,23 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Read input
+# Read input and auto-detect test framework from extension
 if [[ -n "$file" && -f "$file" ]]; then
-    input=$(cat "$file" | truncate_input 4000)
-    # Auto-detect framework
+    input=$(ollama_read_input 4000 "$file" "code")
     if [[ -z "$framework" ]]; then
-        case "$file" in
-            *.py) framework="pytest" ;;
-            *.ts|*.tsx) framework="jest with typescript" ;;
-            *.js|*.jsx) framework="jest" ;;
-            *.java) framework="JUnit 5" ;;
-            *.go) framework="go test" ;;
-            *.rs) framework="Rust #[test]" ;;
-            *) framework="appropriate test framework" ;;
+        lang=$(ollama_detect_lang "$file")
+        case "$lang" in
+            python)     framework="pytest" ;;
+            typescript) framework="jest with typescript" ;;
+            javascript) framework="jest" ;;
+            java)       framework="JUnit 5" ;;
+            go)         framework="go test" ;;
+            rust)       framework="Rust #[test]" ;;
+            *)          framework="appropriate test framework" ;;
         esac
     fi
-elif [[ -n "$stdin_content" ]]; then
-    input=$(echo "$stdin_content" | truncate_input 4000)
+elif [[ -n "${OLLAMA_STDIN:-}" ]]; then
+    input=$(ollama_read_input 4000 "" "code")
     framework="${framework:-appropriate test framework}"
 else
     echo "No code provided" >&2

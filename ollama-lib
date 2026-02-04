@@ -4,6 +4,8 @@
 
 OLLAMA_TIMEOUT="${OLLAMA_TIMEOUT:-120}"
 
+# Stdin safety: all init code must use </dev/null on any command that
+# might consume stdin, since consumers call ollama_capture_stdin after sourcing.
 # Resolve Ollama host with fallback (hostname → IP)
 # Respects OLLAMA_HOST if already set in environment
 OLLAMA_HOST="${OLLAMA_HOST:-}"
@@ -26,6 +28,9 @@ if [[ -z "${OLLAMA_CONVERSATION_ID:-}" && -f "$OLLAMA_CONVO_FILE" ]]; then
     OLLAMA_CONVERSATION_ID=$(cat "$OLLAMA_CONVO_FILE")
 fi
 OLLAMA_CONVERSATION_ID="${OLLAMA_CONVERSATION_ID:-}"
+
+# Auto-derive tool name from the calling script
+OLLAMA_TOOL_NAME="${OLLAMA_TOOL_NAME:-$(basename "${BASH_SOURCE[-1]:-$0}" | sed 's/^llm-//')}"
 
 # Models
 MODEL_CHAT="${OLLAMA_MODEL_CHAT:-llama3.2:latest}"
@@ -52,6 +57,64 @@ _log_usage() {
 # Check if Ollama is reachable
 ollama_ping() {
     curl -s --connect-timeout 2 "$OLLAMA_HOST/api/tags" </dev/null >/dev/null 2>&1
+}
+
+# Require Ollama to be reachable, exit if not
+ollama_require() {
+    if ! ollama_ping; then
+        echo "Error: Cannot reach Ollama at $OLLAMA_HOST" >&2
+        exit 1
+    fi
+}
+
+# Capture stdin into OLLAMA_STDIN if input is piped.
+# Call after sourcing the library, not before.
+# Optional byte limit as first argument, 0 means unlimited.
+OLLAMA_STDIN=""
+ollama_capture_stdin() {
+    local byte_limit="${1:-0}"
+    if [[ ! -t 0 ]]; then
+        if [[ "$byte_limit" -gt 0 ]]; then
+            OLLAMA_STDIN=$(head -c "$byte_limit")
+        else
+            OLLAMA_STDIN=$(cat)
+        fi
+    fi
+}
+
+# Read input from a file path, captured stdin, or fail with an error.
+# Args: token_limit (default 4000), file_path (optional), error_noun (default "input")
+ollama_read_input() {
+    local token_limit="${1:-4000}"
+    local file_path="${2:-}"
+    local error_noun="${3:-input}"
+    if [[ -n "$file_path" ]]; then
+        if [[ ! -f "$file_path" ]]; then
+            echo "Not a file: $file_path" >&2
+            return 1
+        fi
+        truncate_input "$token_limit" < "$file_path"
+    elif [[ -n "${OLLAMA_STDIN:-}" ]]; then
+        echo "$OLLAMA_STDIN" | truncate_input "$token_limit"
+    else
+        echo "No $error_noun provided" >&2
+        return 1
+    fi
+}
+
+# Detect programming language from file extension
+ollama_detect_lang() {
+    case "$1" in
+        *.py)         echo "python" ;;
+        *.ts|*.tsx)   echo "typescript" ;;
+        *.js|*.jsx)   echo "javascript" ;;
+        *.java)       echo "java" ;;
+        *.go)         echo "go" ;;
+        *.rs)         echo "rust" ;;
+        *.rb)         echo "ruby" ;;
+        *.sh|*.bash)  echo "bash" ;;
+        *)            echo "unknown" ;;
+    esac
 }
 
 # Generate completion (streaming disabled for scripting)
@@ -94,15 +157,22 @@ ollama_generate() {
 }
 
 # Chat completion with messages array
-# Args: model, messages_json, [tool_name]
+# Args: model, messages_json, [tool_name], [options_json]
 ollama_chat() {
     local model="$1"
     local messages="$2"
     local tool="${3:-${OLLAMA_TOOL_NAME:-chat}}"
+    local options_json="${4:-}"
 
     local payload
-    payload=$(jq -n --arg model "$model" --argjson messages "$messages" \
-        '{model: $model, messages: $messages, stream: false}')
+    if [[ -n "$options_json" ]]; then
+        payload=$(jq -n --arg model "$model" --argjson messages "$messages" \
+            --argjson opts "$options_json" \
+            '{model: $model, messages: $messages, stream: false, options: $opts}')
+    else
+        payload=$(jq -n --arg model "$model" --argjson messages "$messages" \
+            '{model: $model, messages: $messages, stream: false}')
+    fi
 
     local response
     response=$(curl -s --max-time "$OLLAMA_TIMEOUT" \
@@ -145,4 +215,16 @@ truncate_input() {
     local max_tokens="${1:-4000}"
     local max_chars=$((max_tokens * 4))
     head -c "$max_chars"
+}
+
+# Convenience wrapper for simple system+user chat calls.
+# Args: model, system_prompt, user_message, [tool_name], [options_json]
+ollama_chat_simple() {
+    local model="$1" system_prompt="$2" user_message="$3"
+    local tool="${4:-${OLLAMA_TOOL_NAME:-chat}}"
+    local options="${5:-}"
+    local messages
+    messages=$(jq -n --arg sys "$system_prompt" --arg usr "$user_message" \
+        '[{role:"system",content:$sys},{role:"user",content:$usr}]')
+    ollama_chat "$model" "$messages" "$tool" "$options"
 }
