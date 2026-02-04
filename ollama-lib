@@ -10,14 +10,22 @@ OLLAMA_TIMEOUT="${OLLAMA_TIMEOUT:-120}"
 # Respects OLLAMA_HOST if already set in environment
 OLLAMA_HOST="${OLLAMA_HOST:-}"
 _resolve_ollama_host() {
-    [[ -n "$OLLAMA_HOST" ]] && return
+    if [[ -n "$OLLAMA_HOST" ]]; then
+        if ! curl -s --connect-timeout 2 "$OLLAMA_HOST/api/tags" </dev/null >/dev/null 2>&1; then
+            echo "Error: Ollama not responding at $OLLAMA_HOST" >&2
+            return 1
+        fi
+        return
+    fi
     for host in "http://bigfish:11434" "http://192.168.0.70:11434"; do
-        if curl -s --connect-timeout 1 "$host/api/tags" </dev/null >/dev/null 2>&1; then
+        if curl -s --connect-timeout 2 "$host/api/tags" </dev/null >/dev/null 2>&1; then
             OLLAMA_HOST="$host"
             return
         fi
     done
-    OLLAMA_HOST="http://bigfish:11434"  # default, will fail with clear error
+    echo "Error: Cannot find Ollama server (tried bigfish:11434, 192.168.0.70:11434)" >&2
+    echo "Set OLLAMA_HOST to specify a server, for example OLLAMA_HOST=http://host:11434" >&2
+    return 1
 }
 _resolve_ollama_host
 OLLAMA_USAGE_LOG="${OLLAMA_USAGE_LOG:-$HOME/.cache/ollama-usage.jsonl}"
@@ -63,7 +71,7 @@ ollama_ping() {
 ollama_require() {
     if ! ollama_ping; then
         echo "Error: Cannot reach Ollama at $OLLAMA_HOST" >&2
-        exit 1
+        return 1
     fi
 }
 
@@ -95,7 +103,7 @@ ollama_read_input() {
         fi
         truncate_input "$token_limit" < "$file_path"
     elif [[ -n "${OLLAMA_STDIN:-}" ]]; then
-        echo "$OLLAMA_STDIN" | truncate_input "$token_limit"
+        printf '%s' "$OLLAMA_STDIN" | truncate_input "$token_limit"
     else
         echo "No $error_noun provided" >&2
         return 1
@@ -135,14 +143,18 @@ ollama_generate() {
     fi
 
     local response
-    response=$(curl -s --max-time "$OLLAMA_TIMEOUT" \
+    if ! response=$(curl -s --max-time "$OLLAMA_TIMEOUT" \
         -H "Content-Type: application/json" \
         -d "$payload" \
-        "$OLLAMA_HOST/api/generate" </dev/null 2>/dev/null)
+        "$OLLAMA_HOST/api/generate" </dev/null 2>/dev/null); then
+        echo "Error: Ollama request failed" >&2
+        return 1
+    fi
 
-    local exit_code=$?
-    if [[ $exit_code -ne 0 ]]; then
-        echo "Error: Ollama request failed (curl exit: $exit_code)" >&2
+    local api_error
+    api_error=$(echo "$response" | jq -r '.error // empty')
+    if [[ -n "$api_error" ]]; then
+        echo "Error: Ollama generate ($model): $api_error" >&2
         return 1
     fi
 
@@ -175,13 +187,18 @@ ollama_chat() {
     fi
 
     local response
-    response=$(curl -s --max-time "$OLLAMA_TIMEOUT" \
+    if ! response=$(curl -s --max-time "$OLLAMA_TIMEOUT" \
         -H "Content-Type: application/json" \
         -d "$payload" \
-        "$OLLAMA_HOST/api/chat" </dev/null 2>/dev/null)
-
-    if [[ $? -ne 0 ]]; then
+        "$OLLAMA_HOST/api/chat" </dev/null 2>/dev/null); then
         echo "Error: Ollama chat request failed" >&2
+        return 1
+    fi
+
+    local api_error
+    api_error=$(echo "$response" | jq -r '.error // empty')
+    if [[ -n "$api_error" ]]; then
+        echo "Error: Ollama chat ($model): $api_error" >&2
         return 1
     fi
 

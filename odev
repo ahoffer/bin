@@ -9,13 +9,18 @@ set -euo pipefail
 # Java 17, OSGi/Karaf, Spring, Solr, Docker, K8s, GitLab CI,
 # ActiveMQ, Codice/DDF, Codice/Alliance, Postgres, TypeScript/React.
 
-source "$(dirname "$0")/ollama-lib"
+source "$(dirname "$0")/ollama-lib" || exit 1
 
 # Comma-separated models.
 # First = generator, middle = verifier(s), last = reconciler.
-MODELS_CSV="${OLLAMA_MODELS:-qwen3-coder:latest,deepseek-coder:latest,llama3.1:latest}"
+MODELS_CSV="${OLLAMA_MODELS:-qwen2.5-coder:14b,qwen2.5-coder:7b,llama3.2:latest}"
 
 TASK="${OLLAMA_TASK:-review}"   # review | create | debug
+MODE="${OLLAMA_MODE:-quick}"   # quick | detail
+QUICK_MODEL="${OLLAMA_QUICK_MODEL:-qwen2.5-coder:14b}"
+DEBUG="${OLLAMA_DEBUG:-false}"
+
+dbg() { [[ "$DEBUG" == "true" ]] && echo "$*" >&2 || true; }
 
 NUM_PREDICT="${OLLAMA_NUM_PREDICT:-220}"
 TEMP_GEN="${OLLAMA_TEMPERATURE_GEN:-0.2}"
@@ -25,10 +30,10 @@ TOP_P="${OLLAMA_TOP_P:-0.9}"
 REPEAT_PENALTY="${OLLAMA_REPEAT_PENALTY:-1.1}"
 
 STOP_SEQS=(
-  "\n\nUser:"
-  "\n\nHuman:"
-  "\n\nQ:"
-  "</final>"
+  $'\n\nUser:'
+  $'\n\nHuman:'
+  $'\n\nQ:'
+  '</final>'
 )
 
 DOMAIN_CONTEXT=$'Primary stack / constraints:
@@ -45,31 +50,29 @@ DOMAIN_CONTEXT=$'Primary stack / constraints:
 - TypeScript + React + Next.js + Tailwind
 
 Output rules:
-- Be concise. Prefer bullets. No preamble.
-- Ask at most ONE clarifying question if required (versions, env).
-- Otherwise make reasonable assumptions and proceed.
-- If code/config is requested: output code only unless asked otherwise.
+- Absolute minimum words. No preamble, no disclaimers, no offers to help further.
+- Answer the question directly. If the answer is a single fact, give that fact and stop.
+- Never say "as of my last update" or suggest the user check a website.
+- Ask at most ONE clarifying question if required, otherwise assume and proceed.
+- If code/config is requested, output code only.
 '
 
 SYSTEM_GEN=$'You are the generator.
 Produce the best possible answer for the user request.
 Keep it concise and actionable.
-If critical version or environment details are missing, ask ONE question and stop.'
-$'\n\n'"$DOMAIN_CONTEXT"
+If critical version or environment details are missing, ask ONE question and stop.\n\n'"$DOMAIN_CONTEXT"
 
 SYSTEM_VERIFY=$'You are a verifier.
 Critique the generator output for correctness, omissions, and bad assumptions.
 Propose concrete fixes.
 Bullet points only.
-Ask ONE question only if validation is impossible without environment/version info.'
-$'\n\n'"$DOMAIN_CONTEXT"
+Ask ONE question only if validation is impossible without environment/version info.\n\n'"$DOMAIN_CONTEXT"
 
 SYSTEM_RECONCILE=$'You are the reconciler.
 Merge generator output and verifier feedback into ONE final answer.
 Prioritize correctness and brevity.
 Include fixes.
-Ask ONE question only if unavoidable.'
-$'\n\n'"$DOMAIN_CONTEXT"
+Ask ONE question only if unavoidable.\n\n'"$DOMAIN_CONTEXT"
 
 # If the message references a file path, read and embed its contents.
 # Recognizes patterns like "review the file ~/path" or "review ~/path" or
@@ -111,6 +114,28 @@ embed_file_content() {
   fi
 }
 
+# Simple heuristic to detect queries that would benefit from web search.
+# False positives add a few seconds of latency. False negatives just skip
+# the search, same as current behavior.
+needs_web_search() {
+  local msg="${1,,}"  # lowercase for matching
+  local pattern
+  pattern='(what year|what month|what date|current |today|right now|latest |newest |recent )'
+  pattern+='|(who is |what is the |how much |how many |price of |cost of |version of )'
+  pattern+='|(search for |look up |google )'
+  [[ "$msg" =~ $pattern ]]
+}
+
+# Fetch web search results via ddgr. Returns empty string on failure so the
+# pipeline still works without search results.
+web_search() {
+  local query="$1"
+  local search_results
+  search_results=$(ddgr --json --num 5 "$query" 2>/dev/null \
+    | jq -r '.[] | "Title: \(.title)\nURL: \(.url)\nSnippet: \(.abstract)\n"' 2>/dev/null) || true
+  printf '%s' "${search_results:-}"
+}
+
 split_models() {
   local -a models
   IFS=',' read -ra models <<< "$MODELS_CSV"
@@ -131,7 +156,7 @@ split_models() {
 _build_chat_options() {
   local temperature="$1"
   local stop_json
-  stop_json=$(printf '%s\n' "${STOP_SEQS[@]}" | jq -R . | jq -sc .)
+  stop_json=$(jq -n '$ARGS.positional' --args -- "${STOP_SEQS[@]}")
   jq -n --argjson np "$NUM_PREDICT" --argjson temp "$temperature" \
     --argjson tp "$TOP_P" --argjson rp "$REPEAT_PENALTY" \
     --argjson stop "$stop_json" \
@@ -141,17 +166,69 @@ _build_chat_options() {
 print_opts() {
   echo "HOST=$OLLAMA_HOST"
   echo "MODELS=$MODELS_CSV"
+  echo "QUICK_MODEL=$QUICK_MODEL"
+  echo "MODE=$MODE"
   echo "TASK=$TASK"
   echo "NUM_PREDICT=$NUM_PREDICT"
   echo "TEMP_GEN=$TEMP_GEN  TEMP_VERIFY=$TEMP_VERIFY  TEMP_RECONCILE=$TEMP_RECONCILE"
 }
 
-panel_run() {
+SYSTEM_QUICK=$'Answer the user request directly.\n\n'"$DOMAIN_CONTEXT"
+
+quick_run() {
   local user_msg="$1"
+  local force_search="${2:-auto}"
   local embedded
   embedded="$(embed_file_content "$user_msg")"
 
-  mapfile -t MODELS < <(split_models)
+  local do_search=false
+  case "$force_search" in
+    yes) do_search=true ;;
+    no)  do_search=false ;;
+    *)   needs_web_search "$user_msg" && do_search=true ;;
+  esac
+
+  if $do_search; then
+    dbg "[web search]"
+    local search_results
+    search_results="$(web_search "$user_msg")"
+    if [[ -n "$search_results" ]]; then
+      embedded=$'--- WEB SEARCH RESULTS ---\n'"$search_results"$'--- END WEB SEARCH ---\n\n'"$embedded"
+    fi
+  fi
+
+  local opts
+  opts=$(_build_chat_options "$TEMP_GEN")
+  dbg "[quick: $QUICK_MODEL]"
+  printf '%s' "$(ollama_chat_simple "$QUICK_MODEL" "$SYSTEM_QUICK" "[TASK=$TASK]"$'\n'"$embedded" "odev" "$opts")"
+}
+
+detail_run() {
+  local user_msg="$1"
+  local force_search="${2:-auto}"  # auto, yes, no
+  local embedded
+  embedded="$(embed_file_content "$user_msg")"
+
+  # Web search injection
+  local do_search=false
+  case "$force_search" in
+    yes) do_search=true ;;
+    no)  do_search=false ;;
+    *)   needs_web_search "$user_msg" && do_search=true ;;
+  esac
+
+  if $do_search; then
+    dbg "[web search]"
+    local search_results
+    search_results="$(web_search "$user_msg")"
+    if [[ -n "$search_results" ]]; then
+      embedded=$'--- WEB SEARCH RESULTS ---\n'"$search_results"$'--- END WEB SEARCH ---\n\n'"$embedded"
+    fi
+  fi
+
+  local models_output
+  models_output=$(split_models)
+  mapfile -t MODELS <<< "$models_output"
   local GEN="${MODELS[0]}"
   local REC="${MODELS[-1]}"
   local VERIFIERS=("${MODELS[@]:1:${#MODELS[@]}-2}")
@@ -163,12 +240,12 @@ panel_run() {
   ver_opts=$(_build_chat_options "$TEMP_VERIFY")
   rec_opts=$(_build_chat_options "$TEMP_RECONCILE")
 
-  echo "[generator: $GEN]" >&2
+  dbg "[generator: $GEN]"
   gen_out="$(ollama_chat_simple "$GEN" "$SYSTEM_GEN" "[TASK=$TASK]"$'\n'"$embedded" "odev" "$gen_opts")"
 
   ver_outs=""
   for v in "${VERIFIERS[@]}"; do
-    echo "[verifier: $v]" >&2
+    dbg "[verifier: $v]"
     local vo
     vo="$(ollama_chat_simple "$v" "$SYSTEM_VERIFY" "USER REQUEST:"$'\n'"$embedded"$'\n\n'"GENERATOR ANSWER:"$'\n'"$gen_out" "odev" "$ver_opts")"
     ver_outs+=$'\n\n'"[VERIFIER: $v]"$'\n'"$vo"
@@ -181,22 +258,40 @@ GENERATOR:
 $gen_out
 $ver_outs"
 
-  echo "[reconciler: $REC]" >&2
+  dbg "[reconciler: $REC]"
   final_out="$(ollama_chat_simple "$REC" "$SYSTEM_RECONCILE" "$reconcile_in" "odev" "$rec_opts")"
 
-  echo "$final_out"
+  printf '%s' "$final_out"
+}
+
+# Dispatch to quick_run or detail_run with a timer
+timed_run() {
+  local start=$SECONDS
+  if [[ "$MODE" == "detail" ]]; then
+    detail_run "$@"
+  else
+    quick_run "$@"
+  fi
+  local elapsed=$(( SECONDS - start ))
+  local mins=$(( elapsed / 60 ))
+  local secs=$(( elapsed % 60 ))
+  if (( mins > 0 )); then
+    printf ' (%dm %ds)\n' "$mins" "$secs"
+  else
+    printf ' (%ds)\n' "$secs"
+  fi
 }
 
 main() {
-  echo "Ollama multi-model panel"
-  echo "Models: $MODELS_CSV"
-  echo "Commands: /task review|create|debug | /models a,b,c | /opts | /quit"
-  echo
+  dbg "Ollama multi-model panel"
+  dbg "Models: $MODELS_CSV"
+  dbg "Commands: /task review|create|debug | /models a,b,c | /web | /noweb | /opts | /quit"
+  dbg ""
 
   while true; do
-    printf "> "
-    IFS= read -r line || break
+    IFS= read -e -r -p "> " line || break
     [[ -z "$line" ]] && continue
+    history -s "$line"
 
     case "$line" in
       /quit) exit 0 ;;
@@ -211,10 +306,34 @@ main() {
         echo "(models=$MODELS_CSV)"
         continue
         ;;
+      /web\ *)
+        timed_run "${line#/web }" "yes"
+        continue
+        ;;
+      /noweb\ *)
+        timed_run "${line#/noweb }" "no"
+        continue
+        ;;
+      /quick)
+        MODE="quick"
+        echo "(mode=quick)"
+        continue
+        ;;
+      /detail)
+        MODE="detail"
+        echo "(mode=detail)"
+        continue
+        ;;
+      /detail\ *)
+        local saved_mode="$MODE"
+        MODE=detail
+        timed_run "${line#/detail }"
+        MODE="$saved_mode"
+        continue
+        ;;
     esac
 
-    panel_run "$line"
-    echo
+    timed_run "$line"
   done
 }
 
