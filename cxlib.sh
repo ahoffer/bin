@@ -4,6 +4,57 @@
 # Source this file: source cxlib.sh
 
 # ─────────────────────────────────────────────────────────────
+# Terminal detection
+# ─────────────────────────────────────────────────────────────
+
+_IS_TTY=""
+[[ -t 1 ]] && _IS_TTY=1
+_C_RED=""
+_C_RST=""
+if [[ -n "$_IS_TTY" ]]; then
+  _C_RED=$'\033[31m'
+  _C_RST=$'\033[0m'
+fi
+
+# ─────────────────────────────────────────────────────────────
+# Output helpers
+# ─────────────────────────────────────────────────────────────
+
+warn_msg() {
+  echo "warning: $*"
+}
+
+err_msg() {
+  echo "error: $*" >&2
+}
+
+# Print step name without newline so time can be appended when done.
+_step_progress() {
+  [[ -n "$_IS_TTY" ]] && printf "%s" "$1"
+}
+
+# Finish a step line. On tty, appends time to the name already printed
+# by _step_progress. On non-tty, prints the full line.
+_step_done() {
+  local name="$1" time_str="$2" status="$3" logfile="${4:-}"
+  if [[ -n "$_IS_TTY" ]]; then
+    if [[ $status -eq 0 ]]; then
+      printf " - %s\n" "$time_str"
+    else
+      printf " ${_C_RED}✗${_C_RST}\n"
+      [[ -n "$logfile" ]] && echo "  ${logfile}"
+    fi
+  else
+    if [[ $status -eq 0 ]]; then
+      printf "%s - %s\n" "$name" "$time_str"
+    else
+      printf "%s FAILED\n" "$name"
+      [[ -n "$logfile" ]] && echo "  ${logfile}"
+    fi
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────
 # Timing
 # ─────────────────────────────────────────────────────────────
 
@@ -31,12 +82,6 @@ timer_elapsed() {
   _format_elapsed $((end - _TIMER_START))
 }
 
-timer_end() {
-  local label="${1:-Completed}"
-  echo "==> $label in $(timer_elapsed)"
-}
-
-
 # ─────────────────────────────────────────────────────────────
 # Project detection
 # ─────────────────────────────────────────────────────────────
@@ -60,7 +105,7 @@ find_project_root() {
 require_project_root() {
   PROJECT_ROOT=$(find_project_root)
   if [[ -z "$PROJECT_ROOT" ]]; then
-    echo "ERROR: Not in a project directory (no pom.xml found)" >&2
+    err_msg "Not in a project directory (no pom.xml found)"
     echo "Run this command from a project root or subdirectory" >&2
     exit 1
   fi
@@ -83,7 +128,7 @@ acquire_lock() {
   exec 9>"$lock_file"
 
   if ! flock -n 9; then
-    echo "ERROR: Another $lock_name is running for this project" >&2
+    err_msg "Another $lock_name is running for this project"
     echo "Lock file: $lock_file" >&2
     exit 1
   fi
@@ -146,73 +191,83 @@ maven_modules_for_components() {
 mvn_build() {
   local dir="$1"
   local name="${2:-$dir}"
-  local logfile="/tmp/cxbuild-mvn-${name}.log"
+  local log_name
+  log_name=$(basename "$name")
+  local logfile="/tmp/cxbuild-mvn-${log_name}.log"
   local start
   start=$(date +%s)
-  [[ -d "$dir" ]] || { echo "Error: Directory not found: $dir" >&2; return 1; }
-  echo "==> Maven build: $name -> $logfile"
+  [[ -d "$dir" ]] || { err_msg "Directory not found: $dir"; return 1; }
+  _step_progress "maven $name"
   (cd "$dir" && mvn clean install -DskipTests -T6) > "$logfile" 2>&1
   local status=$?
   local elapsed=$(($(date +%s) - start))
   local time_str
   time_str=$(_format_elapsed $elapsed)
-  [[ $status -eq 0 ]] && echo "    [OK] $name ($time_str)" || echo "    [FAIL] $name ($time_str) - see $logfile"
+  _step_done "maven $name" "$time_str" "$status" "$logfile"
   return $status
 }
 
-# ─────────────────────────────────────────────────────────────
-# Parallel job execution
-# ─────────────────────────────────────────────────────────────
-
-# Global associative arrays for job tracking
-declare -gA _JOB_PIDS=()
-declare -ga _JOB_FAILURES=()
-
-# Clear job tracking state
-jobs_init() {
-  _JOB_PIDS=()
-}
-
-# Start a background job with logging
-# Usage: job_start <name> <logfile> <command...>
-job_start() {
-  local name="$1"
-  local logfile="$2"
-  shift 2
-  (
-    "$@" > "$logfile" 2>&1
-    local status=$?
-    [[ $status -eq 0 ]] && echo "[OK] $name" || echo "[FAIL] $name - see $logfile"
-    exit $status
-  ) &
-  _JOB_PIDS[$name]=$!
-}
-
-# Wait for all jobs and collect failures into provided array
-# Usage: jobs_wait failures_array
-jobs_wait() {
-  local -n failures_ref=$1
-  local prefix="${2:-job}"
-  for name in "${!_JOB_PIDS[@]}"; do
-    wait "${_JOB_PIDS[$name]}" || failures_ref+=("${prefix}:$name")
+# Build all maven modules needed by the given components, deduplicated.
+# Usage: build_maven_modules <project_root> <component...>
+build_maven_modules() {
+  local project_root="$1"
+  shift
+  local -a _bm_comps=("$@")
+  local -a modules
+  mapfile -t modules < <(maven_modules_for_components _bm_comps)
+  for module in "${modules[@]}"; do
+    mvn_build "$project_root/$module" "$project_root/$module" || return 1
   done
 }
 
-# Run a command in subshell with logging, print [OK]/[FAIL]
-# Usage: run_logged <name> <logfile> <command...>
-# Returns: exit status of command
+# Build docker image for a component
+# Usage: docker_build <project_root> <component>
+docker_build() {
+  local project_root="$1"
+  local component="$2"
+  local docker_dir
+  docker_dir=$(cxconfig dir "$component")
+  [[ -d "$project_root/docker/$docker_dir" ]] || {
+    err_msg "Directory not found: $project_root/docker/$docker_dir"
+    return 1
+  }
+  local log_file
+  log_file=$(logfile cxbuild "$docker_dir")
+  run_logged "docker $project_root/docker/$docker_dir" "$log_file" \
+    bash -c 'cd "$1" && mvn install -DskipTests' _ "$project_root/docker/$docker_dir"
+}
+
+# Deploy a component image to remote host
+# Usage: deploy_component <component> <remote_host> <namespace>
+deploy_component() {
+  local component="$1"
+  local remote_host="$2"
+  local namespace="$3"
+  local image deploy_name timeout
+  image=$(cxconfig image "$component")
+  deploy_name=$(cxconfig deploy "$component")
+  timeout=$(cxconfig timeout "$component")
+  local log_file
+  log_file=$(logfile cxdeploy "$component")
+  run_logged "deploy $component" "$log_file" \
+    deploy-image.sh -q -r "$remote_host" -n "$namespace" -t "$timeout" "$image" "$deploy_name"
+}
+
+# Run a command with output redirected to logfile, showing name and elapsed
+# time on completion. On failure, shows logfile path instead of time.
 run_logged() {
   local name="$1"
   local logfile="$2"
   shift 2
   local start
   start=$(date +%s)
+  _step_progress "$name"
   "$@" > "$logfile" 2>&1
   local status=$?
   local elapsed=$(($(date +%s) - start))
   local time_str
   time_str=$(_format_elapsed $elapsed)
-  [[ $status -eq 0 ]] && echo "    [OK] $name ($time_str)" || echo "    [FAIL] $name ($time_str) - see $logfile"
+  _step_done "$name" "$time_str" "$status" "$logfile"
   return $status
 }
 
@@ -233,12 +288,4 @@ logfile() {
   else
     echo "/tmp/${prefix}-${ts}.log"
   fi
-}
-
-# Generate simple log file path without timestamp
-# Usage: logfile_simple <prefix> <suffix>
-logfile_simple() {
-  local prefix="$1"
-  local suffix="$2"
-  echo "/tmp/${prefix}-${suffix}.log"
 }

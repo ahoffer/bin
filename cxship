@@ -1,7 +1,9 @@
 #!/bin/bash
 set -uo pipefail  # no -e: continue on errors, report all at end
 
-# Build and deploy components (calls cxbuild + cxdeploy for each)
+# Build and deploy components.
+# Maven modules are built sequentially, then docker images are built in
+# parallel. Each component is deployed as soon as its image is ready.
 # Must be run from within a project directory (walks up to find pom.xml).
 # App is auto-detected from the project root directory name.
 #
@@ -19,7 +21,7 @@ source cxlib.sh
 timer_start
 
 usage() {
-  sed -n '4,16p' "$0"
+  sed -n '4,18p' "$0"
   echo -e "\nComponents: $(list_components)"
   exit 0
 }
@@ -40,54 +42,58 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Verify we're in a project directory (walks up tree like git)
 require_project_root
 acquire_lock "builddeploy"
 
 app=$(cxconfig app)
 [[ -z "$namespace" ]] && namespace=$(cxconfig namespace)
 
-# Get available components
 mapfile -t all_components < <(cxconfig components)
 
-# Determine which components to build
 if [[ -n "$build_all" ]]; then
   components=("${all_components[@]}")
 elif [[ ${#components[@]} -eq 0 ]]; then
-  echo "Error: Specify components or use --all" >&2
+  err_msg "Specify components or use --all"
   echo "Available: ${all_components[*]}" >&2
   exit 1
 fi
 
-# Validate components
 for c in "${components[@]}"; do
-  valid_component "$c" all_components || { echo "Error: Unknown component '$c'" >&2; exit 1; }
+  valid_component "$c" all_components || { err_msg "Unknown component '$c'"; exit 1; }
 done
 
+project_root=$(cxconfig root)
+
+# Phase 1: Maven modules, sequential. Abort if any fails since docker
+# builds depend on these artifacts.
+build_maven_modules "$project_root" "${components[@]}" || {
+  err_msg "Maven build failed, aborting"
+  exit 1
+}
+
+# Phase 2: Docker build + deploy, parallel per component. Each subshell
+# builds the docker image and then immediately deploys it. TTY mode is
+# disabled so parallel output prints complete lines.
 declare -a failures=()
+declare -A pids=()
 
-echo "==> Build and Deploy: ${components[*]}"
-
-# Build all components, then deploy all
 for component in "${components[@]}"; do
-  cxbuild "$component" || failures+=("build:$component")
+  (
+    _IS_TTY=""
+    docker_build "$project_root" "$component" || exit 1
+    deploy_component "$component" "$remote_host" "$namespace" || exit 1
+  ) &
+  pids[$component]=$!
 done
 
 for component in "${components[@]}"; do
-  cxdeploy -r "$remote_host" -n "$namespace" "$component" || failures+=("deploy:$component")
+  wait "${pids[$component]}" || failures+=("$component")
 done
 
-# Summary
 echo
-echo "========================================"
-echo "Summary"
-echo "========================================"
-
 if [[ ${#failures[@]} -eq 0 ]]; then
-  timer_end "SUCCESS: ${#components[@]} component(s) built and deployed"
+  echo "Shipped $(IFS=', '; echo "${components[*]}") - $(timer_elapsed)"
 else
-  echo "FAILURES: ${#failures[@]} task(s) failed:"
-  printf '  - %s\n' "${failures[@]}"
-  timer_end "Completed with errors"
+  echo "Failed $(IFS=', '; echo "${failures[*]}") - $(timer_elapsed)"
   exit 1
 fi

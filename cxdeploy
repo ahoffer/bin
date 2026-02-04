@@ -13,7 +13,6 @@ set -euo pipefail
 #   -n, --namespace NS  Kubernetes namespace (default: auto from app)
 
 source cxlib.sh
-timer_start
 
 usage() {
   sed -n '4,13p' "$0"
@@ -36,32 +35,31 @@ done
 
 component="${1:?Usage: cxdeploy [-r host] [-n namespace] <component>}"
 
-# Verify we're in a project directory (walks up tree like git)
 require_project_root
 acquire_lock "deploy"
+
+mapfile -t all_components < <(cxconfig components)
+valid_component "$component" all_components || { err_msg "Unknown component '$component'"; exit 1; }
 
 [[ -z "$namespace" ]] && namespace=$(cxconfig namespace)
 
 image=$(cxconfig image "$component")
-deploy=$(cxconfig deploy "$component")
-timeout=$(cxconfig timeout "$component")
 image_age=$(image-age "$image")
 
 # Check local image exists
 local_hash=$(docker inspect --format='{{.Id}}' "$image" 2>/dev/null) || local_hash=""
-[[ -z "$local_hash" ]] && { echo "ERROR: Local image not found - build first" >&2; exit 1; }
+[[ -z "$local_hash" ]] && { err_msg "Local image not found, build first"; exit 1; }
 
 # Warn if local image matches deployed version
 if ssh -o ConnectTimeout=5 -o BatchMode=yes "$remote_host" true 2>/dev/null; then
   remote_hash=$(ssh "$remote_host" "sudo nerdctl -n k8s.io inspect --format='{{.Id}}' '$image'" 2>/dev/null) || remote_hash=""
   if [[ -n "$remote_hash" && "$local_hash" == "$remote_hash" ]]; then
-    echo "WARNING: Image unchanged from deployed version - did you forget to build?"
+    warn_msg "Image unchanged from deployed version. Did you forget to build?"
     read -p "Continue anyway? [y/N] " -n 1 -r
     echo
     [[ ! $REPLY =~ ^[Yy]$ ]] && exit 1
   fi
 fi
 
-echo "==> Deploying $component ($deploy, $image_age old)"
-deploy-image.sh -q -r "$remote_host" -n "$namespace" -t "$timeout" "$image" "$deploy"
-timer_end "$component live at $(date '+%Y-%m-%d %H:%M:%S')"
+echo "image $image, ${image_age} old"
+deploy_component "$component" "$remote_host" "$namespace" || exit 1
