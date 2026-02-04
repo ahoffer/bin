@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+#
+# Fetch GitLab API resources by translating a web URL into the
+# corresponding /api/v4 endpoint. Prints formatted JSON to stdout
+# by default.
+#
+# Usage:
+#   request-gitlab <gitlab-web-url> [api-sub-resource]
+#   request-gitlab --raw <gitlab-web-url> [api-sub-resource]
+
+set -euo pipefail
+
+raw=false
+if [[ "${1:-}" == "--raw" ]]; then
+    raw=true
+    shift
+fi
+
+if [[ -z "${1:-}" ]]; then
+    echo "Usage: request-gitlab [--raw] <gitlab-web-url> [api-sub-resource]" >&2
+    exit 1
+fi
+
+if [[ -z "${GITLAB_BOT_READ_TOKEN:-}" ]]; then
+    echo "GITLAB_BOT_READ_TOKEN is not set." >&2
+    echo "" >&2
+    echo "Export it before running this script, for example:" >&2
+    echo "  export GITLAB_BOT_READ_TOKEN=glpat-xxxxxxxxxxxxxxxxxxxx" >&2
+    exit 1
+fi
+
+web_url="$1"
+sub_resource="${2:-}"
+
+# Strip protocol and split into host and path
+without_protocol="${web_url#https://}"
+without_protocol="${without_protocol#http://}"
+host="${without_protocol%%/*}"
+path="${without_protocol#*/}"
+
+# Separate the project path from any resource path that follows a
+# gitlab separator like /-/merge_requests or /-/issues
+if [[ "$path" == *"/-/"* ]]; then
+    project_path="${path%%/-/*}"
+    resource_tail="${path#*/-/}"
+else
+    project_path="$path"
+    resource_tail=""
+fi
+
+# URL-encode the project path by replacing slashes
+encoded_project="${project_path//\//%2F}"
+
+# Build the API URL
+api_url="https://${host}/api/v4/projects/${encoded_project}"
+if [[ -n "$resource_tail" ]]; then
+    api_url="${api_url}/${resource_tail}"
+fi
+if [[ -n "$sub_resource" ]]; then
+    api_url="${api_url}/${sub_resource}"
+fi
+
+if $raw; then
+    curl -s -k --header "PRIVATE-TOKEN: $GITLAB_BOT_READ_TOKEN" "$api_url"
+else
+    curl -s -k --header "PRIVATE-TOKEN: $GITLAB_BOT_READ_TOKEN" "$api_url" | jq .
+fi
