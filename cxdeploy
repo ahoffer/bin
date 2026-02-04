@@ -64,4 +64,4 @@ fi
 
 echo "==> Deploying $component ($deploy, $image_age old)"
 deploy-image.sh -q -r "$remote_host" -n "$namespace" -t "$timeout" "$image" "$deploy"
-timer_end "Deploy complete"
+timer_end "$component live at $(date '+%Y-%m-%d %H:%M:%S')"

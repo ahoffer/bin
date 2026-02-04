@@ -8,7 +8,6 @@
 # ─────────────────────────────────────────────────────────────
 
 _TIMER_START=""
-_PHASE_START=""
 
 timer_start() {
   _TIMER_START=$(date +%s)
@@ -37,39 +36,6 @@ timer_end() {
   echo "==> $label in $(timer_elapsed)"
 }
 
-# Phase timing for use within phases
-phase_timer_start() {
-  _PHASE_START=$(date +%s)
-}
-
-phase_timer_elapsed() {
-  local end
-  end=$(date +%s)
-  _format_elapsed $((end - _PHASE_START))
-}
-
-# ─────────────────────────────────────────────────────────────
-# Phase headers
-# ─────────────────────────────────────────────────────────────
-
-# Print a phase header
-# Usage: phase_header "1/4" "Building source code"
-phase_header() {
-  local phase_num="$1"
-  local title="$2"
-  echo
-  echo "========================================"
-  echo "Phase ${phase_num}: ${title}"
-  echo "========================================"
-  phase_timer_start
-}
-
-# Print phase completion with timing
-# Usage: phase_done "3/4"
-phase_done() {
-  local phase_num="$1"
-  echo "    Phase ${phase_num} completed in $(phase_timer_elapsed)"
-}
 
 # ─────────────────────────────────────────────────────────────
 # Project detection
@@ -239,9 +205,14 @@ run_logged() {
   local name="$1"
   local logfile="$2"
   shift 2
+  local start
+  start=$(date +%s)
   "$@" > "$logfile" 2>&1
   local status=$?
-  [[ $status -eq 0 ]] && echo "[OK] $name" || echo "[FAIL] $name - see $logfile"
+  local elapsed=$(($(date +%s) - start))
+  local time_str
+  time_str=$(_format_elapsed $elapsed)
+  [[ $status -eq 0 ]] && echo "    [OK] $name ($time_str)" || echo "    [FAIL] $name ($time_str) - see $logfile"
   return $status
 }
 
