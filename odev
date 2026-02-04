@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ollama-panel.sh
+# Multi-model panel using Ollama /api/chat:
+#   generator -> verifier(s) -> reconciler
+#
+# Designed for concise, correct work across:
+# Java 17, OSGi/Karaf, Spring, Solr, Docker, K8s, GitLab CI,
+# ActiveMQ, Codice/DDF, Codice/Alliance, Postgres, TypeScript/React.
+
+HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
+
+# Comma-separated models.
+# First = generator, middle = verifier(s), last = reconciler.
+MODELS_CSV="${OLLAMA_MODELS:-qwen3-coder:latest,deepseek-coder:latest,llama3.1:latest}"
+
+TASK="${OLLAMA_TASK:-review}"   # review | create | debug
+
+NUM_PREDICT="${OLLAMA_NUM_PREDICT:-220}"
+TEMP_GEN="${OLLAMA_TEMPERATURE_GEN:-0.2}"
+TEMP_VERIFY="${OLLAMA_TEMPERATURE_VERIFY:-0.1}"
+TEMP_RECONCILE="${OLLAMA_TEMPERATURE_RECONCILE:-0.2}"
+TOP_P="${OLLAMA_TOP_P:-0.9}"
+REPEAT_PENALTY="${OLLAMA_REPEAT_PENALTY:-1.1}"
+
+STOP_SEQS=(
+  "\n\nUser:"
+  "\n\nHuman:"
+  "\n\nQ:"
+  "</final>"
+)
+
+DOMAIN_CONTEXT=$'Primary stack / constraints:
+- Java 17, Maven, JUnit 5
+- OSGi + Apache Karaf (features, bundles, resolver issues, version ranges)
+- Spring (Boot 2/3), including non-Boot OSGi containers
+- Solr (schema, analysis, queries, performance)
+- Docker (multi-stage builds, runtime issues)
+- Kubernetes (deployments, Helm), config/secret hygiene
+- GitLab CI/CD (.gitlab-ci.yml), runners, caching, artifacts, pipelines, deployments
+- ActiveMQ (classic), DLQ patterns
+- Codice/DDF, Codice/Alliance conventions
+- Postgres (SQL, indexing, jsonb, migrations)
+- TypeScript + React + Next.js + Tailwind
+
+Output rules:
+- Be concise. Prefer bullets. No preamble.
+- Ask at most ONE clarifying question if required (versions, env).
+- Otherwise make reasonable assumptions and proceed.
+- If code/config is requested: output code only unless asked otherwise.
+'
+
+SYSTEM_GEN=$'You are the generator.
+Produce the best possible answer for the user request.
+Keep it concise and actionable.
+If critical version or environment details are missing, ask ONE question and stop.'
+$'\n\n'"$DOMAIN_CONTEXT"
+
+SYSTEM_VERIFY=$'You are a verifier.
+Critique the generator output for correctness, omissions, and bad assumptions.
+Propose concrete fixes.
+Bullet points only.
+Ask ONE question only if validation is impossible without environment/version info.'
+$'\n\n'"$DOMAIN_CONTEXT"
+
+SYSTEM_RECONCILE=$'You are the reconciler.
+Merge generator output and verifier feedback into ONE final answer.
+Prioritize correctness and brevity.
+Include fixes.
+Ask ONE question only if unavoidable.'
+$'\n\n'"$DOMAIN_CONTEXT"
+
+json_escape() {
+  python3 - <<'PY' "$1"
+import json,sys
+print(json.dumps(sys.argv[1]))
+PY
+}
+
+split_models() {
+  python3 - <<'PY' "$MODELS_CSV"
+import sys
+models=[m.strip() for m in sys.argv[1].split(",") if m.strip()]
+if len(models) < 2:
+  raise SystemExit("Need at least 2 models (generator, reconciler).")
+print("\n".join(models))
+PY
+}
+
+call_chat() {
+  local model="$1"
+  local system="$2"
+  local user="$3"
+  local temperature="$4"
+
+  local payload
+  payload="$(python3 - "$model" "$system" "$user" "$NUM_PREDICT" "$temperature" "$TOP_P" "$REPEAT_PENALTY" "${STOP_SEQS[@]}" <<'PY'
+import json,sys
+model=sys.argv[1]
+system=sys.argv[2]
+user=sys.argv[3]
+num_predict=int(sys.argv[4])
+temperature=float(sys.argv[5])
+top_p=float(sys.argv[6])
+repeat_penalty=float(sys.argv[7])
+stop=list(sys.argv[8:])
+
+payload={
+  "model": model,
+  "messages": [
+    {"role":"system","content":system},
+    {"role":"user","content":user}
+  ],
+  "stream": False,
+  "options": {
+    "num_predict": num_predict,
+    "temperature": temperature,
+    "top_p": top_p,
+    "repeat_penalty": repeat_penalty,
+    "stop": stop
+  }
+}
+print(json.dumps(payload))
+PY
+)"
+
+  curl -sS "$HOST/api/chat" \
+    -H 'Content-Type: application/json' \
+    -d "$payload" \
+  | python3 - <<'PY'
+import json,sys
+data=json.load(sys.stdin)
+print((data.get("message") or {}).get("content","").rstrip())
+PY
+}
+
+print_opts() {
+  echo "HOST=$HOST"
+  echo "MODELS=$MODELS_CSV"
+  echo "TASK=$TASK"
+  echo "NUM_PREDICT=$NUM_PREDICT"
+  echo "TEMP_GEN=$TEMP_GEN  TEMP_VERIFY=$TEMP_VERIFY  TEMP_RECONCILE=$TEMP_RECONCILE"
+}
+
+panel_run() {
+  local user_msg="$1"
+
+  mapfile -t MODELS < <(split_models)
+  local GEN="${MODELS[0]}"
+  local REC="${MODELS[-1]}"
+  local VERIFIERS=("${MODELS[@]:1:${#MODELS[@]}-2}")
+
+  local gen_out ver_outs reconcile_in final_out
+
+  gen_out="$(call_chat "$GEN" "$SYSTEM_GEN" "[TASK=$TASK]\n$user_msg" "$TEMP_GEN")"
+
+  ver_outs=""
+  for v in "${VERIFIERS[@]}"; do
+    local vo
+    vo="$(call_chat "$v" "$SYSTEM_VERIFY" "USER REQUEST:\n$user_msg\n\nGENERATOR ANSWER:\n$gen_out" "$TEMP_VERIFY")"
+    ver_outs+=$'\n\n'"[VERIFIER: $v]"$'\n'"$vo"
+  done
+
+  reconcile_in="USER REQUEST:
+$user_msg
+
+GENERATOR:
+$gen_out
+$ver_outs"
+
+  final_out="$(call_chat "$REC" "$SYSTEM_RECONCILE" "$reconcile_in" "$TEMP_RECONCILE")"
+
+  echo "$final_out"
+}
+
+main() {
+  echo "Ollama multi-model panel"
+  echo "Models: $MODELS_CSV"
+  echo "Commands: /task review|create|debug | /models a,b,c | /opts | /quit"
+  echo
+
+  while true; do
+    printf "> "
+    IFS= read -r line || break
+    [[ -z "$line" ]] && continue
+
+    case "$line" in
+      /quit) exit 0 ;;
+      /opts) print_opts; continue ;;
+      /task\ *)
+        TASK="${line#/task }"
+        echo "(task=$TASK)"
+        continue
+        ;;
+      /models\ *)
+        MODELS_CSV="${line#/models }"
+        echo "(models=$MODELS_CSV)"
+        continue
+        ;;
+    esac
+
+    panel_run "$line"
+    echo
+  done
+}
+
+main "$@"
+
