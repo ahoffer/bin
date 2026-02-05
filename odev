@@ -9,7 +9,7 @@ set -euo pipefail
 # Java 17, OSGi/Karaf, Spring, Solr, Docker, K8s, GitLab CI,
 # ActiveMQ, Codice/DDF, Codice/Alliance, Postgres, TypeScript/React.
 
-source "$(dirname "$0")/ollama-lib" || exit 1
+source "$(dirname "$0")/ollamalib" || exit 1
 
 # Comma-separated models.
 # First = generator, middle = verifier(s), last = reconciler.

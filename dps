@@ -10,7 +10,7 @@ set -euo pipefail
 TAB=$'\t'
 
 # Get base CLI name
-CLI=$(container-cli)
+CLI=$(containercli)
 
 # Test if we need sudo
 if $CLI ps &>/dev/null; then

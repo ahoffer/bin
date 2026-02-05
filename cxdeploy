@@ -44,7 +44,7 @@ valid_component "$component" all_components || { err_msg "Unknown component '$co
 [[ -z "$namespace" ]] && namespace=$(cxconfig namespace)
 
 image=$(cxconfig image "$component")
-image_age=$(image-age "$image")
+image_age=$(imageage "$image")
 
 # Check local image exists
 local_hash=$(docker inspect --format='{{.Id}}' "$image" 2>/dev/null) || local_hash=""

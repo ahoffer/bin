@@ -250,7 +250,7 @@ deploy_component() {
   local log_file
   log_file=$(logfile cxdeploy "$component")
   run_logged "deploy $component" "$log_file" \
-    deploy-image.sh -q -r "$remote_host" -n "$namespace" -t "$timeout" "$image" "$deploy_name"
+    deployimage -q -r "$remote_host" -n "$namespace" -t "$timeout" "$image" "$deploy_name"
 }
 
 # Run a command with output redirected to logfile, showing name and elapsed

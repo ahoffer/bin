@@ -1,4 +1,0 @@
-#!/bin/bash
-# Show Ollama token usage for current Claude Code session
-# Thin wrapper around llm-usage, kept for backward compatibility
-exec llm-usage "$@"
