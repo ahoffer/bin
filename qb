@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Initialize variables with default values
-clean=true
+clean=false
 skip_tests=true
 disable_multithreading=false
 enable_retag=false
@@ -11,8 +11,8 @@ MAVEN_ARGS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --dirty|-d)
-            clean=false
+        --clean|-c)
+            clean=true
             shift
             ;;
         --test|-t)
@@ -34,7 +34,7 @@ Usage: $0 [OPTIONS] [MAVEN-GOALS]
 Quick Build with Docker - builds with default docker registry, then retags with branch/commit.
 
 Options:
-  -d, --dirty       Skip clean step (incremental build)
+  -c, --clean       Run clean before build (default: incremental)
   -t, --test        Run tests (default: skip tests)
   -1, --single-thread Disable multi-threading (default: -T6)
   -r, --retag       Retag built images with branch/commit (default: no retagging)
@@ -96,6 +96,13 @@ $skip_tests && MAVEN_ARGS+=("-DskipTests")
 
 # Add custom arguments
 MAVEN_ARGS+=("${custom_args[@]}")
+
+# Run yarn fix in frontend if the project has one
+git_root=$(git rev-parse --show-toplevel 2>/dev/null) || true
+if [[ -n "$git_root" && -f "$git_root/frontend/package.json" ]]; then
+    echo "Running yarn fix in $git_root/frontend"
+    (cd "$git_root/frontend" && yarn fix)
+fi
 
 #This can mess up other projects
 mvn com.spotify.fmt:fmt-maven-plugin:format -T6
