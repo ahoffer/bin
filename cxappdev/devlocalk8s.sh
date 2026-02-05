@@ -1,6 +1,20 @@
 #!/bin/bash
+#
+# Copyright (c) Octo Consulting Group
+#
+# <p>This is free software: you can redistribute it and/or modify it under the terms of the GNU
+# Lesser General Public License as published by the Free Software Foundation, either version 3 of
+# the License, or any later version.
+#
+# <p>This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+# without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Lesser General Public License for more details. A copy of the GNU Lesser General Public
+# License is distributed along with this program and can be found at
+# <http://www.gnu.org/licenses/lgpl.html>.
+#
+
 # ═══════════════════════════════════════════════════════════════════════════════
-# dev-local.sh - Local Development Server for CX Search Frontend
+# devlocalk8s.sh - Local Development Server for CX Search Frontend
 # ═══════════════════════════════════════════════════════════════════════════════
 #
 # PURPOSE:
@@ -8,7 +22,7 @@
 #   services running on a remote Kubernetes cluster (octocx).
 #
 # USAGE:
-#   ./dev-local.sh
+#   ./devlocalk8s.sh
 #
 # PREREQUISITES:
 #   - Backend services running on octocx (K8s)
@@ -33,7 +47,7 @@
 #   We must provide the CA cert that signed octocx's certificates.
 #
 # FILES:
-#   dev-local.sh          - This script
+#   devlocalk8s.sh        - This script
 #   next.config.local.js  - Next.js config with rewrite rules (standalone copy)
 #
 # ═══════════════════════════════════════════════════════════════════════════════
