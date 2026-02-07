@@ -17,7 +17,7 @@ DB_PATH="$HOME/.pki/nssdb/cert9.db"
 # 3) Check that NSS DB exists and is initialized
 if [ ! -f "$DB_PATH" ]; then
   echo "✗ ERROR: NSS DB not found or not initialized at $DB_PATH"
-  echo "  Please run setup-nssdb.sh first to create and initialize your NSS database."
+  echo "  Please run setupnssdb.sh first to create and initialize your NSS database."
   exit 1
 fi
 

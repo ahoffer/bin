@@ -1,14 +1,14 @@
 #!/bin/bash
 # Run Maven tests with auto-summary
-# Usage: llm-mvn-test [module]   # Test specific module
-#        llm-mvn-test            # Test from current dir
+# Usage: llmmvntest [module]   # Test specific module
+#        llmmvntest            # Test from current dir
 
 set -euo pipefail
 
 if [[ $# -gt 0 ]]; then
     # Test specific module
-    llm-watch "mvn clean test -pl $1 -am"
+    llmwatch "mvn clean test -pl $1 -am"
 else
     # Test current directory
-    llm-watch "mvn clean test"
+    llmwatch "mvn clean test"
 fi

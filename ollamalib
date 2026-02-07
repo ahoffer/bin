@@ -1,6 +1,6 @@
 #!/bin/bash
 # Ollama shared library - source this in other scripts
-# Usage: source ollama-lib
+# Usage: source ollamalib
 
 OLLAMA_TIMEOUT="${OLLAMA_TIMEOUT:-120}"
 
@@ -38,7 +38,7 @@ fi
 OLLAMA_CONVERSATION_ID="${OLLAMA_CONVERSATION_ID:-}"
 
 # Auto-derive tool name from the calling script
-OLLAMA_TOOL_NAME="${OLLAMA_TOOL_NAME:-$(basename "${BASH_SOURCE[-1]:-$0}" | sed 's/^llm-//')}"
+OLLAMA_TOOL_NAME="${OLLAMA_TOOL_NAME:-$(basename "${BASH_SOURCE[-1]:-$0}" | sed 's/^llm//')}"
 
 # Models
 MODEL_CHAT="${OLLAMA_MODEL_CHAT:-llama3.2:latest}"

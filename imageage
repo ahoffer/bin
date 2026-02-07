@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # Print human-readable age of a docker image
-# Usage: image-age <image>
+# Usage: imageage <image>
 
-IMAGE="${1:?Usage: image-age <image>}"
+IMAGE="${1:?Usage: imageage <image>}"
 
 CREATED=$(docker inspect --format='{{.Created}}' "$IMAGE" 2>/dev/null) || { echo "unknown"; exit 0; }
 CREATED_SECS=$(date -d "$CREATED" +%s 2>/dev/null) || { echo "unknown"; exit 0; }

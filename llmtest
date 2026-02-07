@@ -1,11 +1,11 @@
 #!/bin/bash
 # Generate unit test stubs for code
-# Usage: llm-test function.py
-#        llm-test --framework jest component.tsx
-#        cat class.java | llm-test --framework junit
+# Usage: llmtest function.py
+#        llmtest --framework jest component.tsx
+#        cat class.java | llmtest --framework junit
 
 set -euo pipefail
-source "$(dirname "$0")/ollama-lib"
+source "$(dirname "$0")/ollamalib"
 ollama_capture_stdin
 ollama_require
 

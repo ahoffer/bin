@@ -1,12 +1,12 @@
 #!/bin/bash
 # Generate conventional commit message from staged changes
-# Usage: llm-commit-msg [--type TYPE]
+# Usage: llmcommitmsg [--type TYPE]
 # Examples:
-#   llm-commit-msg           # auto-detect type
-#   llm-commit-msg --type fix
+#   llmcommitmsg           # auto-detect type
+#   llmcommitmsg --type fix
 
 set -euo pipefail
-source "$(dirname "$0")/ollama-lib"
+source "$(dirname "$0")/ollamalib"
 ollama_require
 
 # Parse args

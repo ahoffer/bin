@@ -5,11 +5,11 @@ set -euo pipefail
 trap 'pkill -P $$ 2>/dev/null || true' EXIT
 
 # Deploy a Docker image to k3s: push, restart, and verify
-# Usage: deploy-image.sh [-r host] [-n namespace] [-t timeout] <image:tag> [deployment]
+# Usage: deployimage [-r host] [-n namespace] [-t timeout] <image:tag> [deployment]
 # Examples:
-#   deploy-image.sh myapp:1.0 cx-app
-#   deploy-image.sh -r node2 myapp:1.0 cx-app
-#   deploy-image.sh -n prod -t 180 myapp:1.0 cx-app
+#   deployimage myapp:1.0 cx-app
+#   deployimage -r node2 myapp:1.0 cx-app
+#   deployimage -n prod -t 180 myapp:1.0 cx-app
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -38,7 +38,7 @@ done
 q_flag=""
 $quiet && q_flag="-q"
 
-readonly IMAGE="${1:?Usage: deploy-image.sh [-r host] [-n namespace] <image:tag> [deployment]}"
+readonly IMAGE="${1:?Usage: deployimage [-r host] [-n namespace] <image:tag> [deployment]}"
 if [[ -n "${2:-}" ]]; then
   DEPLOY="$2"
 else
@@ -47,12 +47,12 @@ else
 fi
 
 # Push image to remote k3s node
-"$SCRIPT_DIR/k3s-push-image" $q_flag -H "$remote_host" "$IMAGE"
+"$SCRIPT_DIR/k3spushimage" $q_flag -H "$remote_host" "$IMAGE"
 
 # Restart deployment and wait for rollout
-"$SCRIPT_DIR/k8s-restart-deploy" $q_flag -n "$namespace" -t "${timeout}s" "$DEPLOY"
+"$SCRIPT_DIR/k8srestartdeploy" $q_flag -n "$namespace" -t "${timeout}s" "$DEPLOY"
 
 # Verify pods are running the correct image
-"$SCRIPT_DIR/k8s-verify-image" $q_flag -n "$namespace" -r "$remote_host" -t "$timeout" "$IMAGE" "$DEPLOY"
+"$SCRIPT_DIR/k8sverifyimage" $q_flag -n "$namespace" -r "$remote_host" -t "$timeout" "$IMAGE" "$DEPLOY"
 
 $quiet || echo "==> Deploy complete"

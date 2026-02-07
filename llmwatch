@@ -1,11 +1,11 @@
 #!/bin/bash
 # Watch command output and summarize/alert on patterns
-# Usage: llm-watch "mvn test"              # Run and summarize on completion
-#        llm-watch --tail /var/log/app.log # Tail and summarize periodically
-#        some_command | llm-watch          # Pipe mode
+# Usage: llmwatch "mvn test"              # Run and summarize on completion
+#        llmwatch --tail /var/log/app.log # Tail and summarize periodically
+#        some_command | llmwatch          # Pipe mode
 
 set -euo pipefail
-source "$(dirname "$0")/ollama-lib"
+source "$(dirname "$0")/ollamalib"
 ollama_capture_stdin
 
 SUMMARY_INTERVAL="${LLM_WATCH_INTERVAL:-60}"  # seconds between summaries for --tail
@@ -33,7 +33,7 @@ watch_command() {
     if [[ ${#output} -gt 200 ]]; then
         echo ""
         echo "Summary:"
-        echo "$output" | llm-summarize 2>/dev/null || echo "(summary unavailable)"
+        echo "$output" | llmsummarize 2>/dev/null || echo "(summary unavailable)"
     fi
 
     return $exit_code
@@ -56,7 +56,7 @@ watch_tail() {
         if (( now - last_summary >= SUMMARY_INTERVAL )) && [[ -n "$buffer" ]]; then
             echo ""
             echo "--- Summary (last ${SUMMARY_INTERVAL}s) ---"
-            echo "$buffer" | llm-summarize 2>/dev/null || echo "(summary unavailable)"
+            echo "$buffer" | llmsummarize 2>/dev/null || echo "(summary unavailable)"
             echo "---"
             buffer=""
             last_summary=$now
@@ -74,7 +74,7 @@ watch_pipe() {
     if [[ ${#output} -gt 200 ]]; then
         echo ""
         echo "--- Summary ---"
-        echo "$output" | llm-summarize 2>/dev/null || echo "(summary unavailable)"
+        echo "$output" | llmsummarize 2>/dev/null || echo "(summary unavailable)"
     fi
 }
 
@@ -85,9 +85,9 @@ case "${1:-}" in
         ;;
     --help|-h)
         echo "Usage:"
-        echo "  llm-watch \"command\"        Run command, summarize output"
-        echo "  llm-watch --tail file      Tail file, periodic summaries"
-        echo "  command | llm-watch        Pipe mode"
+        echo "  llmwatch \"command\"        Run command, summarize output"
+        echo "  llmwatch --tail file      Tail file, periodic summaries"
+        echo "  command | llmwatch        Pipe mode"
         echo ""
         echo "Environment:"
         echo "  LLM_WATCH_INTERVAL=60      Seconds between tail summaries"
@@ -98,7 +98,7 @@ case "${1:-}" in
         elif [[ $# -gt 0 ]]; then
             watch_command "$@"
         else
-            echo "Usage: llm-watch \"command\" or command | llm-watch" >&2
+            echo "Usage: llmwatch \"command\" or command | llmwatch" >&2
             exit 1
         fi
         ;;

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Shell integration for automatic LLM assistance
-# Add to .bashrc: source ~/bin/llm-shell-integration
+# Add to .bashrc: source ~/bin/llmshellintegration
 
 # Auto-explain errors when commands fail (opt-in)
 # Set LLM_AUTO_EXPLAIN=1 to enable
@@ -16,15 +16,15 @@ __llm_prompt_command() {
     local last_cmd
     last_cmd=$(history 1 | sed 's/^[ ]*[0-9]*[ ]*//')
 
-    # Skip if it's an llm- command (avoid loops)
-    if [[ "$last_cmd" == llm-* ]]; then
+    # Skip if it's an llm command (avoid loops)
+    if [[ "$last_cmd" == llm* ]]; then
         return $exit_code
     fi
 
     # Check if we have recent stderr (bash doesn't capture this easily)
     # This is a best-effort feature
     echo -e "\n\033[33m[LLM] Command failed (exit $exit_code). Getting explanation...\033[0m"
-    llm-explain-error "Command '$last_cmd' failed with exit code $exit_code" 2>/dev/null || true
+    llmexplainerror "Command '$last_cmd' failed with exit code $exit_code" 2>/dev/null || true
 
     return $exit_code
 }
@@ -32,20 +32,20 @@ __llm_prompt_command() {
 # Quick LLM functions for interactive use
 llm() {
     case "${1:-}" in
-        ask|a)     shift; llm-ask "$@" ;;
-        code|c)    shift; llm-gen-code "$@" ;;
-        shell|sh)  shift; llm-shell "$@" ;;
-        review|r)  shift; llm-review "$@" ;;
-        test|t)    shift; llm-test "$@" ;;
-        doc|d)     shift; llm-docstring "$@" ;;
-        err|e)     shift; llm-explain-error "$@" ;;
-        sum|s)     shift; llm-summarize "$@" ;;
-        commit)    shift; llm-commit-msg "$@" ;;
-        regex)     shift; llm-regex "$@" ;;
-        jq)        shift; llm-json "$@" ;;
-        index)     shift; llm-index "$@" ;;
-        find)      shift; llm-index --search "$@" ;;
-        watch)     shift; llm-watch "$@" ;;
+        ask|a)     shift; llmask "$@" ;;
+        code|c)    shift; llmgencode "$@" ;;
+        shell|sh)  shift; llmshell "$@" ;;
+        review|r)  shift; llmreview "$@" ;;
+        test|t)    shift; llmtest "$@" ;;
+        doc|d)     shift; llmdocstring "$@" ;;
+        err|e)     shift; llmexplainerror "$@" ;;
+        sum|s)     shift; llmsummarize "$@" ;;
+        commit)    shift; llmcommitmsg "$@" ;;
+        regex)     shift; llmregex "$@" ;;
+        jq)        shift; llmjson "$@" ;;
+        index)     shift; llmindex "$@" ;;
+        find)      shift; llmindex --search "$@" ;;
+        watch)     shift; llmwatch "$@" ;;
         *)
             echo "Usage: llm <command> [args]"
             echo ""

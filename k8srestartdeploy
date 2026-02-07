@@ -2,11 +2,11 @@
 set -euo pipefail
 
 # Restart a Kubernetes deployment and wait for rollout
-# Usage: k8s-restart-deploy [-n namespace] [-t timeout] <deployment>
+# Usage: k8srestartdeploy [-n namespace] [-t timeout] <deployment>
 # Examples:
-#   k8s-restart-deploy cx-app                    # Restart in default namespace
-#   k8s-restart-deploy -n prod cx-app            # Restart in specific namespace
-#   k8s-restart-deploy -t 300s cx-app            # Custom timeout
+#   k8srestartdeploy cx-app                    # Restart in default namespace
+#   k8srestartdeploy -n prod cx-app            # Restart in specific namespace
+#   k8srestartdeploy -t 300s cx-app            # Custom timeout
 
 usage() {
   sed -n '4,8p' "$0"
@@ -26,7 +26,7 @@ while [[ $# -gt 0 && "$1" == -* ]]; do
   esac
 done
 
-readonly DEPLOY="${1:?Usage: k8s-restart-deploy [-n namespace] [-t timeout] <deployment>}"
+readonly DEPLOY="${1:?Usage: k8srestartdeploy [-n namespace] [-t timeout] <deployment>}"
 readonly NAMESPACE="$namespace"
 readonly TIMEOUT="$timeout"
 

@@ -1,11 +1,11 @@
 #!/bin/bash
 # Quick code review / first-pass feedback
-# Usage: llm-review file.py
-#        git diff | llm-review
-#        llm-review < code.ts
+# Usage: llmreview file.py
+#        git diff | llmreview
+#        llmreview < code.ts
 
 set -euo pipefail
-source "$(dirname "$0")/ollama-lib"
+source "$(dirname "$0")/ollamalib"
 ollama_capture_stdin
 ollama_require
 

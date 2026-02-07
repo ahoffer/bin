@@ -1,6 +1,6 @@
 #!/bin/bash
-# llm-explore: Ollama-powered codebase exploration
-# Usage: llm-explore "what files handle authentication?"
+# llmexplore: Ollama-powered codebase exploration
+# Usage: llmexplore "what files handle authentication?"
 #
 # This tool runs grep/find/cat commands via Ollama and returns
 # only the final answer, reducing Claude's context usage.
@@ -10,8 +10,8 @@ set -euo pipefail
 DEBUG="${LLM_EXPLORE_DEBUG:-}"
 
 if [[ $# -eq 0 ]]; then
-    echo "Usage: llm-explore <question about the codebase>"
-    echo "Example: llm-explore 'where is authentication handled?'"
+    echo "Usage: llmexplore <question about the codebase>"
+    echo "Example: llmexplore 'where is authentication handled?'"
     echo ""
     echo "Environment:"
     echo "  LLM_EXPLORE_DEBUG=1  - Show debug output"
@@ -20,7 +20,7 @@ if [[ $# -eq 0 ]]; then
     exit 1
 fi
 
-source "$(dirname "$0")/ollama-lib"
+source "$(dirname "$0")/ollamalib"
 ollama_require
 
 QUERY="$*"

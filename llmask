@@ -1,14 +1,14 @@
 #!/bin/bash
 # Quick Q&A - ask anything
-# Usage: llm-ask "what's the syntax for bash arrays"
-#        llm-ask "explain kubernetes services"
+# Usage: llmask "what's the syntax for bash arrays"
+#        llmask "explain kubernetes services"
 
 set -euo pipefail
-source "$(dirname "$0")/ollama-lib"
+source "$(dirname "$0")/ollamalib"
 ollama_require
 
 if [[ $# -eq 0 ]]; then
-    echo "Usage: llm-ask \"your question\"" >&2
+    echo "Usage: llmask \"your question\"" >&2
     exit 1
 fi
 

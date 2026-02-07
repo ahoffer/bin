@@ -1,13 +1,13 @@
 #!/bin/bash
 # Generate code snippet from description
-# Usage: llm-gen-code "description" [--lang LANG]
+# Usage: llmgencode "description" [--lang LANG]
 # Examples:
-#   llm-gen-code "typescript function to debounce"
-#   llm-gen-code "java builder pattern for User class" --lang java
-#   echo "add equals and hashCode" | llm-gen-code --lang java
+#   llmgencode "typescript function to debounce"
+#   llmgencode "java builder pattern for User class" --lang java
+#   echo "add equals and hashCode" | llmgencode --lang java
 
 set -euo pipefail
-source "$(dirname "$0")/ollama-lib"
+source "$(dirname "$0")/ollamalib"
 ollama_capture_stdin
 ollama_require
 
@@ -27,7 +27,7 @@ if [[ -z "${prompt// }" ]]; then
 fi
 
 if [[ -z "$prompt" ]]; then
-    echo "Usage: llm-gen-code \"description\" [--lang LANG]" >&2
+    echo "Usage: llmgencode \"description\" [--lang LANG]" >&2
     exit 1
 fi
 

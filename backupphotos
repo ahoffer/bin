@@ -2,7 +2,7 @@
 #
 # Google Photos Backup
 #
-# Backup Google Photos to a specified local directory using gphotos-sync.
+# Backup Google Photos to a specified local directory using gphotossync.
 # Requires destination path as first argument and validates before proceeding.
 
 if [ -z "$1" ]; then
@@ -14,4 +14,4 @@ else
 	echo Backing up google photos to \""$1"\"
 fi
 
-gphotos-sync "$1"
+gphotossync "$1"

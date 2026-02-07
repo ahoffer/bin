@@ -1,13 +1,13 @@
 #!/bin/bash
 # Summarize text/logs/output via Ollama
-# Usage: llm-summarize [file]    OR    command | llm-summarize
+# Usage: llmsummarize [file]    OR    command | llmsummarize
 # Examples:
-#   mvn test 2>&1 | llm-summarize
-#   llm-summarize build.log
-#   git diff | llm-summarize
+#   mvn test 2>&1 | llmsummarize
+#   llmsummarize build.log
+#   git diff | llmsummarize
 
 set -euo pipefail
-source "$(dirname "$0")/ollama-lib"
+source "$(dirname "$0")/ollamalib"
 ollama_capture_stdin
 ollama_require
 

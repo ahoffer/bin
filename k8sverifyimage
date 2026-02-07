@@ -2,11 +2,11 @@
 set -euo pipefail
 
 # Verify all pods in a deployment are running the expected image
-# Usage: k8s-verify-image [-n namespace] [-r host] [-t timeout] <image:tag> <deployment>
+# Usage: k8sverifyimage [-n namespace] [-r host] [-t timeout] <image:tag> <deployment>
 # Examples:
-#   k8s-verify-image myapp:1.0 cx-app                    # Verify pods match image
-#   k8s-verify-image -n prod myapp:1.0 cx-app            # Specific namespace
-#   k8s-verify-image -r node1 -t 120 myapp:1.0 cx-app    # Custom host and timeout
+#   k8sverifyimage myapp:1.0 cx-app                    # Verify pods match image
+#   k8sverifyimage -n prod myapp:1.0 cx-app            # Specific namespace
+#   k8sverifyimage -r node1 -t 120 myapp:1.0 cx-app    # Custom host and timeout
 
 usage() {
   sed -n '4,8p' "$0"
@@ -29,8 +29,8 @@ while [[ $# -gt 0 && "$1" == -* ]]; do
   esac
 done
 
-readonly IMAGE="${1:?Usage: k8s-verify-image [-n ns] [-r host] [-t timeout] <image:tag> <deployment>}"
-readonly DEPLOY="${2:?Usage: k8s-verify-image [-n ns] [-r host] [-t timeout] <image:tag> <deployment>}"
+readonly IMAGE="${1:?Usage: k8sverifyimage [-n ns] [-r host] [-t timeout] <image:tag> <deployment>}"
+readonly DEPLOY="${2:?Usage: k8sverifyimage [-n ns] [-r host] [-t timeout] <image:tag> <deployment>}"
 readonly NAMESPACE="$namespace"
 readonly REMOTE_HOST="$remote_host"
 readonly RETRY_TIMEOUT="$timeout"

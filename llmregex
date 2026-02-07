@@ -1,11 +1,11 @@
 #!/bin/bash
 # Generate regex from description
-# Usage: llm-regex "email address"
-#        llm-regex "ISO date format" --flavor python
-#        llm-regex "phone number with optional country code"
+# Usage: llmregex "email address"
+#        llmregex "ISO date format" --flavor python
+#        llmregex "phone number with optional country code"
 
 set -euo pipefail
-source "$(dirname "$0")/ollama-lib"
+source "$(dirname "$0")/ollamalib"
 ollama_require
 
 # Parse args
@@ -21,7 +21,7 @@ done
 
 desc="${desc_parts[*]}"
 if [[ -z "${desc// }" ]]; then
-    echo "Usage: llm-regex \"description\" [--flavor python|js|go|...]" >&2
+    echo "Usage: llmregex \"description\" [--flavor python|js|go|...]" >&2
     exit 1
 fi
 

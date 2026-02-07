@@ -1,11 +1,11 @@
 #!/bin/bash
 # Generate docstring/documentation for code
-# Usage: llm-docstring < function.py
-#        llm-docstring file.ts
-#        echo "function code" | llm-docstring --style jsdoc
+# Usage: llmdocstring < function.py
+#        llmdocstring file.ts
+#        echo "function code" | llmdocstring --style jsdoc
 
 set -euo pipefail
-source "$(dirname "$0")/ollama-lib"
+source "$(dirname "$0")/ollamalib"
 ollama_capture_stdin
 ollama_require
 

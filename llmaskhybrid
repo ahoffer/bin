@@ -5,16 +5,16 @@ set -euo pipefail
 
 query="$*"
 if [[ -z "$query" ]]; then
-    echo "Usage: llm-ask-hybrid <question>" >&2
+    echo "Usage: llmaskhybrid <question>" >&2
     exit 1
 fi
 
 # Try web search first
-result=$(llm-search "$query" 2>/dev/null) || true
+result=$(llmsearch "$query" 2>/dev/null) || true
 
 # Fallback to LLM if web search failed or returned empty
 if [[ -z "$result" ]]; then
-    result=$(llm-ask "$query" 2>/dev/null) || true
+    result=$(llmask "$query" 2>/dev/null) || true
 fi
 
 if [[ -z "$result" ]]; then

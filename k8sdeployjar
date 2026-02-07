@@ -2,11 +2,11 @@
 set -euo pipefail
 
 # Deploy JAR files to a k8s pod's deploy directory
-# Usage: k8s-deploy-jar [-n namespace] [-p pod] <jar-file>...
+# Usage: k8sdeployjar [-n namespace] [-p pod] <jar-file>...
 # Examples:
-#   k8s-deploy-jar myapp.jar                    # Deploy to default pod
-#   k8s-deploy-jar -p cx-edge-abc myapp.jar     # Deploy to specific pod
-#   k8s-deploy-jar -n prod *.jar                # Deploy multiple jars
+#   k8sdeployjar myapp.jar                    # Deploy to default pod
+#   k8sdeployjar -p cx-edge-abc myapp.jar     # Deploy to specific pod
+#   k8sdeployjar -n prod *.jar                # Deploy multiple jars
 
 usage() {
   sed -n '4,7p' "$0"
@@ -25,7 +25,7 @@ while [[ $# -gt 0 && "$1" == -* ]]; do
 done
 
 if [[ $# -eq 0 ]]; then
-  echo "Usage: k8s-deploy-jar [-n namespace] [-p pod] <jar-file>..." >&2
+  echo "Usage: k8sdeployjar [-n namespace] [-p pod] <jar-file>..." >&2
   exit 1
 fi
 

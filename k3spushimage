@@ -2,14 +2,14 @@
 set -euo pipefail
 
 # Push images to a remote k3s node using docker save + k3s ctr import
-# Usage: k3s-push-image [-q] [-H host] [-f file] <image:tag>
+# Usage: k3spushimage [-q] [-H host] [-f file] <image:tag>
 # Examples:
-#   k3s-push-image myapp:1.0                  # Push to default host
-#   k3s-push-image -H node2 myapp:1.0         # Push to specific host
-#   k3s-push-image -q myapp:1.0               # Quiet mode (no progress)
-#   k3s-push-image -H node2 myapp:1.0 nginx   # Multiple images (explicit host)
-#   k3s-push-image -f images.txt              # Read images from a file
-#   k3s-push-image docker://nginx:latest      # Explicit transport (falls back to docker pull)
+#   k3spushimage myapp:1.0                  # Push to default host
+#   k3spushimage -H node2 myapp:1.0         # Push to specific host
+#   k3spushimage -q myapp:1.0               # Quiet mode (no progress)
+#   k3spushimage -H node2 myapp:1.0 nginx   # Multiple images (explicit host)
+#   k3spushimage -f images.txt              # Read images from a file
+#   k3spushimage docker://nginx:latest      # Explicit transport (falls back to docker pull)
 
 usage() {
   sed -n '4,11p' "$0"
@@ -46,7 +46,7 @@ fi
 
 args=("$@")
 if [[ ${#args[@]} -eq 0 && ${#images[@]} -eq 0 ]]; then
-  echo "Usage: k3s-push-image [-q] [-H host] [-f file] <image:tag>" >&2
+  echo "Usage: k3spushimage [-q] [-H host] [-f file] <image:tag>" >&2
   exit 1
 fi
 

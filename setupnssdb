@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # -----------------------------------------------------------------------------
-# setup-nssdb.sh - initialize & populate Chrome/NSS DB for CAC + DoD CAs
+# setupnssdb.sh - initialize & populate Chrome/NSS DB for CAC + DoD CAs
 # Idempotent: safe to re-run anytime.
 # -----------------------------------------------------------------------------
 

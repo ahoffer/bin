@@ -5,8 +5,8 @@
 # by default.
 #
 # Usage:
-#   request-gitlab <gitlab-web-url> [api-sub-resource]
-#   request-gitlab --raw <gitlab-web-url> [api-sub-resource]
+#   requestgitlab <gitlab-web-url> [api-sub-resource]
+#   requestgitlab --raw <gitlab-web-url> [api-sub-resource]
 
 set -euo pipefail
 
@@ -17,7 +17,7 @@ if [[ "${1:-}" == "--raw" ]]; then
 fi
 
 if [[ -z "${1:-}" ]]; then
-    echo "Usage: request-gitlab [--raw] <gitlab-web-url> [api-sub-resource]" >&2
+    echo "Usage: requestgitlab [--raw] <gitlab-web-url> [api-sub-resource]" >&2
     exit 1
 fi
 

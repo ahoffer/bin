@@ -7,11 +7,10 @@
 # Terminal detection
 # ─────────────────────────────────────────────────────────────
 
-_IS_TTY=""
-[[ -t 1 ]] && _IS_TTY=1
+_IS_TTY=1
 _C_RED=""
 _C_RST=""
-if [[ -n "$_IS_TTY" ]]; then
+if [[ -t 1 ]]; then
   _C_RED=$'\033[31m'
   _C_RST=$'\033[0m'
 fi
@@ -28,28 +27,40 @@ err_msg() {
   echo "error: $*" >&2
 }
 
-# Print step name without newline so time can be appended when done.
+# Print step name when a step begins. In progressive mode, prints without
+# a newline so time can be appended by _step_done. In batch mode, prints
+# a complete "start" line.
 _step_progress() {
-  [[ -n "$_IS_TTY" ]] && printf "%s" "$1"
+  if [[ -n "$_IS_TTY" ]]; then
+    printf "%s" "$1"
+  else
+    printf "start %s\n" "$1"
+  fi
 }
 
-# Finish a step line. On tty, appends time to the name already printed
-# by _step_progress. On non-tty, prints the full line.
+# Finish a step line. In progressive mode, appends time to the name already
+# printed by _step_progress. In batch mode, prints a complete "done" line.
 _step_done() {
   local name="$1" time_str="$2" status="$3" logfile="${4:-}"
   if [[ -n "$_IS_TTY" ]]; then
     if [[ $status -eq 0 ]]; then
       printf " - %s\n" "$time_str"
     else
-      printf " ${_C_RED}✗${_C_RST}\n"
-      [[ -n "$logfile" ]] && echo "  ${logfile}"
+      if [[ -n "$logfile" ]]; then
+        printf " ${_C_RED}✗${_C_RST} log file: %s\n" "$logfile"
+      else
+        printf " ${_C_RED}✗${_C_RST}\n"
+      fi
     fi
   else
     if [[ $status -eq 0 ]]; then
-      printf "%s - %s\n" "$name" "$time_str"
+      printf "done %s - %s\n" "$name" "$time_str"
     else
-      printf "%s FAILED\n" "$name"
-      [[ -n "$logfile" ]] && echo "  ${logfile}"
+      if [[ -n "$logfile" ]]; then
+        printf "FAILED %s log file: %s\n" "$name" "$logfile"
+      else
+        printf "FAILED %s\n" "$name"
+      fi
     fi
   fi
 }

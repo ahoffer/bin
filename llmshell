@@ -1,14 +1,14 @@
 #!/bin/bash
 # Generate shell command from natural language
-# Usage: llm-shell "find files modified today"
-#        llm-shell "compress all pngs in current dir"
+# Usage: llmshell "find files modified today"
+#        llmshell "compress all pngs in current dir"
 
 set -euo pipefail
-source "$(dirname "$0")/ollama-lib"
+source "$(dirname "$0")/ollamalib"
 ollama_require
 
 if [[ $# -eq 0 ]]; then
-    echo "Usage: llm-shell \"description of what you want to do\"" >&2
+    echo "Usage: llmshell \"description of what you want to do\"" >&2
     exit 1
 fi
 

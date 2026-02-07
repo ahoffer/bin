@@ -1,11 +1,11 @@
 #!/bin/bash
 # Index codebase for semantic search
-# Usage: llm-index [dir]           # Index directory (default: cwd)
-#        llm-index --search "query" # Search indexed content
-#        llm-index --status         # Show index stats
+# Usage: llmindex [dir]           # Index directory (default: cwd)
+#        llmindex --search "query" # Search indexed content
+#        llmindex --status         # Show index stats
 
 set -euo pipefail
-source "$(dirname "$0")/ollama-lib"
+source "$(dirname "$0")/ollamalib"
 
 INDEX_DIR="${LLM_INDEX_DIR:-$HOME/.cache/llm-index}"
 mkdir -p "$INDEX_DIR"

@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""Validate internal markdown links in a GitLab wiki repository.
+
+Walks every .md file under WIKI_ROOT, extracts markdown links, and checks
+that each relative link resolves to a file or directory on disk. Skips
+external URLs, anchors, upload references, and absolute GitLab paths.
+
+GitLab wikis are case-insensitive when resolving page names, so the
+checker does case-insensitive filename matching. GitLab also normalizes
+URL-encoded spaces to hyphens, but this script checks the decoded form
+against the filesystem as-is. If your links use percent-encoded spaces,
+make sure the filenames on disk match or use hyphens instead.
+
+Exit code 0 means all links resolve. Exit code 1 means broken links
+were found.
+"""
+
+import argparse
+import os
+import re
+import sys
+from pathlib import Path
+from urllib.parse import unquote
+
+# Matches markdown links like [label](target)
+LINK_RE = re.compile(r'\[([^\]]*)\]\(([^)]+)\)')
+
+# Prefixes that indicate a link target is not a local wiki page
+SKIP_PREFIXES = ("http://", "https://", "#", "uploads/", "mailto:", "registry.")
+
+
+def find_file_case_insensitive(directory, name):
+    """Return True if directory contains a file matching name, ignoring case."""
+    if not directory.is_dir():
+        return False
+    target = name.lower()
+    for entry in directory.iterdir():
+        if entry.name.lower() == target:
+            return True
+    return False
+
+
+def link_resolves(wiki_root, source_file, raw_target):
+    """Return True if raw_target resolves to a file on disk.
+
+    Resolution tries relative-to-source first, then relative-to-wiki-root,
+    appending .md when needed and falling back to case-insensitive matching.
+    """
+    # Strip anchor fragments before checking the filesystem
+    target = raw_target.split("#")[0]
+    if not target:
+        return True
+
+    for prefix in SKIP_PREFIXES:
+        if target.startswith(prefix):
+            return True
+
+    # Absolute GitLab paths like /octo-cx/cx/...
+    if target.startswith("/"):
+        return True
+
+    decoded = unquote(target)
+    source_dir = source_file.parent
+
+    # First try resolving relative to the source file
+    candidate = (source_dir / decoded).resolve()
+    md_name = candidate.name + ".md"
+
+    if candidate.with_suffix(".md").is_file():
+        return True
+    if candidate.parent.is_dir() and find_file_case_insensitive(candidate.parent, md_name):
+        return True
+    if candidate.is_file() or candidate.is_dir():
+        return True
+
+    # Then try resolving relative to the wiki root, which handles bare name
+    # links like (Building) that GitLab resolves from the root
+    candidate2 = (wiki_root / decoded).resolve()
+    md_name2 = candidate2.name + ".md"
+
+    if candidate2.with_suffix(".md").is_file():
+        return True
+    if candidate2.parent.is_dir() and find_file_case_insensitive(candidate2.parent, md_name2):
+        return True
+    if candidate2.is_file() or candidate2.is_dir():
+        return True
+
+    return False
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Check that every markdown link in a GitLab wiki repo resolves to a file on disk.")
+    parser.add_argument(
+        "wiki_root", nargs="?", default=".",
+        help="Root directory of the wiki repo. Defaults to the current directory.")
+    args = parser.parse_args()
+
+    wiki_root = Path(args.wiki_root).resolve()
+    if not wiki_root.is_dir():
+        print(f"Error: {wiki_root} is not a directory.", file=sys.stderr)
+        return 1
+
+    broken = []
+    checked = 0
+
+    for md_file in sorted(wiki_root.rglob("*.md")):
+        rel = md_file.relative_to(wiki_root)
+
+        # Skip hidden directories like .git and .idea
+        if any(part.startswith(".") for part in rel.parts):
+            continue
+
+        content = md_file.read_text(errors="replace")
+        for line_num, line in enumerate(content.splitlines(), 1):
+            for match in LINK_RE.finditer(line):
+                label = match.group(1)
+                target = match.group(2)
+                checked += 1
+
+                if not link_resolves(wiki_root, md_file, target):
+                    broken.append((str(rel), line_num, label, target))
+
+    print(f"Checked {checked} links in {wiki_root}\n")
+
+    if broken:
+        print(f"BROKEN LINKS ({len(broken)}):\n")
+        for source, line, label, target in broken:
+            print(f"  {source}:{line}")
+            print(f"    [{label}]({target})")
+            print()
+    else:
+        print("All links resolve to files on disk.")
+
+    return 1 if broken else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

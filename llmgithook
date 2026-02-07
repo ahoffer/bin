@@ -1,5 +1,5 @@
 #!/bin/bash
-# Git hook helper - install with: llm-git-hook install
+# Git hook helper - install with: llmgithook install
 # Provides: commit-msg suggestions, pre-push summaries
 
 set -euo pipefail
@@ -36,8 +36,8 @@ if [[ -s "$COMMIT_MSG_FILE" ]] && ! grep -q "^#" "$COMMIT_MSG_FILE"; then
 fi
 
 # Try to generate suggestion
-if command -v llm-commit-msg &>/dev/null; then
-    suggestion=$(llm-commit-msg 2>/dev/null || true)
+if command -v llmcommitmsg &>/dev/null; then
+    suggestion=$(llmcommitmsg 2>/dev/null || true)
     if [[ -n "$suggestion" ]]; then
         # Prepend suggestion as comment
         {
@@ -56,9 +56,9 @@ HOOK
     cat > "$hooks_dir/post-commit" << 'HOOK'
 #!/bin/bash
 # Summarize commit (optional, non-blocking)
-if [[ "${LLM_POST_COMMIT:-0}" == "1" ]] && command -v llm-summarize &>/dev/null; then
+if [[ "${LLM_POST_COMMIT:-0}" == "1" ]] && command -v llmsummarize &>/dev/null; then
     echo "---"
-    git show --stat HEAD | llm-summarize 2>/dev/null || true
+    git show --stat HEAD | llmsummarize 2>/dev/null || true
 fi
 HOOK
     chmod +x "$hooks_dir/post-commit"
@@ -89,7 +89,7 @@ case "${1:-}" in
         uninstall_hooks
         ;;
     *)
-        echo "Usage: llm-git-hook [install|uninstall]"
+        echo "Usage: llmgithook [install|uninstall]"
         echo ""
         echo "Installs git hooks that use Ollama for:"
         echo "  - Suggesting commit messages"

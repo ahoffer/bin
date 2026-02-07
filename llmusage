@@ -1,11 +1,11 @@
 #!/bin/bash
 # Show Ollama usage stats
-# Usage: llm-usage                    # Current conversation (if set) or all
-#        llm-usage --convo ID         # Specific conversation
-#        llm-usage --today            # Today's totals
-#        llm-usage --all              # All time
-#        llm-usage --json             # JSON output for hooks
-#        llm-usage --clear            # Clear log
+# Usage: llmusage                    # Current conversation (if set) or all
+#        llmusage --convo ID         # Specific conversation
+#        llmusage --today            # Today's totals
+#        llmusage --all              # All time
+#        llmusage --json             # JSON output for hooks
+#        llmusage --clear            # Clear log
 
 set -euo pipefail
 

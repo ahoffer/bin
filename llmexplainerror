@@ -1,11 +1,11 @@
 #!/bin/bash
 # Explain an error message or stack trace
-# Usage: command 2>&1 | llm-explain-error
-#        llm-explain-error "error message"
-#        llm-explain-error < stacktrace.txt
+# Usage: command 2>&1 | llmexplainerror
+#        llmexplainerror "error message"
+#        llmexplainerror < stacktrace.txt
 
 set -euo pipefail
-source "$(dirname "$0")/ollama-lib"
+source "$(dirname "$0")/ollamalib"
 ollama_capture_stdin
 ollama_require
 
