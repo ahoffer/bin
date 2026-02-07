@@ -97,11 +97,13 @@ $skip_tests && MAVEN_ARGS+=("-DskipTests")
 # Add custom arguments
 MAVEN_ARGS+=("${custom_args[@]}")
 
-# Run yarn fix in frontend if the project has one
+# Run yarn fix and type check in frontend workspaces if the project has a frontend
 git_root=$(git rev-parse --show-toplevel 2>/dev/null) || true
 if [[ -n "$git_root" && -f "$git_root/frontend/package.json" ]]; then
-    echo "Running yarn fix in $git_root/frontend"
-    (cd "$git_root/frontend" && yarn fix)
+    echo "Running frontend linters and formatters in $git_root/frontend"
+    (cd "$git_root/frontend" && yarn workspaces foreach --all run fix)
+    echo "Running TypeScript type check in $git_root/frontend"
+    (cd "$git_root/frontend" && yarn workspaces foreach --all exec tsc --noEmit) || exit 1
 fi
 
 #This can mess up other projects
