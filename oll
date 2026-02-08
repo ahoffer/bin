@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${OLLAMA_HOST:=http://bigfish:11434}"
+MODEL="${1:-}"; shift || true
+
+if [[ -z "${MODEL}" ]]; then
+  echo "usage: oll <model> -- <command...>"
+  exit 2
+fi
+
+API="${OLLAMA_HOST%/}/api"
+
+# Check if the model exists on the remote
+if ! curl -fsS "${API}/tags" | grep -q "\"name\":\"${MODEL}\""; then
+  echo "Remote model '${MODEL}' is not installed on ${OLLAMA_HOST}."
+  read -r -p "Install it now? [y/N] " ans
+  case "${ans}" in
+    y|Y|yes|YES)
+      curl -fsS "${API}/pull" \
+        -H "Content-Type: application/json" \
+        -d "{\"model\":\"${MODEL}\",\"stream\":false}" >/dev/null
+      ;;
+    *)
+      exit 1
+      ;;
+  esac
+fi
+
+if [[ "${1:-}" == "--" ]]; then shift; fi
+exec "$@"

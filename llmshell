@@ -4,7 +4,7 @@
 #        llmshell "compress all pngs in current dir"
 
 set -euo pipefail
-source "$(dirname "$0")/ollamalib"
+source "$(dirname "$0")/ollamalib.sh"
 ollama_require
 
 if [[ $# -eq 0 ]]; then

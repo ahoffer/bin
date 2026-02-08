@@ -1,9 +1,0 @@
-#!/bin/bash
-
-# Check if --version flag is provided
-if [[ "$1" == "--version" ]]; then
-    echo "odev 1.0.0"
-    exit 0
-fi
-
-# Existing script logic goes here

@@ -5,7 +5,7 @@
 #        llmindex --status         # Show index stats
 
 set -euo pipefail
-source "$(dirname "$0")/ollamalib"
+source "$(dirname "$0")/ollamalib.sh"
 
 INDEX_DIR="${LLM_INDEX_DIR:-$HOME/.cache/llm-index}"
 mkdir -p "$INDEX_DIR"

@@ -4,7 +4,7 @@
 #        llmsearch --raw "your query"   # show raw results only
 
 set -euo pipefail
-source "$(dirname "$0")/ollamalib"
+source "$(dirname "$0")/ollamalib.sh"
 
 RAW_MODE=false
 if [[ "${1:-}" == "--raw" ]]; then

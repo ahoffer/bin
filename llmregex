@@ -5,7 +5,7 @@
 #        llmregex "phone number with optional country code"
 
 set -euo pipefail
-source "$(dirname "$0")/ollamalib"
+source "$(dirname "$0")/ollamalib.sh"
 ollama_require
 
 # Parse args

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Ollama shared library - source this in other scripts
-# Usage: source ollamalib
+# Usage: source ollamalib.sh
 
 OLLAMA_TIMEOUT="${OLLAMA_TIMEOUT:-120}"
 
