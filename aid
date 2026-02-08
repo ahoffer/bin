@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
-# aider with plan mode. Architect proposes, user approves, editor implements.
-# TODO: Replace with multi-agent framework when local models improve at tool-calling.
+# aider in architect mode with auto-accept so you see the plan without prompts
 exec aider \
   --architect \
-  --model ollama_chat/qwen2.5-coder:14b \
-  --no-auto-accept-architect \
+  --model ollama_chat/qwen2.5-coder:14b-16k \
   --editor-edit-format diff \
   --read ~/.aider.conventions.md \
   --no-show-model-warnings \
