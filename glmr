@@ -11,8 +11,8 @@ Fetches and displays GitLab Merge Request details including title, description,
 linked issues, and all comments.
 
 Example:
-    glmr https://gitlab.octo-cx-prod.runshiftup.com/octo-cx/cx/cx-search/-/merge_requests/381
-
+    glmr <Gitlab MR URL>
+    
 Environment:
     GITLAB_BOT_READ_TOKEN    Required. GitLab API token for authentication.
 
@@ -41,7 +41,6 @@ if ! command -v requestgitlab &>/dev/null; then
 fi
 
 # Parse the MR URL to extract components
-# Expected format: https://gitlab.example.com/group/subgroup/project/-/merge_requests/123
 if [[ ! "$mrurl" =~ ^(https?://[^/]+)/(.+)/-/merge_requests/([0-9]+)$ ]]; then
     echo "Error: Invalid MR URL format." >&2
     echo "Expected: https://gitlab.example.com/path/to/project/-/merge_requests/123" >&2
