@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""Live GPU monitor with utilization bars, process list, and sparkline."""
+
+import os
+import re
+import subprocess
+import time
+from collections import deque
+
+from rich.live import Live
+from rich.padding import Padding
+from rich.table import Table
+from rich.console import Group
+from rich.text import Text
+
+SPARK = "▁▂▃▄▅▆▇█"
+REFRESH = 2
+HISTORY_LEN = 60
+
+
+def util_color(pct):
+    if pct < 50:
+        return "green"
+    if pct <= 80:
+        return "yellow"
+    return "red"
+
+
+def bar(pct, width=40):
+    filled = round(pct / 100 * width)
+    color = util_color(pct)
+    t = Text()
+    t.append("█" * filled, style=color)
+    t.append("░" * (width - filled), style="bright_black")
+    return t
+
+
+def sparkline(history):
+    t = Text()
+    for val in history:
+        idx = min(int(val / 100 * len(SPARK)), len(SPARK) - 1)
+        t.append(SPARK[idx], style=util_color(val))
+    return t
+
+
+def query_gpu():
+    fields = "name,temperature.gpu,power.draw,power.limit,utilization.gpu,memory.used,memory.total"
+    out = subprocess.check_output(
+        ["nvidia-smi", f"--query-gpu={fields}", "--format=csv,noheader,nounits"],
+        text=True,
+    )
+    parts = [p.strip() for p in out.strip().split(",")]
+    return {
+        "name": parts[0],
+        "temp": int(parts[1]),
+        "power": float(parts[2]),
+        "power_cap": float(parts[3]),
+        "gpu_pct": int(parts[4]),
+        "mem_used": int(parts[5]),
+        "mem_total": int(parts[6]),
+    }
+
+
+def query_processes():
+    out = subprocess.check_output(["nvidia-smi"], text=True)
+    procs = []
+    for m in re.finditer(
+        r"^\|\s+\d+\s+N/A\s+N/A\s+(\d+)\s+(\S+)\s+(.+?)\s+(\d+)MiB\s*\|$",
+        out,
+        re.MULTILINE,
+    ):
+        procs.append({
+            "pid": int(m.group(1)),
+            "type": m.group(2),
+            "cmd": os.path.basename(m.group(3).strip()),
+            "mem_mib": int(m.group(4)),
+        })
+    return procs
+
+
+def proc_table(procs):
+    tbl = Table(
+        show_header=True, show_edge=False, show_lines=False,
+        pad_edge=False, padding=(0, 2), box=None,
+    )
+    tbl.add_column("PID", justify="right", style="cyan", header_style="cyan")
+    tbl.add_column("VRAM", justify="right", style="cyan", header_style="cyan")
+    tbl.add_column("Command", header_style="cyan")
+    for p in sorted(procs, key=lambda p: p["mem_mib"], reverse=True):
+        tbl.add_row(str(p["pid"]), f"{p['mem_mib']} MB", p["cmd"])
+    return tbl
+
+
+def render(gpu, procs, history):
+    mem_pct = gpu["mem_used"] / gpu["mem_total"] * 100
+    mem_gb_used = gpu["mem_used"] / 1024
+    mem_gb_total = gpu["mem_total"] / 1024
+    power = round(gpu["power"])
+
+    top = Text()
+    top.append(f"  {gpu['name']}", style="bold cyan")
+    top.append(f"   {gpu['temp']}°C", style="cyan")
+    top.append(f"   {power} / {round(gpu['power_cap'])} W\n\n", style="cyan")
+    top.append("  GPU  ", style="cyan")
+    top.append_text(bar(gpu["gpu_pct"]))
+    top.append(f"   {gpu['gpu_pct']}%\n", style=util_color(gpu["gpu_pct"]))
+    top.append("  MEM  ", style="cyan")
+    top.append_text(bar(mem_pct))
+    top.append(f"   {mem_gb_used:.1f} / {mem_gb_total:.1f} GB\n", style=util_color(mem_pct))
+
+    bottom = Text()
+    bottom.append("  UTL  ", style="cyan")
+    bottom.append_text(sparkline(history))
+
+    if procs:
+        return Group(top, Padding(proc_table(procs), (0, 0, 0, 2)), Text(), bottom)
+    return Group(top, Text("  no GPU processes", style="bright_black"), Text(), bottom)
+
+
+def main():
+    history = deque(maxlen=HISTORY_LEN)
+    try:
+        with Live(Text("loading..."), refresh_per_second=1, screen=True) as live:
+            while True:
+                gpu = query_gpu()
+                procs = query_processes()
+                history.append(gpu["gpu_pct"])
+                live.update(render(gpu, procs, history))
+                time.sleep(REFRESH)
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main()
