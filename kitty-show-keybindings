@@ -1,18 +1,290 @@
 #!/bin/bash
-# Show all kitty keybindings in a human-readable format
+# Show all kitty keybindings in a formatted, categorized display
 # Must be run inside kitty terminal
 
-kitty +runpy '
+set -euo pipefail
+
+usage() {
+    cat <<'EOF'
+Usage: kitty-show-keybindings [-g|--grep] [-c|--category CATEGORY] [-h|--help]
+
+Display kitty keybindings in a formatted, categorized view.
+
+Options:
+  -g, --grep           Machine-readable format (no headers, tab-separated)
+  -c, --category CAT   Show only one category
+                       Categories: tabs, clipboard, scroll, search, font, util, mouse
+  -h, --help           Show this help message
+
+Examples:
+  kitty-show-keybindings              # Full display in less pager
+  kitty-show-keybindings | grep copy  # Search for copy-related bindings
+  kitty-show-keybindings -g           # Tab-separated for scripting
+  kitty-show-keybindings -c clipboard # Show only clipboard bindings
+EOF
+}
+
+GREP_MODE=0
+CATEGORY_FILTER=""
+
+# Verify running inside kitty
+if [[ -z "${KITTY_PID:-}" ]]; then
+    echo "Error: This script must be run inside kitty terminal" >&2
+    exit 1
+fi
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -g|--grep)
+            GREP_MODE=1
+            shift
+            ;;
+        -c|--category)
+            if [[ -z "${2:-}" ]]; then
+                echo "Error: -c requires a category name" >&2
+                usage >&2
+                exit 1
+            fi
+            CATEGORY_FILTER="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            usage >&2
+            exit 1
+            ;;
+    esac
+done
+
+export GREP_MODE CATEGORY_FILTER
+
+generate_output() {
+    kitty +runpy '
+import sys
+import os
 from kitty.config import load_config
 from kitty.fast_data_types import (
     GLFW_MOD_SHIFT, GLFW_MOD_CONTROL, GLFW_MOD_ALT, GLFW_MOD_SUPER,
     glfw_get_key_name,
 )
 
+GREP_MODE = int(os.environ.get("GREP_MODE", "0"))
+CATEGORY_FILTER = os.environ.get("CATEGORY_FILTER", "")
+
+# ANSI styling
+DIM = "\033[2m"
+BOLD = "\033[1m"
+ITALIC = "\033[3m"
+RESET = "\033[0m"
+
+# Colors - bright and vibrant
+CYAN = "\033[36m"
+YELLOW = "\033[33m"
+GREEN = "\033[32m"
+MAGENTA = "\033[35m"
+BLUE = "\033[34m"
+WHITE = "\033[37m"
+BRIGHT_WHITE = "\033[97m"
+BRIGHT_CYAN = "\033[96m"
+BRIGHT_YELLOW = "\033[93m"
+BRIGHT_GREEN = "\033[92m"
+BRIGHT_MAGENTA = "\033[95m"
+BRIGHT_BLUE = "\033[94m"
+
+# Semantic styles - more colorful
+TITLE_STYLE = BOLD + BRIGHT_CYAN
+HEADER_STYLE = BOLD + BRIGHT_YELLOW
+DIAMOND_STYLE = BRIGHT_MAGENTA
+LINE_STYLE = DIM + CYAN
+MOD_STYLE = DIM + CYAN           # dim modifiers
+KEY_STYLE = BOLD + BRIGHT_MAGENTA # actual key, visible on light backgrounds
+DESC_STYLE = BRIGHT_BLUE
+FOOTER_STYLE = DIM + ITALIC + CYAN
+
+
+def style_key(key_str, mod_style, key_style, reset):
+    """Apply dim style to modifier prefixes, bright style to actual key."""
+    def style_single(key):
+        # Find where modifier prefix ends by matching pattern like C-S-
+        i = 0
+        while i < len(key):
+            if i + 1 < len(key) and key[i] in "CSAM" and key[i + 1] == "-":
+                i += 2
+            else:
+                break
+        if i > 0:
+            return mod_style + key[:i] + reset + key_style + key[i:]
+        return key_style + key
+    # Split on comma-space to handle multiple keys, then rejoin
+    parts = key_str.split(", ")
+    styled = [style_single(p) for p in parts]
+    return (reset + ", ").join(styled)
+
+
+# Emacs-style modifier abbreviations
+MOD_ABBREV = {
+    "ctrl": "C",
+    "shift": "S",
+    "alt": "A",
+    "super": "M",
+}
+
+# Display names for ambiguous keys
+KEY_SYMBOLS = {
+    ",": ", comma",
+    ".": ". period",
+    "`": "` grave",
+    "+": "+ plus",
+    "-": "- minus",
+    "=": "= equals",
+    "kp_add": "keypad +",
+    "kp_subtract": "keypad -",
+}
+
+# Category configuration
+TABS_PREFIXES = [
+    "new_tab", "close_tab", "next_tab", "previous_tab",
+    "move_tab", "set_tab_title", "new_window", "close_window",
+    "next_window", "previous_window", "first_window", "second_window",
+    "third_window", "fourth_window", "fifth_window", "sixth_window",
+    "seventh_window", "eighth_window", "ninth_window", "tenth_window",
+    "move_window", "swap_with", "focus_visible", "start_resizing",
+    "next_layout", "toggle_fullscreen", "toggle_maximized", "new_os_window",
+]
+TABS_ORDER = [
+    "new_tab", "close_tab", "next_tab", "previous_tab",
+    "new_window", "close_window", "next_window", "previous_window",
+    "focus window 1-10", "next_layout",
+    "move_window_forward", "move_window_backward",
+    "start_resizing_window", "toggle_fullscreen", "toggle_maximized",
+    "new_os_window", "set_tab_title",
+]
+
+CLIPBOARD_PREFIXES = ["copy_to_clipboard", "paste_from_clipboard", "paste_from_selection"]
+CLIPBOARD_ORDER = ["copy_to_clipboard", "paste_from_clipboard", "paste_from_selection"]
+
+SCROLL_PREFIXES = ["scroll_line", "scroll_page", "scroll_home", "scroll_end", "scroll_to_prompt"]
+SCROLL_ORDER = [
+    "scroll_line_up", "scroll_line_down",
+    "scroll_page_up", "scroll_page_down",
+    "scroll_home", "scroll_end",
+    "scroll_to_prompt",
+]
+
+SEARCH_PREFIXES = ["show_scrollback", "show_last_command", "last_visited_command_output"]
+SEARCH_ORDER = ["show_scrollback", "show_last_command", "last_visited_command_output"]
+
+FONT_PREFIXES = ["change_font_size", "set_background_opacity"]
+FONT_ORDER = ["change_font_size +", "change_font_size -", "change_font_size 0", "set_background_opacity"]
+
+UTIL_PREFIXES = [
+    "open_url", "input_unicode", "kitty_shell", "edit_config",
+    "load_config", "debug_config", "show_kitty_doc", "clear_terminal",
+    "kitten", "pass_selection",
+]
+UTIL_ORDER = [
+    "open_url", "input_unicode", "kitty_shell",
+    "edit_config", "load_config", "debug_config",
+    "clear_terminal", "kitten", "pass_selection", "show_kitty_doc",
+]
+
+MOUSE_ORDER = [
+    "mouse_selection normal", "mouse_selection word", "mouse_selection line",
+    "mouse_selection extend", "mouse_selection rectangle",
+    "mouse_handle_click", "paste_from_selection", "paste_selection",
+    "mouse_show_command_output",
+]
+
+# Format: action -> (short_name, description)
+BINDINGS_INFO = {
+    "change font size all +2.0": ("zoom in", "Zoom in"),
+    "change font size all -2.0": ("zoom out", "Zoom out"),
+    "change font size all 0": ("reset zoom", "Reset zoom"),
+    "set background opacity 1": ("opacity", "Reset opacity"),
+    "copy to clipboard": ("copy", "Copy selected text to clipboard"),
+    "paste from clipboard": ("paste", "Paste text from clipboard"),
+    "paste from selection": ("paste sel", "Paste from X11 selection"),
+    "scroll line up": ("line up", "Scroll up one line"),
+    "scroll line down": ("line down", "Scroll down one line"),
+    "scroll page up": ("page up", "Scroll up one page"),
+    "scroll page down": ("page down", "Scroll down one page"),
+    "scroll home": ("top", "Scroll to beginning"),
+    "scroll end": ("bottom", "Scroll to end"),
+    "scroll to prompt -1": ("prev prompt", "Jump to previous shell prompt"),
+    "scroll to prompt 1": ("next prompt", "Jump to next shell prompt"),
+    "show scrollback in pager": ("scrollback", "View scrollback in pager"),
+    "show last command output": ("last output", "View last command output"),
+    "last visited command output": ("browse out", "Browse command outputs"),
+    "new tab": ("new tab", "Open a new tab"),
+    "close tab": ("close tab", "Close current tab"),
+    "next tab": ("next tab", "Switch to next tab"),
+    "previous tab": ("prev tab", "Switch to previous tab"),
+    "new window": ("new window", "Split into new window"),
+    "close window": ("close win", "Close current window"),
+    "next window": ("next win", "Focus next window"),
+    "previous window": ("prev win", "Focus previous window"),
+    "move window forward": ("win fwd", "Move window forward in stack"),
+    "move window backward": ("win back", "Move window backward in stack"),
+    "start resizing window": ("resize", "Enter window resize mode"),
+    "next layout": ("layout", "Cycle window layout"),
+    "toggle fullscreen": ("fullscreen", "Toggle fullscreen mode"),
+    "toggle maximized": ("maximize", "Toggle maximized mode"),
+    "new os window": ("os window", "Open new OS window"),
+    "set tab title": ("tab title", "Rename current tab"),
+    "open url with hints": ("open url", "Click URLs with keyboard"),
+    "input unicode character": ("unicode", "Insert unicode character"),
+    "kitty shell": ("kitty sh", "Open kitty debug shell"),
+    "edit config file": ("edit conf", "Edit kitty.conf"),
+    "load config file": ("reload", "Reload configuration"),
+    "debug config": ("debug conf", "Show config debug info"),
+    "clear terminal": ("clear", "Clear terminal screen"),
+    "focus visible window": ("focus win", "Focus window by number"),
+    "mouse selection normal": ("select", "Select text, hold and drag"),
+    "mouse selection word": ("word", "Select word"),
+    "mouse selection line": ("line", "Select line"),
+    "mouse selection line from point": ("line pt", "Select lines from click point"),
+    "mouse selection extend": ("extend", "Extend selection, hold and drag"),
+    "mouse selection rectangle": ("rectangle", "Block select"),
+    "mouse handle click link": ("link", "Open link"),
+    "mouse handle click selection link prompt": ("smart", "Paste or open link"),
+    "mouse show command output": ("cmd output", "Show command output"),
+    "paste selection": ("paste", "Paste clipboard"),
+    "focus window 1-10": ("win 1-10", "Focus window by number"),
+    "move tab forward": ("tab fwd", "Move tab right"),
+    "move tab backward": ("tab back", "Move tab left"),
+    "swap with window": ("swap win", "Swap with another window"),
+    "search scrollback": ("search", "Search in scrollback buffer"),
+    "set background opacity": ("opacity", "Adjust background opacity"),
+    "kitten unicode input": ("unicode", "Insert unicode character"),
+    "kitten choose-files": ("files", "File picker dialog"),
+    "pass selection to program": ("pass sel", "Send selection to program"),
+    "show kitty doc": ("help", "Show kitty documentation"),
+    "kitty shell window": ("shell", "Open kitty control shell"),
+}
+
+CATEGORY_CONFIG = {
+    "tabs": {"title": "TABS & WINDOWS", "prefixes": TABS_PREFIXES, "order": TABS_ORDER},
+    "clipboard": {"title": "CLIPBOARD", "prefixes": CLIPBOARD_PREFIXES, "order": CLIPBOARD_ORDER},
+    "scroll": {"title": "SCROLLING", "prefixes": SCROLL_PREFIXES, "order": SCROLL_ORDER},
+    "search": {"title": "SEARCH & HISTORY", "prefixes": SEARCH_PREFIXES, "order": SEARCH_ORDER},
+    "font": {"title": "FONT & DISPLAY", "prefixes": FONT_PREFIXES, "order": FONT_ORDER},
+    "util": {"title": "UTILITIES", "prefixes": UTIL_PREFIXES, "order": UTIL_ORDER},
+}
+
+numbered_windows = (
+    "first_window", "second_window", "third_window", "fourth_window",
+    "fifth_window", "sixth_window", "seventh_window", "eighth_window",
+    "ninth_window", "tenth_window",
+)
+
 opts = load_config()
 km = opts.keyboard_modes.get("", None)
 
-geometry = []
+categorized = {cat: [] for cat in CATEGORY_CONFIG}
 
 if km:
     bindings = []
@@ -36,14 +308,13 @@ if km:
             if 32 <= keycode <= 126:
                 key_name = chr(keycode)
             else:
-                key_name = f"key_{keycode}"
+                key_name = "key_" + str(keycode)
 
-        key_str = f"{mod_str}+{key_name}" if mod_str else key_name
+        key_str = mod_str + "+" + key_name if mod_str else key_name
 
         for defn in definitions:
             bindings.append((defn.definition, key_str))
 
-    # Deduplicate: group by key, keep shortest action name
     by_key = {}
     for action, key_str in bindings:
         if key_str not in by_key or len(action) < len(by_key[key_str]):
@@ -51,166 +322,172 @@ if km:
 
     deduped = [(action, key_str) for key_str, action in by_key.items()]
 
-    # Geometry and tab-related action prefixes
-    geometry_prefixes = (
-        "first_window", "second_window", "third_window", "fourth_window",
-        "fifth_window", "sixth_window", "seventh_window", "eighth_window",
-        "ninth_window", "tenth_window", "next_window", "previous_window",
-        "move_window", "swap_with_window", "focus_visible_window",
-        "start_resizing_window", "next_layout", "toggle_fullscreen",
-        "toggle_maximized", "new_window", "close_window",
-        "new_tab", "close_tab", "next_tab", "previous_tab",
-        "move_tab", "set_tab_title", "new_os_window",
-    )
+    # Actions to skip from display
+    skip_actions = {"move_window_to_top", "set_tab_title", "next_window", "previous_window"}
 
-    # Numbered window actions to consolidate
-    numbered_windows = (
-        "first_window", "second_window", "third_window", "fourth_window",
-        "fifth_window", "sixth_window", "seventh_window", "eighth_window",
-        "ninth_window", "tenth_window",
-    )
-
-    regular = []
     has_numbered_windows = False
     for action, key_str in deduped:
         if action in numbered_windows:
             has_numbered_windows = True
             continue
-        elif action.split()[0] in geometry_prefixes or action.startswith(geometry_prefixes):
-            geometry.append((action, key_str))
-        else:
-            regular.append((action, key_str))
+        if action in skip_actions:
+            continue
+
+        # Categorize inline
+        found_cat = "util"
+        for cat_name in ["tabs", "clipboard", "scroll", "search", "font", "util"]:
+            for prefix in CATEGORY_CONFIG[cat_name]["prefixes"]:
+                if action.startswith(prefix) or action == prefix:
+                    found_cat = cat_name
+                    break
+            if found_cat != "util" or cat_name == "util":
+                break
+        categorized[found_cat].append((action, key_str))
 
     if has_numbered_windows:
-        geometry.append(("focus window 1-10", "ctrl+shift+1-0"))
+        categorized["tabs"].append(("focus window 1-10", "ctrl+shift+0-9"))
 
-    # Logical ordering for geometry/tabs (most used first)
-    geometry_order = [
-        "new_tab", "new_window", "new_os_window",
-        "next_tab", "previous_tab", "next_window", "previous_window",
-        "focus window 1-10", "focus_visible_window",
-        "close_tab", "close_window",
-        "next_layout", "toggle_fullscreen", "toggle_maximized",
-        "move_tab_forward", "move_tab_backward",
-        "move_window_forward", "move_window_backward", "move_window_to_top",
-        "swap_with_window", "start_resizing_window", "set_tab_title",
-    ]
-
-    # Sort geometry using index lookup
-    sorted_geometry = []
-    for item in geometry:
-        action, key_str = item
+# Sort each category using inline loop
+for cat_name in categorized:
+    order = CATEGORY_CONFIG[cat_name]["order"]
+    sorted_items = []
+    for action, key_str in categorized[cat_name]:
         idx = 999
-        for i, prefix in enumerate(geometry_order):
+        for i, prefix in enumerate(order):
             if action == prefix or action.startswith(prefix):
                 idx = i
                 break
-        sorted_geometry.append((idx, action, key_str))
-    sorted_geometry.sort()
+        # Convert to Emacs-style inline
+        parts = key_str.split("+")
+        mod_parts = []
+        actual_key = parts[-1] if parts else key_str
+        if actual_key == "" and key_str.endswith("+"):
+            actual_key = "+"
+            parts = parts[:-1]
+        display_actual = KEY_SYMBOLS.get(actual_key, actual_key)
+        for part in parts[:-1]:
+            if part in MOD_ABBREV:
+                mod_parts.append(MOD_ABBREV[part])
+            else:
+                mod_parts.append(part)
+        if mod_parts:
+            formatted_key = "-".join(mod_parts) + "-" + display_actual
+        else:
+            formatted_key = display_actual
+        sorted_items.append((idx, action, formatted_key))
+    sorted_items.sort()
+    # Consolidate duplicate actions into single entries with combined keys
+    consolidated = {}
+    for _, action, key_str in sorted_items:
+        if action in consolidated:
+            consolidated[action].append(key_str)
+        else:
+            consolidated[action] = [key_str]
+    categorized[cat_name] = [(a, ", ".join(sorted(keys, key=lambda k: (k.split("-")[-1] not in ("up", "down", "left", "right"), k)))) for a, keys in consolidated.items()]
 
-    if sorted_geometry:
-        print("=" * 60)
-        print("WINDOW GEOMETRY & TABS")
-        print("=" * 60)
-        for _, action, key_str in sorted_geometry:
-            print(f"{action}: {key_str}")
-        print("")
+# Simplify repeated modifier prefixes
+for cat_name in categorized:
+    categorized[cat_name] = [(a, k.replace(", C-S-= equals", ", = equals").replace(", C-S-keypad", ", keypad")) for a, k in categorized[cat_name]]
 
-    # Logical ordering for other keybindings (most used first)
-    regular_order = [
-        "copy_to_clipboard", "paste_from_clipboard", "paste_from_selection",
-        "scroll_line_up", "scroll_line_down", "scroll_page_up", "scroll_page_down",
-        "scroll_home", "scroll_end", "scroll_to_prompt",
-        "search_scrollback", "show_scrollback", "show_last_command_output",
-        "change_font_size",
-        "clear_terminal",
-        "open_url_with_hints", "pass_selection_to_program",
-        "kitten", "kitty_shell",
-        "load_config_file", "edit_config_file", "debug_config",
-        "set_background_opacity", "show_kitty_doc",
-    ]
+# Validate category filter
+if CATEGORY_FILTER:
+    if CATEGORY_FILTER not in CATEGORY_CONFIG and CATEGORY_FILTER != "mouse":
+        valid = ", ".join(list(CATEGORY_CONFIG.keys()) + ["mouse"])
+        print("Unknown category: " + CATEGORY_FILTER, file=sys.stderr)
+        print("Valid categories: " + valid, file=sys.stderr)
+        sys.exit(1)
+    cats_to_show = [CATEGORY_FILTER] if CATEGORY_FILTER != "mouse" else []
+    show_mouse = CATEGORY_FILTER == "mouse" or CATEGORY_FILTER == ""
+else:
+    cats_to_show = ["tabs", "clipboard", "scroll", "search", "font", "util"]
+    show_mouse = True
 
-    sorted_regular = []
-    for item in regular:
-        action, key_str = item
-        idx = 999
-        for i, prefix in enumerate(regular_order):
-            if action.startswith(prefix):
-                idx = i
-                break
-        sorted_regular.append((idx, action, key_str))
-    sorted_regular.sort()
+# Print header with PETSCII-style blocks
+if not GREP_MODE:
+    print(TITLE_STYLE + "\u2584" * 68 + RESET)
+    print(TITLE_STYLE + "\u2588" + RESET + "                        KITTY KEYBINDINGS                         " + TITLE_STYLE + "\u2588" + RESET)
+    print(TITLE_STYLE + "\u2580" * 68 + RESET)
+    print()
 
-    print("=" * 60)
-    print("OTHER KEYBINDINGS")
-    print("=" * 60)
-    for _, action, key_str in sorted_regular:
-        print(f"{action}: {key_str}")
+# Print categories
+for cat_name in cats_to_show:
+    items = categorized[cat_name]
+    if not items:
+        continue
 
-# Mouse mappings
-BUTTON_NAMES = {0: "left", 1: "right", 2: "middle", 3: "b4", 4: "b5", 5: "b6", 6: "b7", 7: "b8"}
+    # Section header with diamond accent
+    if not GREP_MODE:
+        title = CATEGORY_CONFIG[cat_name]["title"]
+        line = "\u2500" * (60 - len(title))
+        print(LINE_STYLE + "\u2500\u2500" + DIAMOND_STYLE + "\u25C6 " + RESET + HEADER_STYLE + title + RESET + DIAMOND_STYLE + " \u25C6" + RESET + LINE_STYLE + line + RESET)
+        print()
 
-if hasattr(opts, "mousemap") and opts.mousemap:
-    print("")
-    print("=" * 60)
-    print("MOUSE MAPPINGS")
-    print("=" * 60)
+    desc_width = {"tabs": 30, "clipboard": 31, "scroll": 30, "search": 26, "font": 14, "util": 28}.get(cat_name, 30)
+    for action, key_str in items:
+        action_key = action.replace("_", " ").lower()
+        info = BINDINGS_INFO.get(action_key)
+        if info:
+            _, desc = info
+        else:
+            desc = action.replace("_", " ").capitalize()
 
-    mouse_bindings = []
-    for event, action in opts.mousemap.items():
-        if event.grabbed or action == "discard_event":
-            continue
+        if GREP_MODE:
+            print(desc + "\t" + key_str)
+        else:
+            desc_col = DESC_STYLE + "{:<{w}}".format(desc[:desc_width], w=desc_width) + RESET
+            print("  " + desc_col + "  " + style_key(key_str, MOD_STYLE, KEY_STYLE, RESET) + RESET)
 
-        parts = []
-        if event.mods & GLFW_MOD_CONTROL:
-            parts.append("ctrl")
-        if event.mods & GLFW_MOD_SHIFT:
-            parts.append("shift")
-        if event.mods & GLFW_MOD_ALT:
-            parts.append("alt")
-        if event.mods & GLFW_MOD_SUPER:
-            parts.append("super")
+    if not GREP_MODE:
+        print()
 
-        btn = BUTTON_NAMES.get(event.button, f"b{event.button}")
-        parts.append(btn)
+# Mouse section - standalone, not a keybinding category
+MOUSE_DESCRIPTIONS = [
+    "Select text, click and drag",
+    "Extend selection, shift-click and drag",
+    "Select word, double-click",
+    "Select to word, shift double-click",
+    "Select line, triple-click",
+    "Select to line, shift triple-click",
+    "Select lines from point, ctrl-alt triple-click",
+    "Extend selection, right-click and drag",
+    "Block select, ctrl-alt click and drag",
+    "Open link, ctrl-shift click",
+    "Paste or open link, click",
+    "Paste X11 selection, middle-click",
+    "Paste clipboard, shift middle-click",
+    "Show command output, ctrl-shift right-click",
+]
 
-        if event.repeat_count == -2:
-            parts.append("single click")
-        elif event.repeat_count == -3:
-            parts.append("double click")
-        elif event.repeat_count == -4:
-            parts.append("triple click")
-        elif event.repeat_count == 1:
-            parts.append("button down")
-        elif event.repeat_count == 2:
-            parts.append("double button down")
-        elif event.repeat_count == 3:
-            parts.append("triple button down")
-        elif event.repeat_count > 0:
-            parts.append(f"{event.repeat_count}x button down")
+if show_mouse:
+    if not GREP_MODE:
+        title = "MOUSE"
+        line = "\u2500" * (60 - len(title))
+        print(LINE_STYLE + "\u2500\u2500" + DIAMOND_STYLE + "\u25C6 " + RESET + HEADER_STYLE + title + RESET + DIAMOND_STYLE + " \u25C6" + RESET + LINE_STYLE + line + RESET)
+        print()
+        for desc in MOUSE_DESCRIPTIONS:
+            action, gesture = desc.split(", ", 1)
+            print("  " + DESC_STYLE + action + RESET + ", " + BRIGHT_MAGENTA + gesture + RESET)
+        print()
+    else:
+        for desc in MOUSE_DESCRIPTIONS:
+            print(desc)
 
-        event_str = "+".join(parts)
-        mouse_bindings.append((action, event_str))
-
-    mouse_order = [
-        "mouse_selection normal", "mouse_selection word", "mouse_selection line",
-        "mouse_selection extend", "mouse_selection rectangle", "mouse_selection line_from_point",
-        "mouse_handle_click",
-        "paste_from_selection", "paste_selection",
-        "mouse_show_command_output",
-    ]
-
-    sorted_mouse = []
-    for item in mouse_bindings:
-        action, event_str = item
-        idx = 999
-        for i, prefix in enumerate(mouse_order):
-            if action.startswith(prefix):
-                idx = i
-                break
-        sorted_mouse.append((idx, action, event_str))
-    sorted_mouse.sort()
-
-    for _, action, event_str in sorted_mouse:
-        print(f"{action}: {event_str}")
+# Footer with PETSCII-style blocks
+if not GREP_MODE:
+    print(TITLE_STYLE + "\u2580" * 68 + RESET)
+    print(FOOTER_STYLE + "  / search   q quit   h help" + RESET)
 '
+}
+
+# Determine if we should use pager
+if [[ $GREP_MODE -eq 1 ]] || [[ ! -t 1 ]]; then
+    # Grep mode or piped output: no pager, strip colors if piped
+    if [[ ! -t 1 ]] && [[ $GREP_MODE -eq 0 ]]; then
+        generate_output | sed 's/\x1b\[[0-9;]*m//g'
+    else
+        generate_output
+    fi
+else
+    # Interactive: use less with color support
+    generate_output | less -R
+fi
