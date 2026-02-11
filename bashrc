@@ -107,3 +107,6 @@ complete -F __start_kubectl k
 
 
 export SYSTEMD_EDITOR=vim
+
+
+alias cls=clear

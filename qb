@@ -1,20 +1,14 @@
 #!/usr/bin/env bash
 
 # Initialize variables with default values
-clean=false
 skip_tests=true
 disable_multithreading=false
-enable_retag=false
 custom_args=()
 maven_goals=()
 MAVEN_ARGS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --clean|-c)
-            clean=true
-            shift
-            ;;
         --test|-t)
             skip_tests=false
             shift
@@ -23,22 +17,16 @@ while [[ $# -gt 0 ]]; do
             disable_multithreading=true
             shift
             ;;
-        --retag|-r)
-            enable_retag=true
-            shift
-            ;;
         --help|-h)
             cat <<EOF
 Usage: $0 [OPTIONS] [MAVEN-GOALS]
 
-Quick Build with Docker - builds with default docker registry, then retags with branch/commit.
+Quick Build - runs formatters then Maven install.
 
 Options:
-  -c, --clean       Run clean before build (default: incremental)
-  -t, --test        Run tests (default: skip tests)
+  -t, --test          Run tests (default: skip tests)
   -1, --single-thread Disable multi-threading (default: -T6)
-  -r, --retag       Retag built images with branch/commit (default: no retagging)
-  -h, --help        Show this help message
+  -h, --help          Show this help message
 
 EOF
             exit 0
@@ -57,37 +45,23 @@ EOF
 done
 
 
-# Find project root (directory containing pom.xml)
-find_project_root() {
-    local dir="$PWD"
-    while [[ "$dir" != "/" ]]; do
-        if [[ -f "$dir/pom.xml" ]]; then
-            echo "$dir"
-            return 0
-        fi
-        dir=$(dirname "$dir")
-    done
-    return 1
-}
+# Check if pwd is in a frontend context
+is_frontend_context() {
+    local git_root
+    git_root=$(git rev-parse --show-toplevel 2>/dev/null) || return 1
+    [[ -d "$git_root/frontend" ]] || return 1
 
-# Get Git info for Docker image naming (only if retagging is enabled)
-if $enable_retag; then
-    if git rev-parse --git-dir >/dev/null 2>&1; then
-        docker_tag="$(git rev-parse --abbrev-ref HEAD)/$(git rev-parse --short=6 HEAD)"
-    else
-        echo "Error: --retag requires a git repository" >&2
-        exit 3
-    fi
-fi
+    # True if pwd is project root, frontend/, or subdir of frontend/
+    local rel_path
+    rel_path=$(realpath --relative-to="$git_root" "$PWD")
+    [[ "$rel_path" == "." || "$rel_path" == "frontend" || "$rel_path" == frontend/* ]]
+}
 
 # Set default goals if none provided
 if [[ ${#maven_goals[@]} -eq 0 ]]; then
-    if $clean; then
-        maven_goals=(clean install)
-    else
-        maven_goals=(install)
-    fi
+    maven_goals=(install)
 fi
+
 # Add multi-threading unless disabled
 $disable_multithreading || MAVEN_ARGS+=("-T6")
 
@@ -97,33 +71,20 @@ $skip_tests && MAVEN_ARGS+=("-DskipTests")
 # Add custom arguments
 MAVEN_ARGS+=("${custom_args[@]}")
 
-# Run yarn fix and type check in frontend workspaces if the project has a frontend
+# Run yarn fix and type check in frontend workspaces if pwd is frontend-related
 git_root=$(git rev-parse --show-toplevel 2>/dev/null) || true
-if [[ -n "$git_root" && -f "$git_root/frontend/package.json" ]]; then
+if is_frontend_context; then
+    echo "Installing frontend dependencies in $git_root/frontend"
+    (cd "$git_root/frontend" && yarn install)
     echo "Running frontend linters and formatters in $git_root/frontend"
     (cd "$git_root/frontend" && yarn workspaces foreach --all run fix)
     echo "Running TypeScript type check in $git_root/frontend"
-    (cd "$git_root/frontend" && yarn workspaces foreach --all exec tsc --noEmit) || exit 1
+    (cd "$git_root/frontend" && yarn workspaces foreach --all run tsc --noEmit) || exit 1
 fi
 
-#This can mess up other projects
+# Run Maven formatters and build
 mvn com.spotify.fmt:fmt-maven-plugin:format -T6
 mvn license:format -T6
 
 echo "Executing: mvn ${MAVEN_ARGS[*]} ${maven_goals[*]}"
-
-# Execute Maven build
 mvn "${MAVEN_ARGS[@]}" "${maven_goals[@]}"
-
-# If retagging is not enabled, we're done
-$enable_retag || exit 0
-
-echo "Retagging images with: $docker_tag"
-
-# Simple retagging: find recent images and retag them
-docker images --format "{{.Repository}}:{{.Tag}}" --filter "since=1h" | head -5 | while read -r image; do
-    [[ "$image" != *"$docker_tag"* ]] || continue
-    echo "Retagging: $image -> $docker_tag"
-    docker tag "$image" "$docker_tag" 2>/dev/null
-done
-

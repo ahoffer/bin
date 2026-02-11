@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-exec qb --clean "$@"
+exec qb clean install "$@"
