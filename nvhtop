@@ -62,11 +62,13 @@ def query_gpu():
 
 
 def proc_cmdline(pid):
-    """Read full command line from /proc, fall back to executable name."""
+    """Read executable name from /proc."""
     try:
         raw = open(f"/proc/{pid}/cmdline", "rb").read()
         if raw:
-            return raw.rstrip(b"\x00").replace(b"\x00", b" ").decode("utf-8", errors="replace")
+            # Extract first argument and return basename only
+            argv0 = raw.split(b"\x00")[0].decode("utf-8", errors="replace")
+            return os.path.basename(argv0)
     except (FileNotFoundError, PermissionError):
         pass
     return None
@@ -113,7 +115,8 @@ def proc_table(procs):
     tbl.add_column("VRAM", justify="right", style="cyan", header_style="cyan")
     tbl.add_column("Command", header_style="cyan", max_width=80, no_wrap=True)
     for p in sorted(procs, key=lambda p: p["mem_mib"], reverse=True):
-        tbl.add_row(str(p["pid"]), p["user"], f"{p['mem_mib']} MB", p["cmd"])
+        mem = f"{p['mem_mib'] / 1024:.1f} GB" if p["mem_mib"] > 99 else f"{p['mem_mib']} MB"
+        tbl.add_row(str(p["pid"]), p["user"], mem, p["cmd"])
     return tbl
 
 
