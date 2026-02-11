@@ -61,6 +61,27 @@ def query_gpu():
     }
 
 
+def proc_cmdline(pid):
+    """Read full command line from /proc, fall back to executable name."""
+    try:
+        raw = open(f"/proc/{pid}/cmdline", "rb").read()
+        if raw:
+            return raw.rstrip(b"\x00").replace(b"\x00", b" ").decode("utf-8", errors="replace")
+    except (FileNotFoundError, PermissionError):
+        pass
+    return None
+
+
+def proc_owner(pid):
+    """Read process owner from /proc status."""
+    try:
+        import pwd
+        uid = os.stat(f"/proc/{pid}").st_uid
+        return pwd.getpwuid(uid).pw_name
+    except (FileNotFoundError, PermissionError, KeyError):
+        return "?"
+
+
 def query_processes():
     out = subprocess.check_output(["nvidia-smi"], text=True)
     procs = []
@@ -69,10 +90,14 @@ def query_processes():
         out,
         re.MULTILINE,
     ):
+        pid = int(m.group(1))
+        fallback = os.path.basename(m.group(3).strip())
+        cmdline = proc_cmdline(pid) or fallback
         procs.append({
-            "pid": int(m.group(1)),
+            "pid": pid,
             "type": m.group(2),
-            "cmd": os.path.basename(m.group(3).strip()),
+            "user": proc_owner(pid),
+            "cmd": cmdline,
             "mem_mib": int(m.group(4)),
         })
     return procs
@@ -84,10 +109,11 @@ def proc_table(procs):
         pad_edge=False, padding=(0, 2), box=None,
     )
     tbl.add_column("PID", justify="right", style="cyan", header_style="cyan")
+    tbl.add_column("User", style="magenta", header_style="cyan")
     tbl.add_column("VRAM", justify="right", style="cyan", header_style="cyan")
-    tbl.add_column("Command", header_style="cyan")
+    tbl.add_column("Command", header_style="cyan", max_width=80, no_wrap=True)
     for p in sorted(procs, key=lambda p: p["mem_mib"], reverse=True):
-        tbl.add_row(str(p["pid"]), f"{p['mem_mib']} MB", p["cmd"])
+        tbl.add_row(str(p["pid"]), p["user"], f"{p['mem_mib']} MB", p["cmd"])
     return tbl
 
 
