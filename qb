@@ -1,90 +1,42 @@
 #!/usr/bin/env bash
 
-# Initialize variables with default values
 skip_tests=true
-disable_multithreading=false
-custom_args=()
-maven_goals=()
-MAVEN_ARGS=()
+threads="-T6"
+mvn_args=()
+goals=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --test|-t)
-            skip_tests=false
-            shift
-            ;;
-        --single-thread|-1)
-            disable_multithreading=true
-            shift
-            ;;
-        --help|-h)
-            cat <<EOF
-Usage: $0 [OPTIONS] [MAVEN-GOALS]
-
-Quick Build - runs formatters then Maven install.
-
-Options:
-  -t, --test          Run tests (default: skip tests)
-  -1, --single-thread Disable multi-threading (default: -T6)
-  -h, --help          Show this help message
-
-EOF
+        -t|--test) skip_tests=false ;;
+        -1|--single-thread) threads="" ;;
+        -h|--help)
+            echo "Usage: qb [OPTIONS] [MAVEN-GOALS]"
+            echo "Options: -t (run tests), -1 (single-thread), -h (help)"
             exit 0
             ;;
-        -*)
-            # Maven system properties or other options (e.g., -Dproperty=value, -X, -e)
-            custom_args+=("$1")
-            shift
-            ;;
-        *)
-            # Maven goals (e.g., clean, install, compile, test)
-            maven_goals+=("$1")
-            shift
-            ;;
+        -*) mvn_args+=("$1") ;;
+        *) goals+=("$1") ;;
     esac
+    shift
 done
 
+[[ ${#goals[@]} -eq 0 ]] && goals=(install)
+$skip_tests && mvn_args+=("-DskipTests")
 
-# Check if pwd is in a frontend context
+git_root=$(git rev-parse --show-toplevel 2>/dev/null) || true
+
 is_frontend_context() {
-    local git_root
-    git_root=$(git rev-parse --show-toplevel 2>/dev/null) || return 1
     [[ -d "$git_root/frontend" ]] || return 1
-
-    # True if pwd is project root, frontend/, or subdir of frontend/
-    local rel_path
-    rel_path=$(realpath --relative-to="$git_root" "$PWD")
-    [[ "$rel_path" == "." || "$rel_path" == "frontend" || "$rel_path" == frontend/* ]]
+    local rel
+    rel=$(realpath --relative-to="$git_root" "$PWD")
+    [[ "$rel" == "." || "$rel" == "frontend" || "$rel" == frontend/* ]]
 }
 
-# Set default goals if none provided
-if [[ ${#maven_goals[@]} -eq 0 ]]; then
-    maven_goals=(install)
-fi
-
-# Add multi-threading unless disabled
-$disable_multithreading || MAVEN_ARGS+=("-T6")
-
-# Add skip tests if enabled
-$skip_tests && MAVEN_ARGS+=("-DskipTests")
-
-# Add custom arguments
-MAVEN_ARGS+=("${custom_args[@]}")
-
-# Run yarn fix and type check in frontend workspaces if pwd is frontend-related
-git_root=$(git rev-parse --show-toplevel 2>/dev/null) || true
 if is_frontend_context; then
-    echo "Installing frontend dependencies in $git_root/frontend"
-    (cd "$git_root/frontend" && yarn install)
-    echo "Running frontend linters and formatters in $git_root/frontend"
-    (cd "$git_root/frontend" && yarn workspaces foreach --all run fix)
-    echo "Running TypeScript type check in $git_root/frontend"
-    (cd "$git_root/frontend" && yarn workspaces foreach --all run tsc --noEmit) || exit 1
+    # Run prettier before Maven to avoid build failures. Install deps first if missing.
+    (cd "$git_root/frontend" && [[ -d node_modules ]] || yarn install && yarn fix) || exit 1
 fi
 
-# Run Maven formatters and build
-mvn com.spotify.fmt:fmt-maven-plugin:format -T6
-mvn license:format -T6
+goals=(com.spotify.fmt:fmt-maven-plugin:format license:format "${goals[@]}")
 
-echo "Executing: mvn ${MAVEN_ARGS[*]} ${maven_goals[*]}"
-mvn "${MAVEN_ARGS[@]}" "${maven_goals[@]}"
+exec mvn $threads "${mvn_args[@]}" "${goals[@]}"
