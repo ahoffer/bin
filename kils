@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+FILTER="${1:-}"
+
+# k3s/containerd typically uses the k8s.io namespace
+NS="${KILS_CTR_NS:-k8s.io}"
+
+imgs=$(
+  ctr -n "$NS" images list -q \
+    | sed 's/@.*$//' \
+    | sort -u
+)
+
+if [[ -z "$FILTER" ]]; then
+  echo "$imgs"
+else
+  echo "$imgs" | grep -i -- "$FILTER" || true
+fi

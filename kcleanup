@@ -1,0 +1,6 @@
+# Remove dangling (untagged) images
+ctr -n k8s.io images list -q \
+  | grep '^sha256:' \
+  | xargs -r ctr -n k8s.io images rm
+# Reclaim disk space (garbage-collect unreferenced blobs)
+ctr -n k8s.io content gc
