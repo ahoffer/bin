@@ -5,6 +5,16 @@ threads="-T6"
 mvn_args=()
 goals=()
 
+require_value() {
+    local opt="$1"
+    local val="${2:-}"
+    if [[ -z "$val" || "$val" == -* ]]; then
+        echo "Error: $opt requires a value." >&2
+        echo "Usage: qb [OPTIONS] [MAVEN-GOALS]" >&2
+        exit 2
+    fi
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -t|--test) skip_tests=false ;;
@@ -14,7 +24,20 @@ while [[ $# -gt 0 ]]; do
             echo "Options: -t (run tests), -1 (single-thread), -h (help)"
             exit 0
             ;;
-        -pl|-am|-amd|-rf|-P|-f|-s|-gs|-T) mvn_args+=("$1" "$2"); shift ;;
+        -T)
+            require_value "$1" "${2:-}"
+            if [[ ! "$2" =~ ^[0-9]+$ ]]; then
+                echo "Error: -T requires a numeric thread count (e.g. 6 or 8)." >&2
+                exit 2
+            fi
+            threads="-T$2"
+            shift
+            ;;
+        -pl|-am|-amd|-rf|-P|-f|-s|-gs)
+            require_value "$1" "${2:-}"
+            mvn_args+=("$1" "$2")
+            shift
+            ;;
         -*) mvn_args+=("$1") ;;
         *) goals+=("$1") ;;
     esac
