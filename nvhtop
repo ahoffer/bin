@@ -21,7 +21,7 @@ except ImportError:
 
 SPARK = "▁▂▃▄▅▆▇█"
 REFRESH = 2
-HISTORY_LEN = 60
+HISTORY_LEN = 30
 
 
 def check_nvidia_smi():
@@ -49,7 +49,7 @@ def util_color(pct):
     return "red"
 
 
-def bar(pct, width=40):
+def bar(pct, width=20):
     filled = round(pct / 100 * width)
     color = util_color(pct)
     t = Text()
@@ -147,12 +147,12 @@ def query_processes():
 def proc_table(procs):
     tbl = Table(
         show_header=True, show_edge=False, show_lines=False,
-        pad_edge=False, padding=(0, 2), box=None,
+        pad_edge=False, padding=(0, 1), box=None,
     )
     tbl.add_column("PID", justify="right", style="cyan", header_style="cyan")
     tbl.add_column("User", style="magenta", header_style="cyan")
     tbl.add_column("VRAM", justify="right", style="cyan", header_style="cyan")
-    tbl.add_column("Command", header_style="cyan", max_width=80, no_wrap=True)
+    tbl.add_column("Command", header_style="cyan", max_width=30, no_wrap=True)
     for p in sorted(procs, key=lambda p: p["mem_mib"], reverse=True):
         mem = f"{p['mem_mib'] / 1024:.1f} GB" if p["mem_mib"] > 99 else f"{p['mem_mib']} MB"
         tbl.add_row(str(p["pid"]), p["user"], mem, p["cmd"])
@@ -165,19 +165,26 @@ def render(gpu, procs, history):
     mem_gb_total = gpu["mem_total"] / 1024
     power = round(gpu["power"])
 
+    # Strip common prefixes from GPU name
+    name = gpu['name']
+    for prefix in ["NVIDIA GeForce ", "NVIDIA "]:
+        if name.startswith(prefix):
+            name = name[len(prefix):]
+            break
+
     top = Text()
-    top.append(f"  {gpu['name']}", style="bold cyan")
-    top.append(f"   {gpu['temp']}°C", style="cyan")
-    top.append(f"   {power} / {round(gpu['power_cap'])} W\n\n", style="cyan")
-    top.append("  GPU  ", style="cyan")
+    top.append(f" {name}", style="bold cyan")
+    top.append(f"  {gpu['temp']}°C", style="cyan")
+    top.append(f"  {power}W\n\n", style="cyan")
+    top.append(" GPU ", style="cyan")
     top.append_text(bar(gpu["gpu_pct"]))
-    top.append(f"   {gpu['gpu_pct']}%\n", style=util_color(gpu["gpu_pct"]))
-    top.append("  MEM  ", style="cyan")
+    top.append(f" {gpu['gpu_pct']}%\n", style=util_color(gpu["gpu_pct"]))
+    top.append(" MEM ", style="cyan")
     top.append_text(bar(mem_pct))
-    top.append(f"   {mem_gb_used:.1f} / {mem_gb_total:.1f} GB\n", style=util_color(mem_pct))
+    top.append(f" {mem_gb_used:.1f}G\n", style=util_color(mem_pct))
 
     bottom = Text()
-    bottom.append("  UTL  ", style="cyan")
+    bottom.append(" UTL ", style="cyan")
     bottom.append_text(sparkline(history))
 
     if procs:
