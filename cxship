@@ -20,6 +20,48 @@ set -uo pipefail  # no -e: continue on errors, report all at end
 source cxlib.sh
 timer_start
 
+notify_kitty_tab() {
+  local status="$1"
+  local icon=""
+  local title=""
+
+  if [[ "$status" == "success" ]]; then
+    icon="✔"
+  else
+    icon="✖"
+  fi
+
+  if [[ -n "${KITTY_PID:-}" ]] && command -v kitty >/dev/null 2>&1; then
+    title="${icon} cxship"
+    kitty @ set-tab-title --match "id:${KITTY_WINDOW_ID:-}" "$title" 2>/dev/null || true
+  fi
+}
+
+play_completion_sound() {
+  local status="$1"
+  local sound=""
+
+  if [[ "$status" == "success" ]]; then
+    sound="/usr/share/sounds/freedesktop/stereo/complete.oga"
+  else
+    sound="/usr/share/sounds/freedesktop/stereo/bell.oga"
+  fi
+
+  if command -v paplay >/dev/null 2>&1 && [[ -f "$sound" ]]; then
+    paplay "$sound" >/dev/null 2>&1 || true
+  elif command -v canberra-gtk-play >/dev/null 2>&1; then
+    if [[ "$status" == "success" ]]; then
+      canberra-gtk-play -i complete >/dev/null 2>&1 || true
+    else
+      canberra-gtk-play -i bell >/dev/null 2>&1 || true
+    fi
+  elif command -v aplay >/dev/null 2>&1 && [[ -f "$sound" ]]; then
+    aplay -q "$sound" >/dev/null 2>&1 || true
+  else
+    printf '\a' >/dev/null 2>&1 || true
+  fi
+}
+
 usage() {
   sed -n '4,18p' "$0"
   echo -e "\nComponents: $(list_components)"
@@ -93,7 +135,11 @@ done
 echo
 if [[ ${#failures[@]} -eq 0 ]]; then
   echo "Shipped $(IFS=', '; echo "${components[*]}") - $(timer_elapsed)"
+  notify_kitty_tab success
+  play_completion_sound success
 else
   echo "Failed $(IFS=', '; echo "${failures[*]}") - $(timer_elapsed)"
+  notify_kitty_tab failure
+  play_completion_sound failure
   exit 1
 fi
