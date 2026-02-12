@@ -14,6 +14,7 @@ set -euo pipefail
 # Commands:
 #   components          List all component names
 #   dir <component>     Get docker directory for component
+#   modules <component> Get maven modules for component
 #   deploy <component>  Get k8s deployment name for component
 #   image <component>   Get full image:tag (registry/dir:version)
 #   timeout <component> Get rollout timeout in seconds
@@ -23,10 +24,25 @@ set -euo pipefail
 #   app                 Get the detected app name
 #   root                Get the project root
 
-source cxlib.sh
+source cx.lib
 
 usage() {
-  sed -n '4,24p' "$0"
+  cat <<'EOF'
+Query component configuration for cx or marrs projects
+
+Commands:
+  components          List all component names
+  dir <component>     Get docker directory for component
+  modules <component> Get maven modules for component
+  deploy <component>  Get k8s deployment name for component
+  image <component>   Get full image:tag (registry/dir:version)
+  timeout <component> Get rollout timeout in seconds
+  registry            Get the container registry URL
+  version             Get the current build version
+  namespace           Get the k8s namespace for this app
+  app                 Get the detected app name
+  root                Get the project root
+EOF
   exit 0
 }
 
@@ -123,10 +139,16 @@ case "$1" in
     version=$(get_version)
     echo "$registry/$dir:$version"
     ;;
+  modules)
+    component="${2:?Usage: cxconfig modules <component>}"
+    get_component_dir "$component" >/dev/null  # validate component exists
+    modules=$(get_component_field "$component" 3)
+    echo "$modules" | tr ',' '\n'
+    ;;
   timeout)
     component="${2:?Usage: cxconfig timeout <component>}"
     get_component_dir "$component" >/dev/null  # validate component exists
-    timeout=$(get_component_field "$component" 3)
+    timeout=$(get_component_field "$component" 4)
     echo "${timeout:-$(get_setting default_timeout)}"
     ;;
   registry)

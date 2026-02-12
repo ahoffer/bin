@@ -1,82 +1,49 @@
 #!/bin/bash
 set -uo pipefail  # no -e: continue on errors, report all at end
 
-# Build and deploy components.
+# Build and deploy components
+#
 # Maven modules are built sequentially, then docker images are built in
 # parallel. Each component is deployed as soon as its image is ready.
 # Must be run from within a project directory (walks up to find pom.xml).
-# App is auto-detected from the project root directory name.
 #
-# Usage: cxship [options] [component...]
-#        cxship --all
-#        cxship edge
-#        cxship edge app graphql
+# Usage: cxship [options] <component...>
+#        cxship all
+#        cxship app graphql
 #
 # Options:
-#   --all               Build and deploy all components
 #   -r, --remote HOST   Target k3s node (default: bigfish)
 #   -n, --namespace NS  Kubernetes namespace (default: auto from app)
 
-source cxlib.sh
+source cx.lib
 timer_start
 
-notify_kitty_tab() {
-  local status="$1"
-  local icon=""
-  local title=""
-
-  if [[ "$status" == "success" ]]; then
-    icon="✔"
-  else
-    icon="✖"
-  fi
-
-  if [[ -n "${KITTY_PID:-}" ]] && command -v kitty >/dev/null 2>&1; then
-    title="${icon} cxship"
-    kitty @ set-tab-title --match "id:${KITTY_WINDOW_ID:-}" "$title" 2>/dev/null || true
-  fi
-}
-
-play_completion_sound() {
-  local status="$1"
-  local sound=""
-
-  if [[ "$status" == "success" ]]; then
-    sound="/usr/share/sounds/freedesktop/stereo/complete.oga"
-  else
-    sound="/usr/share/sounds/freedesktop/stereo/bell.oga"
-  fi
-
-  if command -v paplay >/dev/null 2>&1 && [[ -f "$sound" ]]; then
-    paplay "$sound" >/dev/null 2>&1 || true
-  elif command -v canberra-gtk-play >/dev/null 2>&1; then
-    if [[ "$status" == "success" ]]; then
-      canberra-gtk-play -i complete >/dev/null 2>&1 || true
-    else
-      canberra-gtk-play -i bell >/dev/null 2>&1 || true
-    fi
-  elif command -v aplay >/dev/null 2>&1 && [[ -f "$sound" ]]; then
-    aplay -q "$sound" >/dev/null 2>&1 || true
-  else
-    printf '\a' >/dev/null 2>&1 || true
-  fi
-}
-
 usage() {
-  sed -n '4,18p' "$0"
+  cat <<'EOF'
+Build and deploy components
+
+Maven modules are built sequentially, then docker images are built in
+parallel. Each component is deployed as soon as its image is ready.
+
+Usage: cxship [options] <component...>
+       cxship all
+       cxship app graphql
+
+Options:
+  -r, --remote HOST   Target k3s node (default: bigfish)
+  -n, --namespace NS  Kubernetes namespace (default: auto from app)
+EOF
   echo -e "\nComponents: $(list_components)"
   exit 0
 }
 
 remote_host="bigfish"
 namespace=""
-build_all=""
 declare -a components=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage ;;
-    --all) build_all=1; shift ;;
     -r|--remote) remote_host="$2"; shift 2 ;;
     -n|--namespace) namespace="$2"; shift 2 ;;
     -*) echo "Unknown option: $1" >&2; exit 1 ;;
@@ -92,17 +59,13 @@ app=$(cxconfig app)
 
 mapfile -t all_components < <(cxconfig components)
 
-if [[ -n "$build_all" ]]; then
-  components=("${all_components[@]}")
-elif [[ ${#components[@]} -eq 0 ]]; then
-  err_msg "Specify components or use --all"
+if [[ ${#components[@]} -eq 0 ]]; then
+  err_msg "Specify components or use 'all'"
   echo "Available: ${all_components[*]}" >&2
   exit 1
 fi
 
-for c in "${components[@]}"; do
-  valid_component "$c" all_components || { err_msg "Unknown component '$c'"; exit 1; }
-done
+expand_components components all_components
 
 project_root=$(cxconfig root)
 
@@ -113,33 +76,19 @@ build_maven_modules "$project_root" "${components[@]}" || {
   exit 1
 }
 
-# Phase 2: Docker build + deploy, parallel per component. Each subshell
-# builds the docker image and then immediately deploys it. TTY mode is
-# disabled so parallel output prints complete lines.
-declare -a failures=()
-declare -A pids=()
-
-for component in "${components[@]}"; do
-  (
-    _IS_TTY=""
-    docker_build "$project_root" "$component" || exit 1
-    deploy_component "$component" "$remote_host" "$namespace" || exit 1
-  ) &
-  pids[$component]=$!
-done
-
-for component in "${components[@]}"; do
-  wait "${pids[$component]}" || failures+=("$component")
-done
+# Phase 2: Docker build + deploy, parallel per component.
+_build_and_deploy() {
+  docker_build "$project_root" "$1" || return 1
+  deploy_component "$1" "$remote_host" "$namespace"
+}
+run_parallel _build_and_deploy components
 
 echo
-if [[ ${#failures[@]} -eq 0 ]]; then
+if [[ ${#parallel_failures[@]} -eq 0 ]]; then
   echo "Shipped $(IFS=', '; echo "${components[*]}") - $(timer_elapsed)"
-  notify_kitty_tab success
-  play_completion_sound success
+  run_completion_hook cxship success
 else
-  echo "Failed $(IFS=', '; echo "${failures[*]}") - $(timer_elapsed)"
-  notify_kitty_tab failure
-  play_completion_sound failure
+  echo "Failed $(IFS=', '; echo "${parallel_failures[*]}") - $(timer_elapsed)"
+  run_completion_hook cxship failure
   exit 1
 fi

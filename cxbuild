@@ -1,43 +1,77 @@
 #!/bin/bash
 set -euo pipefail
 
-# Build a component's Docker image
+# Build component Docker images
 #
-# This script ONLY builds the image. It does NOT push or deploy.
-# After building, use cxdeploy to push the image and restart the pods.
+# This script ONLY builds images. It does NOT push or deploy.
+# After building, use cxdeploy to push images and restart pods.
 # Must be run from within a project directory (walks up to find pom.xml).
-# App is auto-detected from the project root directory name.
 #
-# Usage: cxbuild <component>
+# Usage: cxbuild [options] <component...>
+#        cxbuild all
+#        cxbuild app graphql
 #
 # Examples:
 #   cxbuild graphql
-#   cxbuild edge
+#   cxbuild all
 
-source cxlib.sh
+source cx.lib
+timer_start
 
 usage() {
-  sed -n '4,15p' "$0"
+  cat <<'EOF'
+Build component Docker images
+
+This script ONLY builds images. It does NOT push or deploy.
+After building, use cxdeploy to push images and restart pods.
+
+Usage: cxbuild [options] <component...>
+       cxbuild all
+       cxbuild app graphql
+EOF
   echo -e "\nComponents: $(list_components)"
   exit 0
 }
+
+declare -a components=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage ;;
     -*) echo "Unknown option: $1" >&2; exit 1 ;;
-    *) break ;;
+    *) components+=("$1"); shift ;;
   esac
 done
-
-component="${1:?Usage: cxbuild <component>}"
 
 require_project_root
 acquire_lock "build"
 
 mapfile -t all_components < <(cxconfig components)
-valid_component "$component" all_components || { err_msg "Unknown component '$component'"; exit 1; }
+
+if [[ ${#components[@]} -eq 0 ]]; then
+  err_msg "Specify components or use 'all'"
+  echo "Available: ${all_components[*]}" >&2
+  exit 1
+fi
+
+expand_components components all_components
 
 project_root=$(cxconfig root)
-build_maven_modules "$project_root" "$component" || exit 1
-docker_build "$project_root" "$component" || exit 1
+
+build_maven_modules "$project_root" "${components[@]}" || {
+  err_msg "Maven build failed, aborting"
+  exit 1
+}
+
+_docker_build_one() {
+  docker_build "$project_root" "$1"
+}
+run_parallel _docker_build_one components
+
+echo
+if [[ ${#parallel_failures[@]} -eq 0 ]]; then
+  echo "Built $(IFS=', '; echo "${components[*]}") - $(timer_elapsed)"
+else
+  echo "Failed $(IFS=', '; echo "${parallel_failures[*]}") - $(timer_elapsed)"
+  exit 1
+fi

@@ -1,18 +1,18 @@
 #!/bin/bash
 # Shared utilities for cx* scripts
 #
-# Source this file: source cxlib.sh
+# Source this file: source cx.lib
 
 # ─────────────────────────────────────────────────────────────
 # Terminal detection
 # ─────────────────────────────────────────────────────────────
 
-_IS_TTY=1
-_C_RED=""
-_C_RST=""
+cxlibIsTty=1
+cxlibRed=""
+cxlibReset=""
 if [[ -t 1 ]]; then
-  _C_RED=$'\033[31m'
-  _C_RST=$'\033[0m'
+  cxlibRed=$'\033[31m'
+  cxlibReset=$'\033[0m'
 fi
 
 # ─────────────────────────────────────────────────────────────
@@ -28,10 +28,10 @@ err_msg() {
 }
 
 # Print step name when a step begins. In progressive mode, prints without
-# a newline so time can be appended by _step_done. In batch mode, prints
+# a newline so time can be appended by cxlibStepDone. In batch mode, prints
 # a complete "start" line.
-_step_progress() {
-  if [[ -n "$_IS_TTY" ]]; then
+cxlibStepProgress() {
+  if [[ -n "$cxlibIsTty" ]]; then
     printf "%s" "$1"
   else
     printf "start %s\n" "$1"
@@ -39,17 +39,17 @@ _step_progress() {
 }
 
 # Finish a step line. In progressive mode, appends time to the name already
-# printed by _step_progress. In batch mode, prints a complete "done" line.
-_step_done() {
+# printed by cxlibStepProgress. In batch mode, prints a complete "done" line.
+cxlibStepDone() {
   local name="$1" time_str="$2" status="$3" logfile="${4:-}"
-  if [[ -n "$_IS_TTY" ]]; then
+  if [[ -n "$cxlibIsTty" ]]; then
     if [[ $status -eq 0 ]]; then
       printf " - %s\n" "$time_str"
     else
       if [[ -n "$logfile" ]]; then
-        printf " ${_C_RED}✗${_C_RST} log file: %s\n" "$logfile"
+        printf " ${cxlibRed}✗${cxlibReset} log file: %s\n" "$logfile"
       else
-        printf " ${_C_RED}✗${_C_RST}\n"
+        printf " ${cxlibRed}✗${cxlibReset}\n"
       fi
     fi
   else
@@ -69,14 +69,14 @@ _step_done() {
 # Timing
 # ─────────────────────────────────────────────────────────────
 
-_TIMER_START=""
+cxlibTimerStart=""
 
 timer_start() {
-  _TIMER_START=$(date +%s)
+  cxlibTimerStart=$(date +%s)
 }
 
 # Format seconds as "Xm Ys" or "Xs"
-_format_elapsed() {
+cxlibFormatElapsed() {
   local elapsed="$1"
   local min=$((elapsed / 60))
   local sec=$((elapsed % 60))
@@ -90,7 +90,7 @@ _format_elapsed() {
 timer_elapsed() {
   local end
   end=$(date +%s)
-  _format_elapsed $((end - _TIMER_START))
+  cxlibFormatElapsed $((end - cxlibTimerStart))
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -167,31 +167,69 @@ valid_component() {
 }
 
 # ─────────────────────────────────────────────────────────────
+# Component expansion and parallel execution
+# ─────────────────────────────────────────────────────────────
+
+# Expand "all" keyword and validate components.
+# Usage: expand_components <components_array> <all_components_array>
+# Modifies the first array in place.
+expand_components() {
+  local -n targetComponents=$1
+  local -n validComponents=$2
+  if [[ ${#targetComponents[@]} -eq 1 && "${targetComponents[0]}" == "all" ]]; then
+    targetComponents=("${validComponents[@]}")
+  else
+    for c in "${targetComponents[@]}"; do
+      valid_component "$c" validComponents || { err_msg "Unknown component '$c'"; exit 1; }
+    done
+  fi
+}
+
+# Run a function on components in parallel, collecting failures.
+# Usage: run_parallel <func_name> <components_array> [extra_args...]
+# Returns: sets global $parallel_failures array with failed components
+run_parallel() {
+  local func="$1"
+  local -n itemsToProcess=$2
+  shift 2
+  local extra_args=("$@")
+
+  parallel_failures=()
+  local -A pids=()
+  local item
+
+  for item in "${itemsToProcess[@]}"; do
+    (
+      cxlibIsTty=""
+      "$func" "$item" "${extra_args[@]}" || exit 1
+    ) &
+    pids[$item]=$!
+  done
+
+  for item in "${itemsToProcess[@]}"; do
+    wait "${pids[$item]}" || parallel_failures+=("$item")
+  done
+}
+
+# ─────────────────────────────────────────────────────────────
 # Build helpers
 # ─────────────────────────────────────────────────────────────
 
 # Map components to Maven module paths, de-duplicated, in order.
 # Usage: maven_modules_for_components components_array
 maven_modules_for_components() {
-  local -n comps=$1
-  local -a modules=()
-  local comp
-  for comp in "${comps[@]}"; do
-    case "$comp" in
-      edge|redirect|video-streaming) modules+=("backend" "distributions") ;;
-      graphql) modules+=("frontend/graphql") ;;
-      app) modules+=("frontend/app") ;;
-      docs) modules+=("docs") ;;
-    esac
-  done
-
+  local -n sourceComponents=$1
   local -A seen=()
   local -a uniq=()
-  local mod
-  for mod in "${modules[@]}"; do
-    [[ -n "${seen[$mod]:-}" ]] && continue
-    seen[$mod]=1
-    uniq+=("$mod")
+  local comp mod
+
+  for comp in "${sourceComponents[@]}"; do
+    while IFS= read -r mod; do
+      [[ -z "$mod" ]] && continue
+      [[ -n "${seen[$mod]:-}" ]] && continue
+      seen[$mod]=1
+      uniq+=("$mod")
+    done < <(cxconfig modules "$comp")
   done
 
   printf '%s\n' "${uniq[@]}"
@@ -202,20 +240,12 @@ maven_modules_for_components() {
 mvn_build() {
   local dir="$1"
   local name="${2:-$dir}"
+  [[ -d "$dir" ]] || { err_msg "Directory not found: $dir"; return 1; }
   local log_name
   log_name=$(basename "$name")
-  local logfile="/tmp/cxbuild-mvn-${log_name}.log"
-  local start
-  start=$(date +%s)
-  [[ -d "$dir" ]] || { err_msg "Directory not found: $dir"; return 1; }
-  _step_progress "maven $name"
-  (cd "$dir" && mvn clean install -DskipTests -T6) > "$logfile" 2>&1
-  local status=$?
-  local elapsed=$(($(date +%s) - start))
-  local time_str
-  time_str=$(_format_elapsed $elapsed)
-  _step_done "maven $name" "$time_str" "$status" "$logfile"
-  return $status
+  local log_file="/tmp/cxbuild-mvn-${log_name}.log"
+  run_logged "maven $name" "$log_file" \
+    bash -c 'cd "$1" && mvn clean install -DskipTests -T6' _ "$dir"
 }
 
 # Build all maven modules needed by the given components, deduplicated.
@@ -248,6 +278,27 @@ docker_build() {
     bash -c 'cd "$1" && mvn install -DskipTests' _ "$project_root/docker/$docker_dir"
 }
 
+# Push a component image to remote host. Uses prebuilt tarball if available,
+# otherwise falls back to docker save.
+# Usage: push_component <component> <remote_host>
+push_component() {
+  local component="$1"
+  local remote_host="$2"
+  local docker_dir tarball image
+  docker_dir=$(cxconfig dir "$component")
+  tarball="$PROJECT_ROOT/docker/$docker_dir/target/image.tar"
+  image=$(cxconfig image "$component")
+  local log_file
+  log_file=$(logfile cxpush "$component")
+  if [[ -f "$tarball" ]]; then
+    run_logged "push $component" "$log_file" \
+      bash -c 'cat "$1" | ssh "$2" "sudo k3s ctr images import - >/dev/null"' _ "$tarball" "$remote_host"
+  else
+    run_logged "push $component" "$log_file" \
+      bash -c 'docker save "$1" | ssh "$2" "sudo k3s ctr images import - >/dev/null"' _ "$image" "$remote_host"
+  fi
+}
+
 # Deploy a component image to remote host
 # Usage: deploy_component <component> <remote_host> <namespace>
 deploy_component() {
@@ -272,14 +323,32 @@ run_logged() {
   shift 2
   local start
   start=$(date +%s)
-  _step_progress "$name"
+  cxlibStepProgress "$name"
   "$@" > "$logfile" 2>&1
   local status=$?
   local elapsed=$(($(date +%s) - start))
   local time_str
-  time_str=$(_format_elapsed $elapsed)
-  _step_done "$name" "$time_str" "$status" "$logfile"
+  time_str=$(cxlibFormatElapsed $elapsed)
+  cxlibStepDone "$name" "$time_str" "$status" "$logfile"
   return $status
+}
+
+# ─────────────────────────────────────────────────────────────
+# Completion hooks
+# ─────────────────────────────────────────────────────────────
+
+# Run user completion hook if it exists.
+# Usage: run_completion_hook <script_name> <status>
+# Looks for ~/.config/cx/hooks/completion or uses built-in notification.
+# The hook receives two arguments: script name and status (success/failure).
+run_completion_hook() {
+  local script_name="$1"
+  local status="$2"
+  local hook="$HOME/.config/cx/hooks/completion"
+
+  if [[ -x "$hook" ]]; then
+    "$hook" "$script_name" "$status" 2>/dev/null || true
+  fi
 }
 
 # ─────────────────────────────────────────────────────────────
