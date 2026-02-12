@@ -14,6 +14,7 @@ while [[ $# -gt 0 ]]; do
             echo "Options: -t (run tests), -1 (single-thread), -h (help)"
             exit 0
             ;;
+        -pl|-am|-amd|-rf|-P|-f|-s|-gs|-T) mvn_args+=("$1" "$2"); shift ;;
         -*) mvn_args+=("$1") ;;
         *) goals+=("$1") ;;
     esac
@@ -26,16 +27,25 @@ $skip_tests && mvn_args+=("-DskipTests")
 git_root=$(git rev-parse --show-toplevel 2>/dev/null) || true
 
 is_frontend_context() {
+    [[ -n "$git_root" ]] || return 1
     [[ -d "$git_root/frontend" ]] || return 1
     local rel
     rel=$(realpath --relative-to="$git_root" "$PWD")
     [[ "$rel" == "." || "$rel" == "frontend" || "$rel" == frontend/* ]]
 }
 
-if is_frontend_context; then
+prepare_frontend_if_needed() {
+    is_frontend_context || return 0
+
     # Run prettier before Maven to avoid build failures. Install deps first if missing.
-    (cd "$git_root/frontend" && [[ -d node_modules ]] || yarn install && yarn fix) || exit 1
-fi
+    (
+        cd "$git_root/frontend" || exit 1
+        [[ -d node_modules ]] || yarn install
+        yarn fix
+    )
+}
+
+prepare_frontend_if_needed || exit 1
 
 goals=(com.spotify.fmt:fmt-maven-plugin:format license:format "${goals[@]}")
 
