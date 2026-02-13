@@ -1,0 +1,139 @@
+{
+    "profiles": [
+        {
+            "name": "Default profile",
+            "selected": true,
+            "complex_modifications": {
+                "rules": [
+                    {
+                        "description": "Left Cmd: Ctrl when held, Spotlight when tapped alone",
+                        "manipulators": [
+                            {
+                                "type": "basic",
+                                "from": {
+                                    "key_code": "left_command",
+                                    "modifiers": { "optional": ["any"] }
+                                },
+                                "to": [
+                                    { "key_code": "left_control" }
+                                ],
+                                "to_if_alone": [
+                                    {
+                                        "key_code": "spacebar",
+                                        "modifiers": ["left_command"]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "description": "Swap Ctrl<->Cmd except in kitty",
+                        "manipulators": [
+                            {
+                                "type": "basic",
+                                "from": {
+                                    "key_code": "left_control",
+                                    "modifiers": { "optional": ["any"] }
+                                },
+                                "to": [
+                                    { "key_code": "left_command" }
+                                ],
+                                "conditions": [
+                                    {
+                                        "type": "frontmost_application_unless",
+                                        "bundle_identifiers": ["^net\\.kovidgoyal\\.kitty$"]
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "basic",
+                                "from": {
+                                    "key_code": "right_control",
+                                    "modifiers": { "optional": ["any"] }
+                                },
+                                "to": [
+                                    { "key_code": "right_command" }
+                                ],
+                                "conditions": [
+                                    {
+                                        "type": "frontmost_application_unless",
+                                        "bundle_identifiers": ["^net\\.kovidgoyal\\.kitty$"]
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "basic",
+                                "from": {
+                                    "key_code": "right_command",
+                                    "modifiers": { "optional": ["any"] }
+                                },
+                                "to": [
+                                    { "key_code": "right_control" }
+                                ],
+                                "conditions": [
+                                    {
+                                        "type": "frontmost_application_unless",
+                                        "bundle_identifiers": ["^net\\.kovidgoyal\\.kitty$"]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "description": "Home to beginning of line, Shift+Home to select to beginning",
+                        "manipulators": [
+                            {
+                                "type": "basic",
+                                "from": {
+                                    "key_code": "home",
+                                    "modifiers": { "optional": ["shift"] }
+                                },
+                                "to": [
+                                    {
+                                        "key_code": "left_arrow",
+                                        "modifiers": ["left_command"]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "description": "End to end of line, Shift+End to select to end",
+                        "manipulators": [
+                            {
+                                "type": "basic",
+                                "from": {
+                                    "key_code": "end",
+                                    "modifiers": { "optional": ["shift"] }
+                                },
+                                "to": [
+                                    {
+                                        "key_code": "right_arrow",
+                                        "modifiers": ["left_command"]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        "description": "Print Screen to area screenshot (Cmd+Shift+4)",
+                        "manipulators": [
+                            {
+                                "type": "basic",
+                                "from": { "key_code": "print_screen" },
+                                "to": [
+                                    {
+                                        "key_code": "4",
+                                        "modifiers": ["left_command", "left_shift"]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "simple_modifications": [],
+            "virtual_hid_keyboard": { "keyboard_type_v2": "ansi" }
+        }
+    ]
+}
