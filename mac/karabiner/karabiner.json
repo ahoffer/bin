@@ -1,28 +1,24 @@
 {
     "profiles": [
         {
-            "name": "Default profile",
-            "selected": true,
             "complex_modifications": {
                 "rules": [
                     {
                         "description": "Left Cmd: Ctrl when held, Spotlight when tapped alone",
                         "manipulators": [
                             {
-                                "type": "basic",
                                 "from": {
                                     "key_code": "left_command",
                                     "modifiers": { "optional": ["any"] }
                                 },
-                                "to": [
-                                    { "key_code": "left_control" }
-                                ],
+                                "to": [{ "key_code": "left_control" }],
                                 "to_if_alone": [
                                     {
                                         "key_code": "spacebar",
                                         "modifiers": ["left_command"]
                                     }
-                                ]
+                                ],
+                                "type": "basic"
                             }
                         ]
                     },
@@ -30,68 +26,52 @@
                         "description": "Swap Ctrl<->Cmd except in kitty",
                         "manipulators": [
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "bundle_identifiers": [
+                                            "^net\\.kovidgoyal\\.kitty$"
+                                        ],
+                                        "type": "frontmost_application_unless"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "left_control",
                                     "modifiers": { "optional": ["any"] }
                                 },
-                                "to": [
-                                    { "key_code": "left_command" }
-                                ],
-                                "conditions": [
-                                    {
-                                        "type": "frontmost_application_unless",
-                                        "bundle_identifiers": ["^net\\.kovidgoyal\\.kitty$"]
-                                    }
-                                ]
+                                "to": [{ "key_code": "left_command" }],
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "bundle_identifiers": [
+                                            "^net\\.kovidgoyal\\.kitty$"
+                                        ],
+                                        "type": "frontmost_application_unless"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "right_control",
                                     "modifiers": { "optional": ["any"] }
                                 },
-                                "to": [
-                                    { "key_code": "right_command" }
-                                ],
-                                "conditions": [
-                                    {
-                                        "type": "frontmost_application_unless",
-                                        "bundle_identifiers": ["^net\\.kovidgoyal\\.kitty$"]
-                                    }
-                                ]
+                                "to": [{ "key_code": "right_command" }],
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
-                                "from": {
-                                    "key_code": "right_control",
-                                    "modifiers": { "optional": ["any"] }
-                                },
-                                "to": [
-                                    { "key_code": "left_control" }
-                                ],
                                 "conditions": [
                                     {
-                                        "type": "frontmost_application_if",
-                                        "bundle_identifiers": ["^net\\.kovidgoyal\\.kitty$"]
+                                        "bundle_identifiers": [
+                                            "^net\\.kovidgoyal\\.kitty$"
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "right_command",
                                     "modifiers": { "optional": ["any"] }
                                 },
-                                "to": [
-                                    { "key_code": "right_control" }
-                                ],
-                                "conditions": [
-                                    {
-                                        "type": "frontmost_application_unless",
-                                        "bundle_identifiers": ["^net\\.kovidgoyal\\.kitty$"]
-                                    }
-                                ]
+                                "to": [{ "key_code": "right_control" }],
+                                "type": "basic"
                             }
                         ]
                     },
@@ -99,7 +79,6 @@
                         "description": "Home to beginning of line, Shift+Home to select to beginning",
                         "manipulators": [
                             {
-                                "type": "basic",
                                 "from": {
                                     "key_code": "home",
                                     "modifiers": { "optional": ["shift"] }
@@ -109,7 +88,8 @@
                                         "key_code": "left_arrow",
                                         "modifiers": ["left_command"]
                                     }
-                                ]
+                                ],
+                                "type": "basic"
                             }
                         ]
                     },
@@ -117,7 +97,6 @@
                         "description": "End to end of line, Shift+End to select to end",
                         "manipulators": [
                             {
-                                "type": "basic",
                                 "from": {
                                     "key_code": "end",
                                     "modifiers": { "optional": ["shift"] }
@@ -127,7 +106,8 @@
                                         "key_code": "right_arrow",
                                         "modifiers": ["left_command"]
                                     }
-                                ]
+                                ],
+                                "type": "basic"
                             }
                         ]
                     },
@@ -135,20 +115,21 @@
                         "description": "Print Screen to area screenshot (Cmd+Shift+4)",
                         "manipulators": [
                             {
-                                "type": "basic",
                                 "from": { "key_code": "print_screen" },
                                 "to": [
                                     {
                                         "key_code": "4",
                                         "modifiers": ["left_command", "left_shift"]
                                     }
-                                ]
+                                ],
+                                "type": "basic"
                             }
                         ]
                     }
                 ]
             },
-            "simple_modifications": [],
+            "name": "Default profile",
+            "selected": true,
             "virtual_hid_keyboard": { "keyboard_type_v2": "ansi" }
         }
     ]

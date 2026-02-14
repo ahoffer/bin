@@ -56,3 +56,7 @@ regsync
 
 .serena/
 .aider*
+
+mac/karabiner/automatic_backups/
+mac/karabiner/assets/
+mac/karabiner/*.bak
