@@ -1,0 +1,14 @@
+#!/bin/bash
+# Persistent SOCKS5 proxy through bigfish
+PROXY_PORT=1080
+MONITOR_PORT=20000
+REMOTE_HOST=bigfish
+
+exec /opt/homebrew/bin/autossh \
+  -M "$MONITOR_PORT" \
+  -N \
+  -D "$PROXY_PORT" \
+  -o "ExitOnForwardFailure=yes" \
+  -o "ServerAliveInterval=30" \
+  -o "ServerAliveCountMax=3" \
+  "$REMOTE_HOST"

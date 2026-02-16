@@ -1,0 +1,24 @@
+#!/bin/bash
+# Restart SOCKS proxy and PAC server
+
+echo "Restarting proxy services..."
+
+echo "Unloading socksproxy..."
+launchctl unload ~/Library/LaunchAgents/com.aaron.socksproxy.plist 2>/dev/null
+
+echo "Unloading pacserver..."
+launchctl unload ~/Library/LaunchAgents/com.aaron.pacserver.plist 2>/dev/null
+
+sleep 2
+
+echo "Loading socksproxy..."
+launchctl load ~/Library/LaunchAgents/com.aaron.socksproxy.plist
+
+echo "Loading pacserver..."
+launchctl load ~/Library/LaunchAgents/com.aaron.pacserver.plist
+
+sleep 2
+
+echo ""
+echo "Services restarted. Status:"
+~/bin/mac/proxystatus
