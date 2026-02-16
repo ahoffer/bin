@@ -1,0 +1,21 @@
+#!/bin/bash
+# Copy the most recent screenshot to the clipboard whenever a new one appears.
+# Triggered by a LaunchAgent watching ~/Pictures/Screenshots.
+
+WATCH_DIR="$HOME/Pictures/Screenshots"
+STATE_FILE="$WATCH_DIR/.last_clipboard_copy"
+
+# Wait for the screenshot file to be fully written
+sleep 0.5
+
+NEWEST=$(ls -t "$WATCH_DIR"/*.png 2>/dev/null | head -1)
+
+if [ -n "$NEWEST" ] && [ -f "$NEWEST" ]; then
+    LAST_COPIED=""
+    [ -f "$STATE_FILE" ] && LAST_COPIED=$(cat "$STATE_FILE")
+
+    if [ "$NEWEST" != "$LAST_COPIED" ]; then
+        osascript -e "set the clipboard to (read (POSIX file \"$NEWEST\") as «class PNGf»)"
+        echo "$NEWEST" > "$STATE_FILE"
+    fi
+fi
