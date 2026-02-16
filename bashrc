@@ -64,7 +64,7 @@ alias jpick='. pickjava'
 export TERM=xterm-256color
 
 export KUBECONFIG=~/.kube/config
-export YAMLLINT_CONFIG_FILE=/home/aaron/bin/.yamllint
+export YAMLLINT_CONFIG_FILE=$HOME/bin/.yamllint
 export VIMINIT='source $HOME/bin/.vimrc'
 # Set path to Container Network Interface
 export CNI_PATH=~/.local/libexec/cni
