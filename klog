@@ -1,64 +1,34 @@
-#!/bin/bash
-# klog - Follow logs for a pod matching a partial name
-#
-# Usage: klog <partial-name> [kubectl logs options...]
-# Examples:
-#   klog nginx              # follow logs for first pod matching 'nginx'
-#   klog frontend --tail=100  # follow logs, starting from last 100 lines
-#   klog myapp -n my-namespace  # search in specific namespace
+#!/usr/bin/env python3
+"""klog - follow logs for a pod matching a regex.
 
-set -e
+Searches all namespaces unless -n is given. Extra flags pass through
+to kubectl logs.
 
-if [[ $# -lt 1 ]]; then
-    echo "Usage: klog <partial-pod-name> [kubectl logs options...]"
-    echo ""
-    echo "Examples:"
-    echo "  klog nginx              # follow logs for pod matching 'nginx'"
-    echo "  klog web --tail=50      # follow, starting from last 50 lines"
-    echo "  klog app -n prod        # search in 'prod' namespace"
-    exit 1
-fi
+Usage: klog [-n NAMESPACE] <pod-regex> [kubectl logs options...]
 
-PATTERN="$1"
-shift
+Examples:
+  klog nginx
+  klog frontend --tail=100
+  klog myapp -n my-namespace
+"""
 
-# Extract namespace from remaining args if provided
-NAMESPACE_ARGS=""
-REMAINING_ARGS=()
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -n|--namespace)
-            NAMESPACE_ARGS="-n $2"
-            shift 2
-            ;;
-        -n=*|--namespace=*)
-            NAMESPACE_ARGS="$1"
-            shift
-            ;;
-        *)
-            REMAINING_ARGS+=("$1")
-            shift
-            ;;
-    esac
-done
+import argparse
+import os
+import sys
 
-# Find matching pods
-PODS=$(kubectl get pods $NAMESPACE_ARGS --no-headers 2>/dev/null | grep -i -- "$PATTERN" | awk '{print $1}')
+from k8s_lib import print_info, resolve_pod
 
-if [[ -z "$PODS" ]]; then
-    echo "No pods found matching '$PATTERN'"
-    exit 1
-fi
+parser = argparse.ArgumentParser(add_help=False)
+parser.add_argument('-n', '--namespace')
+known, remaining = parser.parse_known_args()
 
-POD_COUNT=$(echo "$PODS" | wc -l)
+if not remaining:
+    print(__doc__.strip(), file=sys.stderr)
+    sys.exit(1)
 
-if [[ $POD_COUNT -gt 1 ]]; then
-    echo "Error: Ambiguous match - multiple pods match '$PATTERN':" >&2
-    echo "$PODS" >&2
-    exit 1
-fi
+pod_regex = remaining.pop(0)
+namespace, pod = resolve_pod(pod_regex, known.namespace, case_insensitive=True)
 
-POD="$PODS"
-
-echo "→ kubectl logs $NAMESPACE_ARGS $POD -f ${REMAINING_ARGS[*]}"
-kubectl logs $NAMESPACE_ARGS "$POD" -f "${REMAINING_ARGS[@]}"
+cmd = ['kubectl', '-n', namespace, 'logs', pod, '-f'] + remaining
+print_info(f"→ {' '.join(cmd)}")
+os.execvp('kubectl', cmd)

@@ -15,9 +15,7 @@ import argparse
 import sys
 
 # Import utilities from the same directory
-from k8s_utils import (
-    Colors, print_error, print_info, resolve_pod, run_command
-)
+from k8s_lib import print_error, print_info, resolve_pod, run_command
 
 
 def parse_args() -> argparse.Namespace:
@@ -57,20 +55,17 @@ def main() -> None:
     args = parse_args()
     
     try:
-        # Resolve the pod
-        pod_name = resolve_pod(args.pod_regex, args.namespace)
-        
+        # Resolve the pod, discovering namespace when not specified
+        namespace, pod_name = resolve_pod(args.pod_regex, args.namespace)
+
         # Build kubectl describe command
-        cmd = ['kubectl']
-        if args.namespace:
-            cmd.extend(['-n', args.namespace])
-        cmd.extend(['describe', 'pod', pod_name])
-        
+        cmd = ['kubectl', '-n', namespace, 'describe', 'pod', pod_name]
+
         # Add any additional kubectl describe arguments
         if args.kubectl_args:
             cmd.extend(args.kubectl_args)
-        
-        print_info(f"Describing pod: {pod_name}")
+
+        print_info(f"Describing pod: {namespace}/{pod_name}")
         
         # Execute the command
         run_command(cmd, capture_output=False, check=False)
