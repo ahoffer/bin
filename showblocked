@@ -1,0 +1,17 @@
+#!/bin/bash
+# Show sites blocked by Microsoft Defender Network Protection.
+# Usage: showblocked [duration]
+# Duration defaults to 1h. Examples: 30m, 2h, 1d
+
+duration="${1:-1h}"
+
+log show --last "$duration" \
+  --predicate 'subsystem == "mdatp" AND category == "net" AND eventMessage CONTAINS "connection was blocked"' \
+  --style compact 2>/dev/null \
+| awk '
+  /^[0-9]{4}-/ { ts = substr($0, 12, 8) }
+  /Destination:/ { gsub(/.*Destination: "/, ""); gsub(/".*/, ""); dest = $0 }
+  /Application:/ { gsub(/.*Application: /, ""); app = $0 }
+  /Overridable Block:/ { print ts "  " dest " (" app ")" }
+' \
+| sort -u
