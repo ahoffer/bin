@@ -69,7 +69,7 @@ export NEXTAUTH_URL_INTERNAL=https://localhost:3001
 # Backend services - proxied through Next.js rewrites (avoids CORS)
 export IDP_BASE_URL=https://octocx
 export IDP_REDIRECT_URL=https://octocx
-export GRAPHQL_BASE_URL=https://localhost:3001/graphql
+export GRAPHQL_BASE_URL=https://octocx/graphql
 export GEOSERVER_BASE_URL=https://localhost:3001/geoserver
 export NODE_BASE_URL=https://octocx/endpoint
 export TILE_SERVER_ZYX_URL=https://localhost:3001/tile-proxy/tilesZYX

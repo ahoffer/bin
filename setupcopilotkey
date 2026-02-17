@@ -1,0 +1,42 @@
+#!/bin/bash
+set -euo pipefail
+
+if [ ! -f ~/remap-copilot/build/remap-copilot ]; then
+    make -C ~/remap-copilot clean all
+fi
+
+sudo cp ~/remap-copilot/build/remap-copilot /usr/local/bin/remap-copilot
+sudo chmod 755 /usr/local/bin/remap-copilot
+
+if systemctl is-active --quiet keyd 2>/dev/null; then
+    sudo systemctl disable --now keyd
+fi
+sudo rm -f /usr/local/bin/keyd /usr/local/bin/keyd-application-mapper
+sudo rm -f /usr/local/lib/keyd/keyd-ipc
+sudo rm -f /etc/keyd/default.conf
+sudo rm -f /usr/lib/systemd/system/keyd.service
+
+# Clean up old user service if present
+systemctl --user disable --now remap-copilot 2>/dev/null || true
+rm -f ~/.config/systemd/user/remap-copilot.service
+systemctl --user daemon-reload
+
+# Install as system service so it has access to /dev/input devices
+sudo tee /etc/systemd/system/remap-copilot.service > /dev/null << 'EOF'
+[Unit]
+Description=Remap Windows Copilot Key to Right Control
+After=systemd-udevd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/remap-copilot
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now remap-copilot
+sudo systemctl status remap-copilot

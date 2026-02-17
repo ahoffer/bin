@@ -1,0 +1,72 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ $EUID -ne 0 ]]; then
+    echo "Run with: sudo $0"
+    exit 1
+fi
+
+REAL_USER="${SUDO_USER:?Run with sudo, not as root directly}"
+REAL_UID=$(id -u "$REAL_USER")
+REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+XDG="/run/user/$REAL_UID"
+DBUS="unix:path=$XDG/bus"
+
+run_as_user() {
+    runuser -u "$REAL_USER" -- env \
+        XDG_RUNTIME_DIR="$XDG" \
+        DBUS_SESSION_BUS_ADDRESS="$DBUS" \
+        PATH="$REAL_HOME/.local/bin:/usr/local/bin:/usr/bin:/bin" \
+        "$@"
+}
+
+echo "=== Step 1: Stop and disable Docker ==="
+systemctl stop docker docker.socket 2>/dev/null || true
+systemctl disable docker docker.socket 2>/dev/null || true
+echo "Done"
+
+echo ""
+echo "=== Step 2: Remove Docker packages ==="
+apt-get remove -y docker-ce docker-ce-cli docker-compose-plugin docker-ce-rootless-extras
+echo "Done"
+
+echo ""
+echo "=== Step 3: Stop and disable system containerd ==="
+systemctl stop containerd 2>/dev/null || true
+systemctl disable containerd 2>/dev/null || true
+echo "Done"
+
+echo ""
+echo "=== Step 4: Set up rootless containerd ==="
+run_as_user containerd-rootless-setuptool.sh install
+echo "Done"
+
+echo ""
+echo "=== Step 5: Set up rootless buildkit ==="
+run_as_user containerd-rootless-setuptool.sh install-buildkit
+echo "Done"
+
+echo ""
+echo "=== Step 6: Update nerdctl config ==="
+cat > /etc/nerdctl/nerdctl.toml << 'TOML'
+namespace = "default"
+TOML
+echo "Wrote /etc/nerdctl/nerdctl.toml"
+
+echo ""
+echo "=== Step 7: Verify ==="
+run_as_user nerdctl info
+echo ""
+run_as_user nerdctl ps
+
+echo ""
+echo "========================================="
+echo "Migration complete."
+echo ""
+echo "Docker data remains at /var/lib/docker."
+echo "To remove it:  sudo rm -rf /var/lib/docker"
+echo ""
+echo "The containerd.io package is still installed"
+echo "but the service is disabled. To remove it:"
+echo "  sudo apt remove containerd.io"
+echo "========================================="
