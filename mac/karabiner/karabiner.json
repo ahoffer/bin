@@ -1,4 +1,5 @@
 {
+    "global": { "show_in_menu_bar": false },
     "profiles": [
         {
             "complex_modifications": {
@@ -13,10 +14,20 @@
                                 },
                                 "to": [
                                     { "key_code": "left_control" },
-                                    { "set_variable": { "name": "win_key_held", "value": 1 } }
+                                    {
+                                        "set_variable": {
+                                            "name": "win_key_held",
+                                            "value": 1
+                                        }
+                                    }
                                 ],
                                 "to_after_key_up": [
-                                    { "set_variable": { "name": "win_key_held", "value": 0 } }
+                                    {
+                                        "set_variable": {
+                                            "name": "win_key_held",
+                                            "value": 0
+                                        }
+                                    }
                                 ],
                                 "to_if_alone": [
                                     {
@@ -39,9 +50,7 @@
                                         "value": 1
                                     }
                                 ],
-                                "from": {
-                                    "key_code": "l"
-                                },
+                                "from": { "key_code": "l" },
                                 "to": [
                                     {
                                         "key_code": "q",
@@ -243,9 +252,7 @@
                             {
                                 "from": {
                                     "key_code": "delete_or_backspace",
-                                    "modifiers": {
-                                        "mandatory": ["command"]
-                                    }
+                                    "modifiers": { "mandatory": ["command"] }
                                 },
                                 "to": [
                                     {
@@ -258,9 +265,7 @@
                             {
                                 "from": {
                                     "key_code": "delete_forward",
-                                    "modifiers": {
-                                        "mandatory": ["command"]
-                                    }
+                                    "modifiers": { "mandatory": ["command"] }
                                 },
                                 "to": [
                                     {
@@ -284,9 +289,7 @@
                                         "type": "frontmost_application_if"
                                     }
                                 ],
-                                "from": {
-                                    "key_code": "delete_forward"
-                                },
+                                "from": { "key_code": "delete_forward" },
                                 "to": [
                                     {
                                         "key_code": "delete_or_backspace",
@@ -304,9 +307,7 @@
                                         "type": "frontmost_application_if"
                                     }
                                 ],
-                                "from": {
-                                    "key_code": "delete_or_backspace"
-                                },
+                                "from": { "key_code": "delete_or_backspace" },
                                 "to": [
                                     {
                                         "key_code": "up_arrow",
@@ -329,14 +330,8 @@
                                         "type": "frontmost_application_if"
                                     }
                                 ],
-                                "from": {
-                                    "key_code": "f2"
-                                },
-                                "to": [
-                                    {
-                                        "key_code": "return_or_enter"
-                                    }
-                                ],
+                                "from": { "key_code": "f2" },
+                                "to": [{ "key_code": "return_or_enter" }],
                                 "type": "basic"
                             },
                             {
@@ -350,9 +345,7 @@
                                 ],
                                 "from": {
                                     "key_code": "up_arrow",
-                                    "modifiers": {
-                                        "mandatory": ["option"]
-                                    }
+                                    "modifiers": { "mandatory": ["option"] }
                                 },
                                 "to": [
                                     {
@@ -373,9 +366,7 @@
                                 ],
                                 "from": {
                                     "key_code": "h",
-                                    "modifiers": {
-                                        "mandatory": ["command"]
-                                    }
+                                    "modifiers": { "mandatory": ["command"] }
                                 },
                                 "to": [
                                     {
@@ -396,9 +387,7 @@
                                 ],
                                 "from": {
                                     "key_code": "l",
-                                    "modifiers": {
-                                        "mandatory": ["command"]
-                                    }
+                                    "modifiers": { "mandatory": ["command"] }
                                 },
                                 "to": [
                                     {
@@ -431,9 +420,7 @@
                             {
                                 "from": {
                                     "key_code": "f4",
-                                    "modifiers": {
-                                        "mandatory": ["option"]
-                                    }
+                                    "modifiers": { "mandatory": ["option"] }
                                 },
                                 "to": [
                                     {
