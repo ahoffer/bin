@@ -72,4 +72,9 @@ prepare_frontend_if_needed || exit 1
 
 goals=(com.spotify.fmt:fmt-maven-plugin:format license:format "${goals[@]}")
 
+colima_sock="$HOME/.colima/default/docker.sock"
+if [[ -S "$colima_sock" && ! -S /var/run/docker.sock ]]; then
+    mvn_args+=("-Ddocker.host=unix://$colima_sock")
+fi
+
 exec mvn $threads "${mvn_args[@]}" "${goals[@]}"
