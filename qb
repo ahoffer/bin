@@ -52,9 +52,11 @@ git_root=$(git rev-parse --show-toplevel 2>/dev/null) || true
 is_frontend_context() {
     [[ -n "$git_root" ]] || return 1
     [[ -d "$git_root/frontend" ]] || return 1
-    local rel
-    rel=$(realpath --relative-to="$git_root" "$PWD")
-    [[ "$rel" == "." || "$rel" == "frontend" || "$rel" == frontend/* ]]
+    local resolved_pwd rel
+    resolved_pwd=$(realpath "$PWD")
+    rel="${resolved_pwd#"$git_root"}"
+    rel="${rel#/}"
+    [[ -z "$rel" || "$rel" == "frontend" || "$rel" == frontend/* ]]
 }
 
 prepare_frontend_if_needed() {
