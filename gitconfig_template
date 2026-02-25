@@ -4,7 +4,6 @@
 
 [core]
     editor = vim
-    autocrlf = input
     pager = less -FRSX
     # on commit: convert CRLF → LF; on checkout: leave line‐endings as LF
     autocrlf = input
@@ -18,7 +17,6 @@
 
 [alias]
     st       = status
-    co       = checkout
     br       = branch
     ci       = commit
     df       = diff
@@ -29,6 +27,13 @@
     amend    = commit --amend --no-edit
     rb       = rebase
     s        = "!git status -s"
+    wt       = worktree
+    sw       = switch
+    cp       = cherry-pick
+    aa       = add -A
+    cm       = commit -m
+    pu       = pull
+    ps       = push
 
 [fetch]
     prune = true
