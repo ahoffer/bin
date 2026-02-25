@@ -12,7 +12,7 @@ set -uo pipefail  # no -e: continue on errors, report all at end
 #        cxship app graphql
 #
 # Options:
-#   -r, --remote HOST   Target k3s node (default: bigfish)
+#   -r, --remote HOST   Target host (default: CX_HOST or clown)
 #   -n, --namespace NS  Kubernetes namespace (default: auto from app)
 
 source cx.lib
@@ -30,14 +30,14 @@ Usage: cxship [options] <component...>
        cxship app graphql
 
 Options:
-  -r, --remote HOST   Target k3s node (default: bigfish)
+  -r, --remote HOST   Target host (default: CX_HOST or clown)
   -n, --namespace NS  Kubernetes namespace (default: auto from app)
 EOF
   echo -e "\nComponents: $(list_components)"
   exit 0
 }
 
-remote_host="bigfish"
+remote_host=""
 namespace=""
 declare -a components=()
 
@@ -50,6 +50,8 @@ while [[ $# -gt 0 ]]; do
     *) components+=("$1"); shift ;;
   esac
 done
+
+[[ -z "$remote_host" ]] && remote_host=$(resolve_default_host)
 
 require_project_root
 acquire_lock "builddeploy"

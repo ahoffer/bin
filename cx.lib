@@ -123,6 +123,31 @@ require_project_root() {
 }
 
 # ─────────────────────────────────────────────────────────────
+# Host resolution
+# ─────────────────────────────────────────────────────────────
+
+# Return the default k8s host name from CX_HOST or fall back to clown
+resolve_default_host() {
+  echo "${CX_HOST:-clown}"
+}
+
+# Return the SSH command array for a host as a single eval-safe string.
+# Callers use: eval "${ssh_cmd}" to expand into the correct argv.
+host_ssh_cmd() {
+  local host="$1"
+  case "$host" in
+    clown) echo "ssh -F $HOME/.lima/rke2/ssh.config lima-rke2" ;;
+    *)     echo "ssh $host" ;;
+  esac
+}
+
+# Return the ctr import command for the host's container runtime.
+# Reads from stdin when given - as the file argument.
+host_ctr_import_cmd() {
+  echo "sudo /var/lib/rancher/rke2/bin/ctr --address /run/k3s/containerd/containerd.sock --namespace k8s.io images import"
+}
+
+# ─────────────────────────────────────────────────────────────
 # Locking (prevent parallel builds)
 # ─────────────────────────────────────────────────────────────
 
@@ -278,24 +303,27 @@ docker_build() {
     bash -c 'cd "$1" && mvn install -DskipTests' _ "$project_root/docker/$docker_dir"
 }
 
-# Push a component image to remote host. Uses prebuilt tarball if available,
+# Push a component image to a k8s host. Uses prebuilt tarball if available,
 # otherwise falls back to docker save.
-# Usage: push_component <component> <remote_host>
+# Usage: push_component <component> <host>
 push_component() {
   local component="$1"
-  local remote_host="$2"
+  local host="$2"
   local docker_dir tarball image
   docker_dir=$(cxconfig dir "$component")
   tarball="$PROJECT_ROOT/docker/$docker_dir/target/image.tar"
   image=$(cxconfig image "$component")
   local log_file
   log_file=$(logfile cxpush "$component")
+  local ssh_cmd ctr_cmd
+  ssh_cmd=$(host_ssh_cmd "$host")
+  ctr_cmd=$(host_ctr_import_cmd)
   if [[ -f "$tarball" ]]; then
     run_logged "push $component" "$log_file" \
-      bash -c 'cat "$1" | ssh "$2" "sudo k3s ctr images import - >/dev/null"' _ "$tarball" "$remote_host"
+      bash -c "cat \"\$1\" | $ssh_cmd \"$ctr_cmd - >/dev/null\"" _ "$tarball"
   else
     run_logged "push $component" "$log_file" \
-      bash -c 'docker save "$1" | ssh "$2" "sudo k3s ctr images import - >/dev/null"' _ "$image" "$remote_host"
+      bash -c "docker save \"\$1\" | $ssh_cmd \"$ctr_cmd - >/dev/null\"" _ "$image"
   fi
 }
 
