@@ -1,0 +1,7 @@
+#!/bin/bash
+exec proxytunnel \
+    slack.com \
+    slack-edge.com \
+    slack-msgs.com \
+    slackb.com \
+    slack-files.com

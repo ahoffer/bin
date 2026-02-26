@@ -1,0 +1,30 @@
+#!/bin/bash
+# Stop the proxy tunnel and restore Chrome.
+
+PID_FILE="$HOME/.proxy-tunnel.pid"
+
+# Kill all PIDs in the file (autossh + PAC server).
+if [ -f "$PID_FILE" ]; then
+    while IFS= read -r pid; do
+        [ -n "$pid" ] && kill "$pid" 2>/dev/null && echo "Stopped PID $pid." || true
+    done < "$PID_FILE"
+    rm "$PID_FILE"
+fi
+
+# Clean up old PID file location from earlier versions.
+old="$HOME/.slack-tunnel.pid"
+if [ -f "$old" ]; then
+    pid=$(cat "$old")
+    kill "$pid" 2>/dev/null || true
+    rm "$old"
+fi
+
+# Fallback: kill any remaining autossh tunnel processes.
+pkill -f "autossh.*-D.*9050" 2>/dev/null || true
+
+rm -f "$HOME/.proxy-tunnel.pac"
+
+osascript -e 'tell application "Google Chrome" to quit' 2>/dev/null || true
+sleep 1
+open -a "Google Chrome"
+echo "Chrome restored."

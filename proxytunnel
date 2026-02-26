@@ -1,0 +1,92 @@
+#!/bin/bash
+# Route specified domains through a SOCKS5 tunnel to bigfish.
+# Usage: proxytunnel domain1 [domain2 ...]
+# A PAC file is served locally so only listed domains use the tunnel.
+
+set -euo pipefail
+
+[ $# -eq 0 ] && { echo "Usage: proxytunnel domain1 [domain2 ...]" >&2; exit 1; }
+
+SOCKS_PORT=9050
+SSH_HOST=bigfish
+PID_FILE="$HOME/.proxy-tunnel.pid"
+PAC_FILE="$HOME/.proxy-tunnel.pac"
+
+if [ -f "$PID_FILE" ]; then
+    first_pid=$(head -1 "$PID_FILE")
+    if kill -0 "$first_pid" 2>/dev/null; then
+        echo "Tunnel already running (PID $first_pid). Run proxystop first." >&2
+        exit 1
+    fi
+    rm "$PID_FILE"
+fi
+
+if nc -z -w 1 127.0.0.1 "$SOCKS_PORT" 2>/dev/null; then
+    echo "Port $SOCKS_PORT already in use. Run proxystop first." >&2
+    exit 1
+fi
+
+# Generate PAC file routing listed domains through SOCKS5, everything else DIRECT.
+{
+    echo "function FindProxyForURL(url, host) {"
+    echo "    var proxy = \"SOCKS5 127.0.0.1:$SOCKS_PORT\";"
+    printf '    var domains = ['
+    sep=""
+    for domain in "$@"; do
+        printf '%s"%s"' "$sep" "${domain#.}"
+        sep=", "
+    done
+    echo "];"
+    cat << 'JSEOF'
+    for (var i = 0; i < domains.length; i++) {
+        if (dnsDomainIs(host, "." + domains[i]) || host === domains[i])
+            return proxy;
+    }
+    return "DIRECT";
+}
+JSEOF
+} > "$PAC_FILE"
+
+# Find a free port and start an HTTP server to serve the PAC file.
+PAC_PORT=$(python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); print(s.getsockname()[1]); s.close()")
+PAC_FILE="$PAC_FILE" PAC_PORT="$PAC_PORT" python3 -c "
+import http.server, os, pathlib
+pac = pathlib.Path(os.environ['PAC_FILE']).read_bytes()
+port = int(os.environ['PAC_PORT'])
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/x-ns-proxy-autoconfig')
+        self.end_headers()
+        self.wfile.write(pac)
+    def log_message(self, *a): pass
+http.server.HTTPServer(('127.0.0.1', port), H).serve_forever()
+" &
+pac_pid=$!
+
+echo "Starting tunnel to $SSH_HOST for: $*"
+nohup autossh -M 0 -N -D "$SOCKS_PORT" "$SSH_HOST" \
+    > "$HOME/.proxy-tunnel.log" 2>&1 &
+autossh_pid=$!
+
+printf '%s\n%s\n' "$autossh_pid" "$pac_pid" > "$PID_FILE"
+
+echo "Waiting for tunnel..."
+for i in $(seq 1 10); do
+    nc -z -w 1 127.0.0.1 "$SOCKS_PORT" 2>/dev/null && break
+    if [ "$i" -eq 10 ]; then
+        echo "Tunnel did not come up. Check ~/.proxy-tunnel.log" >&2
+        kill "$autossh_pid" "$pac_pid" 2>/dev/null || true
+        rm -f "$PID_FILE" "$PAC_FILE"
+        exit 1
+    fi
+    sleep 1
+done
+
+echo "Tunnel up (PID $autossh_pid). Routing: $*"
+
+osascript -e 'tell application "Google Chrome" to quit' 2>/dev/null || true
+sleep 1
+open -a "Google Chrome" --args "--proxy-pac-url=http://127.0.0.1:$PAC_PORT/proxy.pac"
+
+echo "Chrome open. Run proxystop when done."
