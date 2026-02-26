@@ -91,19 +91,19 @@ command -v go >/dev/null 2>&1 && export PATH="$PATH:$(go env GOPATH)/bin"
 
 
 # ----- TAB COMPLETIONS GO HERE -----
-#Tab completion for kubectl, if kubectl is available
-command -v kubectl &>/dev/null && source <(kubectl completion bash)
+# Tab completion for kubectl, if available and supported
+command -v kubectl >/dev/null 2>&1 && source <(kubectl completion bash 2>/dev/null) 2>/dev/null
 
-#Tab completion for Helm, if helm is available
-command -v helm &>/dev/null && source <(helm completion bash)
+# Tab completion for Helm, if available and supported
+command -v helm >/dev/null 2>&1 && source <(helm completion bash 2>/dev/null) 2>/dev/null
 
-#Tab completion for nerdctl, if it is available
-command -v nerdctl &>/dev/null && source <(nerdctl completion bash)
+# Tab completion for nerdctl, if available and supported
+command -v nerdctl >/dev/null 2>&1 && source <(nerdctl completion bash 2>/dev/null) 2>/dev/null
 
-command -v regctl &>/dev/null && source <(regctl completion bash)
+command -v regctl >/dev/null 2>&1 && source <(regctl completion bash 2>/dev/null) 2>/dev/null
 
-# Completions for the alias "k"
-complete -F __start_kubectl k
+# Completions for the alias "k" (only if kubectl completion is loaded)
+declare -F __start_kubectl >/dev/null 2>&1 && complete -F __start_kubectl k
 
 
 export SYSTEMD_EDITOR=vim
