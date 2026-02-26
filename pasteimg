@@ -1,0 +1,33 @@
+#!/bin/bash
+# Save clipboard image or text to the frontmost Finder window's directory.
+
+# If a file path was passed as argument, use its parent directory.
+# Otherwise fall back to Finder's insertion location or Desktop.
+if [ -n "$1" ]; then
+  if [ -d "$1" ]; then
+    dir="$1"
+  else
+    dir=$(dirname "$1")
+  fi
+else
+  dir=$(osascript -e '
+    tell application "Finder"
+      try
+        return POSIX path of (insertion location as alias)
+      end try
+      return POSIX path of (path to desktop)
+    end tell
+  ')
+fi
+
+stamp=$(date +'%Y%m%d%H%M%S')
+
+if /opt/homebrew/bin/pngpaste "${dir%/}/clipboard${stamp}.png" 2>/dev/null; then
+  osascript -e "display notification \"Saved clipboard${stamp}.png\" with title \"Paste\""
+elif text=$(pbpaste 2>/dev/null) && [ -n "$text" ]; then
+  printf '%s' "$text" > "${dir%/}/clipboard${stamp}.txt"
+  osascript -e "display notification \"Saved clipboard${stamp}.txt\" with title \"Paste\""
+else
+  osascript -e 'display notification "Nothing to paste" with title "Paste"'
+fi
+exit 0
