@@ -33,7 +33,8 @@ while [[ $# -gt 0 ]]; do
             threads="-T$2"
             shift
             ;;
-        -pl|-am|-amd|-rf|-P|-f|-s|-gs)
+        -am|-amd) mvn_args+=("$1") ;;
+        -pl|-rf|-P|-f|-s|-gs)
             require_value "$1" "${2:-}"
             mvn_args+=("$1" "$2")
             shift
