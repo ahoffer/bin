@@ -1,0 +1,84 @@
+<keymap version="1" name="GNOME" parent="$default">
+  <action id="ActivateNuGetToolWindow" />
+  <action id="ActivateUnitTestsToolWindow" />
+  <action id="Back">
+    <keyboard-shortcut first-keystroke="shift alt left" />
+    <mouse-shortcut keystroke="button4" />
+  </action>
+  <action id="EvaluateExpression">
+    <keyboard-shortcut first-keystroke="shift alt 8" />
+  </action>
+  <action id="FileChooser.GoToRoot">
+    <keyboard-shortcut first-keystroke="ctrl slash" />
+  </action>
+  <action id="Find">
+    <keyboard-shortcut first-keystroke="ctrl f" />
+    <keyboard-shortcut first-keystroke="shift alt 3" />
+  </action>
+  <action id="FindUsages">
+    <keyboard-shortcut first-keystroke="shift alt 7" />
+  </action>
+  <action id="ForceRunToCursor">
+    <keyboard-shortcut first-keystroke="ctrl alt 9" />
+  </action>
+  <action id="Forward">
+    <keyboard-shortcut first-keystroke="shift alt right" />
+    <mouse-shortcut keystroke="button5" />
+  </action>
+  <action id="IDEtalk.SearchUserHistory">
+    <keyboard-shortcut first-keystroke="shift alt 7" />
+  </action>
+  <action id="Images.EditExternally">
+    <keyboard-shortcut first-keystroke="ctrl alt 4" />
+  </action>
+  <action id="MoveLineDown" />
+  <action id="MoveLineUp" />
+  <action id="NextOccurence">
+    <keyboard-shortcut first-keystroke="shift alt down" />
+  </action>
+  <action id="PreviousOccurence">
+    <keyboard-shortcut first-keystroke="shift alt up" />
+  </action>
+  <action id="QuickEvaluateExpression">
+    <keyboard-shortcut first-keystroke="ctrl alt 8" />
+    <mouse-shortcut keystroke="shift control alt button1" />
+  </action>
+  <action id="ResetIdeScaleAction">
+    <keyboard-shortcut first-keystroke="shift ctrl alt 0" />
+  </action>
+  <action id="RunToCursor">
+    <keyboard-shortcut first-keystroke="shift alt 9" />
+  </action>
+  <action id="SelectIn">
+    <keyboard-shortcut first-keystroke="shift alt 1" />
+    <keyboard-shortcut first-keystroke="alt f1" />
+  </action>
+  <action id="ShowExecutionPoint">
+    <keyboard-shortcut first-keystroke="shift alt 0" />
+  </action>
+  <action id="ShowFilePath">
+    <keyboard-shortcut first-keystroke="shift ctrl alt 2" />
+  </action>
+  <action id="ShowSettingsAndFindUsages">
+    <keyboard-shortcut first-keystroke="shift ctrl alt 7" />
+  </action>
+  <action id="ShowUsages">
+    <keyboard-shortcut first-keystroke="ctrl alt 7" />
+  </action>
+  <action id="SurroundWith">
+    <keyboard-shortcut first-keystroke="shift ctrl alt b" />
+    <keyboard-shortcut first-keystroke="ctrl alt t" />
+  </action>
+  <action id="SwitchCoverage">
+    <keyboard-shortcut first-keystroke="ctrl alt 6" />
+  </action>
+  <action id="XDebugger.AttachToProcess">
+    <keyboard-shortcut first-keystroke="ctrl alt 5" />
+  </action>
+  <action id="ZoomInIdeAction">
+    <keyboard-shortcut first-keystroke="shift ctrl alt equals" />
+  </action>
+  <action id="ZoomOutIdeAction">
+    <keyboard-shortcut first-keystroke="shift ctrl alt minus" />
+  </action>
+</keymap>
