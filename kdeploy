@@ -11,15 +11,23 @@ set -euo pipefail
 # Kill child processes on exit
 trap 'pkill -P $$ 2>/dev/null || true' EXIT
 
-source cx.hostlib
-
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+source "$SCRIPT_DIR/cx.hostlib"
 
 usage() {
   sed -n '4,8p' "$0"
   echo
   echo "If deployment is omitted, it defaults to the image name (before the tag)."
   exit 0
+}
+
+require_optarg() {
+  local opt="$1"
+  if [[ $# -lt 2 || -z "${2:-}" || "${2:0:1}" == "-" ]]; then
+    echo "error: option $opt requires a value" >&2
+    exit 1
+  fi
 }
 
 host=""
@@ -30,9 +38,9 @@ while [[ $# -gt 0 && "$1" == -* ]]; do
   case "$1" in
     -h|--help) usage ;;
     -q|--quiet) quiet=true; shift ;;
-    -r|--remote) host="$2"; shift 2 ;;
-    -n|--namespace) namespace="$2"; shift 2 ;;
-    -t|--timeout) timeout="$2"; shift 2 ;;
+    -r|--remote) require_optarg "$1" "${2:-}"; host="$2"; shift 2 ;;
+    -n|--namespace) require_optarg "$1" "${2:-}"; namespace="$2"; shift 2 ;;
+    -t|--timeout) require_optarg "$1" "${2:-}"; timeout="$2"; shift 2 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
@@ -56,16 +64,18 @@ if [[ -z "$namespace" ]]; then
   fi
 fi
 
-q_flag=""
-$quiet && q_flag="-q"
+declare -a q_args=()
+$quiet && q_args=(-q)
+rollout_timeout="$timeout"
+[[ "$rollout_timeout" =~ [[:alpha:]]$ ]] || rollout_timeout="${rollout_timeout}s"
 
 # Push image to remote k8s node
-"$SCRIPT_DIR/kpush" $q_flag -r "$host" "$IMAGE"
+"$SCRIPT_DIR/kpush" "${q_args[@]}" -r "$host" "$IMAGE"
 
 # Restart deployment and wait for rollout
-"$SCRIPT_DIR/krestart" $q_flag -n "$namespace" -t "${timeout}s" "$DEPLOY"
+"$SCRIPT_DIR/krestart" "${q_args[@]}" -n "$namespace" -t "$rollout_timeout" "$DEPLOY"
 
 # Verify pods are running the correct image
-"$SCRIPT_DIR/kverify" $q_flag -n "$namespace" -r "$host" -t "$timeout" "$IMAGE" "$DEPLOY"
+"$SCRIPT_DIR/kverify" "${q_args[@]}" -n "$namespace" -r "$host" -t "$timeout" "$IMAGE" "$DEPLOY"
 
 $quiet || echo "==> Deploy complete"

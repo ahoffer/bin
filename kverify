@@ -8,11 +8,21 @@ set -euo pipefail
 #   kverify -n prod myapp:1.0 cx-app              Specific namespace
 #   kverify -r node1 -t 120 myapp:1.0 cx-app      Custom host and timeout
 
-source cx.hostlib
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+source "$SCRIPT_DIR/cx.hostlib"
 
 usage() {
   sed -n '4,8p' "$0"
   exit 0
+}
+
+require_optarg() {
+  local opt="$1"
+  if [[ $# -lt 2 || -z "${2:-}" || "${2:0:1}" == "-" ]]; then
+    echo "error: option $opt requires a value" >&2
+    exit 1
+  fi
 }
 
 namespace=""
@@ -24,9 +34,9 @@ while [[ $# -gt 0 && "$1" == -* ]]; do
   case "$1" in
     -h|--help) usage ;;
     -q|--quiet) quiet=true; shift ;;
-    -n|--namespace) namespace="$2"; shift 2 ;;
-    -r|--remote) host="$2"; shift 2 ;;
-    -t|--timeout) timeout="$2"; shift 2 ;;
+    -n|--namespace) require_optarg "$1" "${2:-}"; namespace="$2"; shift 2 ;;
+    -r|--remote) require_optarg "$1" "${2:-}"; host="$2"; shift 2 ;;
+    -t|--timeout) require_optarg "$1" "${2:-}"; timeout="$2"; shift 2 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
@@ -52,8 +62,26 @@ readonly RETRY_INTERVAL="$interval"
 
 get_pod_selector() {
   kubectl get deployment "$DEPLOY" -n "$NAMESPACE" \
-    -o jsonpath='{.spec.selector.matchLabels}' |
-    jq -r 'to_entries | map("\(.key)=\(.value)") | join(",")'
+    -o json |
+    jq -r '
+      [
+        (.spec.selector.matchLabels // {} | to_entries[] | "\(.key)=\(.value)"),
+        (
+          .spec.selector.matchExpressions // [] | .[] |
+          if .operator == "In" then
+            "\(.key) in (\(.values | join(",")))"
+          elif .operator == "NotIn" then
+            "\(.key) notin (\(.values | join(",")))"
+          elif .operator == "Exists" then
+            .key
+          elif .operator == "DoesNotExist" then
+            "!\(.key)"
+          else
+            error("unsupported selector operator: \(.operator)")
+          end
+        )
+      ] | join(",")
+    '
 }
 
 # Check for pod failure states that indicate deployment will not succeed.

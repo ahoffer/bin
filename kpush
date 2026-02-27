@@ -9,11 +9,21 @@ set -euo pipefail
 #   kpush -T image.tar myapp:1.0         Push from tarball instead of docker save
 #   kpush -q myapp:1.0                   Quiet mode
 
-source cx.hostlib
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+source "$SCRIPT_DIR/cx.hostlib"
 
 usage() {
   sed -n '4,9p' "$0"
   exit 0
+}
+
+require_optarg() {
+  local opt="$1"
+  if [[ $# -lt 2 || -z "${2:-}" || "${2:0:1}" == "-" ]]; then
+    echo "error: option $opt requires a value" >&2
+    exit 1
+  fi
 }
 
 quiet=false
@@ -23,8 +33,8 @@ while [[ $# -gt 0 && "$1" == -* ]]; do
   case "$1" in
     -h|--help) usage ;;
     -q|--quiet) quiet=true; shift ;;
-    -r|--remote) host="$2"; shift 2 ;;
-    -T|--tarball) tarball="$2"; shift 2 ;;
+    -r|--remote) require_optarg "$1" "${2:-}"; host="$2"; shift 2 ;;
+    -T|--tarball) require_optarg "$1" "${2:-}"; tarball="$2"; shift 2 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done

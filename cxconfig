@@ -21,11 +21,22 @@ set -euo pipefail
 #   root                Get the project root
 #   all                 List modules from docker/pom.xml (for "all" expansion)
 
-source cx.lib
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+source "$SCRIPT_DIR/cx.lib"
 
 usage() {
   sed -n '4,22p' "$0"
   exit 0
+}
+
+require_subarg() {
+  local cmd="$1"
+  local value="${2:-}"
+  if [[ -z "$value" || "${value:0:1}" == "-" ]]; then
+    err_msg "Usage: cxconfig $cmd <component>"
+    exit 1
+  fi
 }
 
 [[ "${1:-}" == "-h" || "${1:-}" == "--help" || $# -eq 0 ]] && usage
@@ -136,15 +147,18 @@ case "$1" in
     get_all_modules
     ;;
   dir)
-    require_component "${2:?Usage: cxconfig dir <component>}"
+    require_subarg "dir" "${2:-}"
+    require_component "$2"
     echo "$2"
     ;;
   deploy)
-    require_component "${2:?Usage: cxconfig deploy <component>}"
+    require_subarg "deploy" "${2:-}"
+    require_component "$2"
     get_deploy_name "$2"
     ;;
   image)
-    component="${2:?Usage: cxconfig image <component>}"
+    require_subarg "image" "${2:-}"
+    component="$2"
     require_component "$component"
     echo "$(get_registry)/${component}:$(get_version)"
     ;;

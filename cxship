@@ -15,7 +15,9 @@ set -uo pipefail  # no -e: continue on errors, report all at end
 #   -r, --remote HOST   Target host (default: from kubectl context)
 #   -n, --namespace NS  Kubernetes namespace (default: auto from project)
 
-source cx.lib
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+source "$SCRIPT_DIR/cx.lib"
 timer_start
 
 usage() {
@@ -37,6 +39,14 @@ EOF
   exit 0
 }
 
+require_optarg() {
+  local opt="$1"
+  if [[ $# -lt 2 || -z "${2:-}" || "${2:0:1}" == "-" ]]; then
+    err_msg "Option $opt requires a value"
+    exit 1
+  fi
+}
+
 remote_host=""
 namespace=""
 declare -a components=()
@@ -44,8 +54,8 @@ declare -a components=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage ;;
-    -r|--remote) remote_host="$2"; shift 2 ;;
-    -n|--namespace) namespace="$2"; shift 2 ;;
+    -r|--remote) require_optarg "$1" "${2:-}"; remote_host="$2"; shift 2 ;;
+    -n|--namespace) require_optarg "$1" "${2:-}"; namespace="$2"; shift 2 ;;
     -*) echo "Unknown option: $1" >&2; exit 1 ;;
     *) components+=("$1"); shift ;;
   esac
@@ -56,9 +66,9 @@ done
 require_project_root
 acquire_lock "builddeploy"
 
-[[ -z "$namespace" ]] && namespace=$(cxconfig namespace)
+[[ -z "$namespace" ]] && namespace=$("$SCRIPT_DIR/cxconfig" namespace)
 
-mapfile -t all_components < <(cxconfig components)
+mapfile -t all_components < <("$SCRIPT_DIR/cxconfig" components)
 
 if [[ ${#components[@]} -eq 0 ]]; then
   err_msg "Specify components or use 'all'"
@@ -68,7 +78,7 @@ fi
 
 expand_components components all_components
 
-project_root=$(cxconfig root)
+project_root=$("$SCRIPT_DIR/cxconfig" root)
 
 # Phase 1: Build all components
 build_components "$project_root" "${components[@]}" || {

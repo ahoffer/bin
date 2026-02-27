@@ -15,7 +15,9 @@ set -euo pipefail
 #   cxbuild graphql
 #   cxbuild all
 
-source cx.lib
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+source "$SCRIPT_DIR/cx.lib"
 timer_start
 
 usage() {
@@ -46,7 +48,7 @@ done
 require_project_root
 acquire_lock "build"
 
-mapfile -t all_components < <(cxconfig components)
+mapfile -t all_components < <("$SCRIPT_DIR/cxconfig" components)
 
 if [[ ${#components[@]} -eq 0 ]]; then
   err_msg "Specify components or use 'all'"
@@ -56,7 +58,7 @@ fi
 
 expand_components components all_components
 
-project_root=$(cxconfig root)
+project_root=$("$SCRIPT_DIR/cxconfig" root)
 
 build_components "$project_root" "${components[@]}" || {
   err_msg "Build failed"

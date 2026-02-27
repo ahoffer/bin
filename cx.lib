@@ -3,16 +3,19 @@
 #
 # Source this file: source cx.lib
 
-source cx.hostlib
+CXLIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly CXLIB_DIR
+source "$CXLIB_DIR/cx.hostlib"
 
 # ─────────────────────────────────────────────────────────────
 # Terminal detection
 # ─────────────────────────────────────────────────────────────
 
-cxlibIsTty=1
+cxlibIsTty=""
 cxlibRed=""
 cxlibReset=""
 if [[ -t 1 ]]; then
+  cxlibIsTty=1
   cxlibRed=$'\033[31m'
   cxlibReset=$'\033[0m'
 fi
@@ -51,7 +54,7 @@ cxlibStepDone() {
       if [[ -n "$logfile" ]]; then
         printf " ${cxlibRed}✗${cxlibReset} log file: %s\n" "$logfile"
       else
-        printf " ${cxlibRed}✗${cxlibReset}\n"
+        printf " %s%s%s\n" "$cxlibRed" "✗" "$cxlibReset"
       fi
     fi
   else
@@ -162,7 +165,7 @@ acquire_lock() {
 
 # List components as space-separated string
 list_components() {
-  cxconfig components 2>/dev/null | tr '\n' ' '
+  "$CXLIB_DIR/cxconfig" components 2>/dev/null | tr '\n' ' '
 }
 
 # Validate component exists
@@ -190,7 +193,7 @@ expand_components() {
   local -n targetComponents=$1
   local -n validComponents=$2
   if [[ ${#targetComponents[@]} -eq 1 && "${targetComponents[0]}" == "all" ]]; then
-    mapfile -t targetComponents < <(cxconfig all)
+    mapfile -t targetComponents < <("$CXLIB_DIR/cxconfig" all)
   else
     for c in "${targetComponents[@]}"; do
       valid_component "$c" validComponents || { err_msg "Unknown component '$c'"; exit 1; }
@@ -263,7 +266,7 @@ build_components() {
     local log_file
     log_file=$(logfile cxbuild "$comp")
     run_logged "docker $comp" "$log_file" \
-      docker build -t "$(cxconfig image "$comp")" "$project_root/docker/$comp" \
+      docker build -t "$("$CXLIB_DIR/cxconfig" image "$comp")" "$project_root/docker/$comp" \
       || return 1
   done
 }
@@ -275,17 +278,17 @@ push_component() {
   local component="$1"
   local host="$2"
   local docker_dir tarball image
-  docker_dir=$(cxconfig dir "$component")
+  docker_dir=$("$CXLIB_DIR/cxconfig" dir "$component")
   tarball="$PROJECT_ROOT/docker/$docker_dir/target/image.tar"
-  image=$(cxconfig image "$component")
+  image=$("$CXLIB_DIR/cxconfig" image "$component")
   local log_file
   log_file=$(logfile cxpush "$component")
   if [[ -f "$tarball" ]]; then
     run_logged "push $component" "$log_file" \
-      kpush -q -r "$host" -T "$tarball" "$image"
+      "$CXLIB_DIR/kpush" -q -r "$host" -T "$tarball" "$image"
   else
     run_logged "push $component" "$log_file" \
-      kpush -q -r "$host" "$image"
+      "$CXLIB_DIR/kpush" -q -r "$host" "$image"
   fi
 }
 
@@ -296,13 +299,13 @@ deploy_component() {
   local remote_host="$2"
   local namespace="$3"
   local image deploy_name timeout
-  image=$(cxconfig image "$component")
-  deploy_name=$(cxconfig deploy "$component")
-  timeout=$(cxconfig timeout "$component")
+  image=$("$CXLIB_DIR/cxconfig" image "$component")
+  deploy_name=$("$CXLIB_DIR/cxconfig" deploy "$component")
+  timeout=$("$CXLIB_DIR/cxconfig" timeout "$component")
   local log_file
   log_file=$(logfile cxdeploy "$component")
   run_logged "deploy $component" "$log_file" \
-    kdeploy -q -r "$remote_host" -n "$namespace" -t "$timeout" "$image" "$deploy_name"
+    "$CXLIB_DIR/kdeploy" -q -r "$remote_host" -n "$namespace" -t "$timeout" "$image" "$deploy_name"
 }
 
 # Run a command with output redirected to logfile, showing name and elapsed
