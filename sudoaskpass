@@ -1,11 +1,11 @@
 #!/bin/bash
 # Askpass helper for use with SUDO_ASKPASS.
-# Shows a zenity password dialog so the user can approve or deny
+# Shows a native macOS password dialog so the user can approve or deny
 # each sudo invocation from non-interactive contexts like Claude Code.
 
 prompt="${1:-Password:}"
 
-exec zenity --password \
-    --title="sudo authorization requested" \
-    --text="$prompt" \
-    --timeout=60 2>/dev/null
+exec osascript -e "
+  set pw to text returned of (display dialog \"$prompt\" with title \"sudo authorization requested\" default answer \"\" with hidden answer giving up after 60)
+  pw
+" 2>/dev/null

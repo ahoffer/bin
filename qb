@@ -71,6 +71,19 @@ prepare_frontend_if_needed() {
     )
 }
 
+is_docs_context() {
+    [[ -n "$git_root" ]] || return 1
+    local resolved_pwd rel
+    resolved_pwd=$(realpath "$PWD")
+    rel="${resolved_pwd#"$git_root"}"
+    rel="${rel#/}"
+    [[ "$rel" == "docs" || "$rel" == docs/* ]]
+}
+
+if is_docs_context; then
+    exec "$HOME/bin/cxappdev/docbuild" "$@"
+fi
+
 prepare_frontend_if_needed || exit 1
 
 goals=(com.spotify.fmt:fmt-maven-plugin:format license:format "${goals[@]}")
