@@ -58,20 +58,10 @@ expand_components components all_components
 
 project_root=$(cxconfig root)
 
-build_maven_modules "$project_root" "${components[@]}" || {
-  err_msg "Maven build failed, aborting"
+build_components "$project_root" "${components[@]}" || {
+  err_msg "Build failed"
   exit 1
 }
-
-_docker_build_one() {
-  docker_build "$project_root" "$1"
-}
-run_parallel _docker_build_one components
 
 echo
-if [[ ${#parallel_failures[@]} -eq 0 ]]; then
-  echo "Built $(IFS=', '; echo "${components[*]}") - $(timer_elapsed)"
-else
-  echo "Failed $(IFS=', '; echo "${parallel_failures[*]}") - $(timer_elapsed)"
-  exit 1
-fi
+echo "Built $(IFS=', '; echo "${components[*]}") - $(timer_elapsed)"

@@ -12,7 +12,7 @@ set -euo pipefail
 #        cxpush app graphql
 #
 # Options:
-#   -r, --remote HOST   Target host (default: CX_HOST or clown)
+#   -r, --remote HOST   Target host (default: from kubectl context)
 
 source cx.lib
 timer_start
@@ -29,7 +29,7 @@ Usage: cxpush [options] <component...>
        cxpush app graphql
 
 Options:
-  -r, --remote HOST   Target host (default: CX_HOST or clown)
+  -r, --remote HOST   Target host (default: from kubectl context)
 EOF
   echo -e "\nComponents: $(list_components)"
   exit 0

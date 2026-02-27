@@ -3,6 +3,8 @@
 #
 # Source this file: source cx.lib
 
+source cx.hostlib
+
 # ─────────────────────────────────────────────────────────────
 # Terminal detection
 # ─────────────────────────────────────────────────────────────
@@ -123,28 +125,12 @@ require_project_root() {
 }
 
 # ─────────────────────────────────────────────────────────────
-# Host resolution
+# Host resolution (delegates to cx.hostlib)
 # ─────────────────────────────────────────────────────────────
 
-# Return the default k8s host name from CX_HOST or fall back to clown
+# Return the default k8s host name from cx.hostlib
 resolve_default_host() {
-  echo "${CX_HOST:-clown}"
-}
-
-# Return the SSH command array for a host as a single eval-safe string.
-# Callers use: eval "${ssh_cmd}" to expand into the correct argv.
-host_ssh_cmd() {
-  local host="$1"
-  case "$host" in
-    clown) echo "ssh -F $HOME/.lima/rke2/ssh.config lima-rke2" ;;
-    *)     echo "ssh $host" ;;
-  esac
-}
-
-# Return the ctr import command for the host's container runtime.
-# Reads from stdin when given - as the file argument.
-host_ctr_import_cmd() {
-  echo "sudo /var/lib/rancher/rke2/bin/ctr --address /run/k3s/containerd/containerd.sock --namespace k8s.io images import"
+  resolve_host
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -195,14 +181,16 @@ valid_component() {
 # Component expansion and parallel execution
 # ─────────────────────────────────────────────────────────────
 
-# Expand "all" keyword and validate components.
+# Expand "all" keyword and validate components. When "all" is used, expands
+# to modules from docker/pom.xml. Otherwise validates against all known
+# components (any docker subdir with pom.xml or Dockerfile).
 # Usage: expand_components <components_array> <all_components_array>
 # Modifies the first array in place.
 expand_components() {
   local -n targetComponents=$1
   local -n validComponents=$2
   if [[ ${#targetComponents[@]} -eq 1 && "${targetComponents[0]}" == "all" ]]; then
-    targetComponents=("${validComponents[@]}")
+    mapfile -t targetComponents < <(cxconfig all)
   else
     for c in "${targetComponents[@]}"; do
       valid_component "$c" validComponents || { err_msg "Unknown component '$c'"; exit 1; }
@@ -240,67 +228,44 @@ run_parallel() {
 # Build helpers
 # ─────────────────────────────────────────────────────────────
 
-# Map components to Maven module paths, de-duplicated, in order.
-# Usage: maven_modules_for_components components_array
-maven_modules_for_components() {
-  local -n sourceComponents=$1
-  local -A seen=()
-  local -a uniq=()
-  local comp mod
-
-  for comp in "${sourceComponents[@]}"; do
-    while IFS= read -r mod; do
-      [[ -z "$mod" ]] && continue
-      [[ -n "${seen[$mod]:-}" ]] && continue
-      seen[$mod]=1
-      uniq+=("$mod")
-    done < <(cxconfig modules "$comp")
-  done
-
-  printf '%s\n' "${uniq[@]}"
-}
-
-# Run maven build in a directory
-# Usage: mvn_build <dir> [name]
-mvn_build() {
-  local dir="$1"
-  local name="${2:-$dir}"
-  [[ -d "$dir" ]] || { err_msg "Directory not found: $dir"; return 1; }
-  local log_name
-  log_name=$(basename "$name")
-  local log_file="/tmp/cxbuild-mvn-${log_name}.log"
-  run_logged "maven $name" "$log_file" \
-    bash -c 'cd "$1" && mvn clean install -DskipTests -T6' _ "$dir"
-}
-
-# Build all maven modules needed by the given components, deduplicated.
-# Usage: build_maven_modules <project_root> <component...>
-build_maven_modules() {
+# Build components with a single maven invocation from the project root.
+# Maven components get -pl docker/X,docker/Y -am. Non-maven components
+# (Dockerfile only) get docker build directly.
+# Usage: build_components <project_root> <component...>
+build_components() {
   local project_root="$1"
   shift
-  local -a _bm_comps=("$@")
-  local -a modules
-  mapfile -t modules < <(maven_modules_for_components _bm_comps)
-  for module in "${modules[@]}"; do
-    mvn_build "$project_root/$module" "$project_root/$module" || return 1
-  done
-}
+  local -a maven_pl=()
+  local -a docker_only=()
 
-# Build docker image for a component
-# Usage: docker_build <project_root> <component>
-docker_build() {
-  local project_root="$1"
-  local component="$2"
-  local docker_dir
-  docker_dir=$(cxconfig dir "$component")
-  [[ -d "$project_root/docker/$docker_dir" ]] || {
-    err_msg "Directory not found: $project_root/docker/$docker_dir"
-    return 1
-  }
-  local log_file
-  log_file=$(logfile cxbuild "$docker_dir")
-  run_logged "docker $project_root/docker/$docker_dir" "$log_file" \
-    bash -c 'cd "$1" && mvn install -DskipTests' _ "$project_root/docker/$docker_dir"
+  for comp in "$@"; do
+    if [[ -f "$project_root/docker/$comp/pom.xml" ]]; then
+      maven_pl+=("docker/$comp")
+    elif [[ -f "$project_root/docker/$comp/Dockerfile" ]]; then
+      docker_only+=("$comp")
+    else
+      err_msg "Component '$comp' has no pom.xml or Dockerfile"
+      return 1
+    fi
+  done
+
+  if [[ ${#maven_pl[@]} -gt 0 ]]; then
+    local pl_csv
+    pl_csv=$(IFS=,; echo "${maven_pl[*]}")
+    local log_file
+    log_file=$(logfile cxbuild "maven")
+    run_logged "maven $pl_csv" "$log_file" \
+      bash -c 'cd "$1" && mvn install -pl "$2" -am -DskipTests -T6' _ "$project_root" "$pl_csv" \
+      || return 1
+  fi
+
+  for comp in "${docker_only[@]}"; do
+    local log_file
+    log_file=$(logfile cxbuild "$comp")
+    run_logged "docker $comp" "$log_file" \
+      docker build -t "$(cxconfig image "$comp")" "$project_root/docker/$comp" \
+      || return 1
+  done
 }
 
 # Push a component image to a k8s host. Uses prebuilt tarball if available,
@@ -315,15 +280,12 @@ push_component() {
   image=$(cxconfig image "$component")
   local log_file
   log_file=$(logfile cxpush "$component")
-  local ssh_cmd ctr_cmd
-  ssh_cmd=$(host_ssh_cmd "$host")
-  ctr_cmd=$(host_ctr_import_cmd)
   if [[ -f "$tarball" ]]; then
     run_logged "push $component" "$log_file" \
-      bash -c "cat \"\$1\" | $ssh_cmd \"$ctr_cmd - >/dev/null\"" _ "$tarball"
+      kpush -q -r "$host" -T "$tarball" "$image"
   else
     run_logged "push $component" "$log_file" \
-      bash -c "docker save \"\$1\" | $ssh_cmd \"$ctr_cmd - >/dev/null\"" _ "$image"
+      kpush -q -r "$host" "$image"
   fi
 }
 
@@ -340,7 +302,7 @@ deploy_component() {
   local log_file
   log_file=$(logfile cxdeploy "$component")
   run_logged "deploy $component" "$log_file" \
-    deployimage -q -r "$remote_host" -n "$namespace" -t "$timeout" "$image" "$deploy_name"
+    kdeploy -q -r "$remote_host" -n "$namespace" -t "$timeout" "$image" "$deploy_name"
 }
 
 # Run a command with output redirected to logfile, showing name and elapsed

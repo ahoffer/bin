@@ -1,20 +1,22 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 # Verify all pods in a deployment are running the expected image
-# Usage: k8sverifyimage [-n namespace] [-r host] [-t timeout] <image:tag> <deployment>
+# Usage: kverify [-q] [-n namespace] [-r host] [-t timeout] <image:tag> <deployment>
 # Examples:
-#   k8sverifyimage myapp:1.0 cx-app                    # Verify pods match image
-#   k8sverifyimage -n prod myapp:1.0 cx-app            # Specific namespace
-#   k8sverifyimage -r node1 -t 120 myapp:1.0 cx-app    # Custom host and timeout
+#   kverify myapp:1.0 cx-app                      Verify pods match image
+#   kverify -n prod myapp:1.0 cx-app              Specific namespace
+#   kverify -r node1 -t 120 myapp:1.0 cx-app      Custom host and timeout
+
+source cx.hostlib
 
 usage() {
   sed -n '4,8p' "$0"
   exit 0
 }
 
-namespace="octocx"
-remote_host="bigfish"
+namespace=""
+host=""
 timeout=60
 interval=2
 quiet=false
@@ -23,16 +25,28 @@ while [[ $# -gt 0 && "$1" == -* ]]; do
     -h|--help) usage ;;
     -q|--quiet) quiet=true; shift ;;
     -n|--namespace) namespace="$2"; shift 2 ;;
-    -r|--remote) remote_host="$2"; shift 2 ;;
+    -r|--remote) host="$2"; shift 2 ;;
     -t|--timeout) timeout="$2"; shift 2 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
 
-readonly IMAGE="${1:?Usage: k8sverifyimage [-n ns] [-r host] [-t timeout] <image:tag> <deployment>}"
-readonly DEPLOY="${2:?Usage: k8sverifyimage [-n ns] [-r host] [-t timeout] <image:tag> <deployment>}"
+readonly IMAGE="${1:?Usage: kverify [-n ns] [-r host] [-t timeout] <image:tag> <deployment>}"
+readonly DEPLOY="${2:?Usage: kverify [-n ns] [-r host] [-t timeout] <image:tag> <deployment>}"
+
+[[ -z "$host" ]] && host=$(resolve_host)
+require_host "$host" || exit 1
+
+if [[ -z "$namespace" ]]; then
+  namespace="${K8S_NS:-}"
+  if [[ -z "$namespace" ]]; then
+    echo "error: no namespace specified. Use -n <ns> or set K8S_NS." >&2
+    exit 1
+  fi
+fi
+
 readonly NAMESPACE="$namespace"
-readonly REMOTE_HOST="$remote_host"
+readonly REMOTE_HOST="$host"
 readonly RETRY_TIMEOUT="$timeout"
 readonly RETRY_INTERVAL="$interval"
 
@@ -42,7 +56,7 @@ get_pod_selector() {
     jq -r 'to_entries | map("\(.key)=\(.value)") | join(",")'
 }
 
-# Check for pod failure states that indicate deployment won't succeed.
+# Check for pod failure states that indicate deployment will not succeed.
 # Iterates all containers per pod so sidecar failures are also caught.
 check_pod_failures() {
   local selector="$1"
@@ -63,17 +77,16 @@ check_pod_failures() {
   return 0
 }
 
-# Outputs status for each pod, returns 0 if all match expected hash.
-# Uses CONTAINER_NAME to select the right container in multi-container pods.
+# Verify each pod is running the expected image hash.
 verify_pod_images() {
   local expected="$1" selector="$2" container="$3" result=0
 
   while read -r pod_name pod_hash; do
     [[ -z "$pod_name" ]] && continue
     if [[ "$pod_hash" == "$expected" ]]; then
-      echo "✓ $pod_name"
+      echo "ok $pod_name"
     else
-      printf "✗ %s\n  got:      %s\n  expected: %s\n" "$pod_name" "$pod_hash" "$expected"
+      printf "MISMATCH %s\n  got:      %s\n  expected: %s\n" "$pod_name" "$pod_hash" "$expected"
       result=1
     fi
   done < <(kubectl get pod -n "$NAMESPACE" -l "$selector" -o json | \
@@ -85,7 +98,9 @@ verify_pod_images() {
 }
 
 $quiet || echo -n "    Verifying..."
-EXPECTED_HASH=$(ssh "$REMOTE_HOST" "sudo /var/lib/rancher/rke2/bin/crictl --runtime-endpoint unix:///run/k3s/containerd/containerd.sock inspecti '$IMAGE' 2>/dev/null" | jq -r '.status.id')
+
+crictl=$(crictl_cmd)
+EXPECTED_HASH=$(remote_exec "$REMOTE_HOST" "$crictl inspecti '$IMAGE' 2>/dev/null" | jq -r '.status.id')
 : "${EXPECTED_HASH:?ERROR: Could not get image hash for $IMAGE}"
 
 SELECTOR=$(get_pod_selector)

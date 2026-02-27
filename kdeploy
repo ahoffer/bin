@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Deploy an image: push to k8s node, restart deployment, verify pods
+# Usage: kdeploy [-q] [-r host] [-n namespace] [-t timeout] <image:tag> [deployment]
+# Examples:
+#   kdeploy myapp:1.0 cx-app
+#   kdeploy -r bigfish myapp:1.0 cx-app
+#   kdeploy -n prod -t 180 myapp:1.0 cx-app
+
+# Kill child processes on exit
+trap 'pkill -P $$ 2>/dev/null || true' EXIT
+
+source cx.hostlib
+
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+usage() {
+  sed -n '4,8p' "$0"
+  echo
+  echo "If deployment is omitted, it defaults to the image name (before the tag)."
+  exit 0
+}
+
+host=""
+namespace=""
+timeout=60
+quiet=false
+while [[ $# -gt 0 && "$1" == -* ]]; do
+  case "$1" in
+    -h|--help) usage ;;
+    -q|--quiet) quiet=true; shift ;;
+    -r|--remote) host="$2"; shift 2 ;;
+    -n|--namespace) namespace="$2"; shift 2 ;;
+    -t|--timeout) timeout="$2"; shift 2 ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
+
+readonly IMAGE="${1:?Usage: kdeploy [-r host] [-n namespace] <image:tag> [deployment]}"
+if [[ -n "${2:-}" ]]; then
+  DEPLOY="$2"
+else
+  DEPLOY="${IMAGE%%:*}"
+  DEPLOY="${DEPLOY##*/}"
+fi
+
+[[ -z "$host" ]] && host=$(resolve_host)
+require_host "$host" || exit 1
+
+if [[ -z "$namespace" ]]; then
+  namespace="${K8S_NS:-}"
+  if [[ -z "$namespace" ]]; then
+    echo "error: no namespace specified. Use -n <ns> or set K8S_NS." >&2
+    exit 1
+  fi
+fi
+
+q_flag=""
+$quiet && q_flag="-q"
+
+# Push image to remote k8s node
+"$SCRIPT_DIR/kpush" $q_flag -r "$host" "$IMAGE"
+
+# Restart deployment and wait for rollout
+"$SCRIPT_DIR/krestart" $q_flag -n "$namespace" -t "${timeout}s" "$DEPLOY"
+
+# Verify pods are running the correct image
+"$SCRIPT_DIR/kverify" $q_flag -n "$namespace" -r "$host" -t "$timeout" "$IMAGE" "$DEPLOY"
+
+$quiet || echo "==> Deploy complete"

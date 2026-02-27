@@ -3,8 +3,8 @@ set -uo pipefail  # no -e: continue on errors, report all at end
 
 # Build and deploy components
 #
-# Maven modules are built sequentially, then docker images are built in
-# parallel. Each component is deployed as soon as its image is ready.
+# Builds all components with a single maven invocation, then deploys
+# each component in parallel.
 # Must be run from within a project directory (walks up to find pom.xml).
 #
 # Usage: cxship [options] <component...>
@@ -12,8 +12,8 @@ set -uo pipefail  # no -e: continue on errors, report all at end
 #        cxship app graphql
 #
 # Options:
-#   -r, --remote HOST   Target host (default: CX_HOST or clown)
-#   -n, --namespace NS  Kubernetes namespace (default: auto from app)
+#   -r, --remote HOST   Target host (default: from kubectl context)
+#   -n, --namespace NS  Kubernetes namespace (default: auto from project)
 
 source cx.lib
 timer_start
@@ -22,16 +22,16 @@ usage() {
   cat <<'EOF'
 Build and deploy components
 
-Maven modules are built sequentially, then docker images are built in
-parallel. Each component is deployed as soon as its image is ready.
+Builds all components with a single maven invocation, then deploys
+each component in parallel.
 
 Usage: cxship [options] <component...>
        cxship all
        cxship app graphql
 
 Options:
-  -r, --remote HOST   Target host (default: CX_HOST or clown)
-  -n, --namespace NS  Kubernetes namespace (default: auto from app)
+  -r, --remote HOST   Target host (default: from kubectl context)
+  -n, --namespace NS  Kubernetes namespace (default: auto from project)
 EOF
   echo -e "\nComponents: $(list_components)"
   exit 0
@@ -56,7 +56,6 @@ done
 require_project_root
 acquire_lock "builddeploy"
 
-app=$(cxconfig app)
 [[ -z "$namespace" ]] && namespace=$(cxconfig namespace)
 
 mapfile -t all_components < <(cxconfig components)
@@ -71,19 +70,18 @@ expand_components components all_components
 
 project_root=$(cxconfig root)
 
-# Phase 1: Maven modules, sequential. Abort if any fails since docker
-# builds depend on these artifacts.
-build_maven_modules "$project_root" "${components[@]}" || {
-  err_msg "Maven build failed, aborting"
+# Phase 1: Build all components
+build_components "$project_root" "${components[@]}" || {
+  err_msg "Build failed, aborting"
+  run_completion_hook cxship failure
   exit 1
 }
 
-# Phase 2: Docker build + deploy, parallel per component.
-_build_and_deploy() {
-  docker_build "$project_root" "$1" || return 1
+# Phase 2: Deploy in parallel
+_deploy_one() {
   deploy_component "$1" "$remote_host" "$namespace"
 }
-run_parallel _build_and_deploy components
+run_parallel _deploy_one components
 
 echo
 if [[ ${#parallel_failures[@]} -eq 0 ]]; then

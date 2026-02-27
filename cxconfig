@@ -3,131 +3,156 @@ set -euo pipefail
 
 # Query component configuration for cx or marrs projects
 #
-# Reads components.conf from the project root directory.
-# Must be run from within a project directory (walks up to find pom.xml).
+# Derives everything from project structure, pom files, and conventions.
+# No config files needed. Must be run from within a project directory.
 #
 # Usage: cxconfig <command> [args]
 #
 # Commands:
 #   components          List all component names
-#   dir <component>     Get docker directory for component
-#   modules <component> Get maven modules for component
+#   dir <component>     Get docker directory name for component (same as name)
 #   deploy <component>  Get k8s deployment name for component
-#   image <component>   Get full image:tag (registry/dir:version)
-#   timeout <component> Get rollout timeout in seconds
+#   image <component>   Get full image:tag (registry/project/dir:version)
+#   timeout             Get rollout timeout in seconds (default 300)
 #   registry            Get the container registry URL
 #   version             Get the current build version
 #   namespace           Get the k8s namespace for this app
-#   app                 Get the detected app name
+#   prefix              Get the deploy prefix (cx or marrs)
 #   root                Get the project root
+#   all                 List modules from docker/pom.xml (for "all" expansion)
 
 source cx.lib
 
 usage() {
-  cat <<'EOF'
-Query component configuration for cx or marrs projects
-
-Commands:
-  components          List all component names
-  dir <component>     Get docker directory for component
-  modules <component> Get maven modules for component
-  deploy <component>  Get k8s deployment name for component
-  image <component>   Get full image:tag (registry/dir:version)
-  timeout <component> Get rollout timeout in seconds
-  registry            Get the container registry URL
-  version             Get the current build version
-  namespace           Get the k8s namespace for this app
-  app                 Get the detected app name
-  root                Get the project root
-EOF
+  sed -n '4,22p' "$0"
   exit 0
 }
 
-# Handle help before requiring project root
 [[ "${1:-}" == "-h" || "${1:-}" == "--help" || $# -eq 0 ]] && usage
 
-# Require being in a project directory
 require_project_root
 project_root="$PROJECT_ROOT"
 
-readonly CONFIG="$project_root/components.conf"
-
-if [[ ! -f "$CONFIG" ]]; then
-  err_msg "Config file not found: $CONFIG"
-  exit 1
-fi
-
-get_setting() {
-  grep "^$1=" "$CONFIG" | cut -d= -f2-
+# Derive deploy prefix from project path
+get_prefix() {
+  case "$project_root" in
+    *cx-search*) echo "cx" ;;
+    *marrs*)     echo "marrs" ;;
+    *)
+      err_msg "Cannot determine deploy prefix from project path: $project_root"
+      exit 1
+      ;;
+  esac
 }
 
-get_component_field() {
-  local component="$1" field="$2"
-  grep "^${component}:" "$CONFIG" | cut -d: -f"$field"
+# Read a property value from docker/pom.xml
+get_docker_pom_property() {
+  local prop="$1"
+  sed -n "s/.*<${prop}>\(.*\)<\/${prop}>.*/\1/p" "$project_root/docker/pom.xml" | head -1
 }
 
-get_component_dir() {
-  local component="$1"
-  local dir
-  dir=$(get_component_field "$component" 2)
-  [[ -n "$dir" ]] || { err_msg "Unknown component '$component'"; exit 1; }
-  echo "$dir"
-}
-
-get_namespace() {
-  local ns
-  ns=$(get_setting namespace)
-  echo "${ns:-octocx}"
-}
-
-get_deploy_prefix() {
-  local prefix
-  prefix=$(get_setting deploy_prefix)
-  echo "${prefix:-cx}"
+get_registry() {
+  local registry project
+  registry=$(get_docker_pom_property "docker.push.registry")
+  project=$(get_docker_pom_property "docker.project")
+  if [[ -z "$registry" || -z "$project" ]]; then
+    err_msg "Cannot read docker.push.registry or docker.project from docker/pom.xml"
+    exit 1
+  fi
+  echo "$registry/$project"
 }
 
 get_version() {
-  grep -m1 '<version>' "$project_root/pom.xml" | sed 's/.*<version>\(.*\)<\/version>.*/\1/'
+  local ver
+  ver=$(grep -m1 '<version>' "$project_root/pom.xml" | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
+  if [[ -z "$ver" ]]; then
+    err_msg "Cannot read version from $project_root/pom.xml"
+    exit 1
+  fi
+  echo "$ver"
+}
+
+# List modules declared in docker/pom.xml
+get_all_modules() {
+  sed -n 's/.*<module>\(.*\)<\/module>.*/\1/p' "$project_root/docker/pom.xml"
+}
+
+# List all components: subdirs of docker/ that have a pom.xml or Dockerfile
+get_components() {
+  local dir
+  for dir in "$project_root"/docker/*/; do
+    local name
+    name=$(basename "$dir")
+    [[ "$name" == "target" ]] && continue
+    if [[ -f "$dir/pom.xml" || -f "$dir/Dockerfile" ]]; then
+      echo "$name"
+    fi
+  done
+}
+
+# Verify that a component has a docker subdirectory with pom.xml or Dockerfile
+require_component() {
+  local comp="$1"
+  local compdir="$project_root/docker/$comp"
+  if [[ ! -f "$compdir/pom.xml" && ! -f "$compdir/Dockerfile" ]]; then
+    err_msg "Unknown component '$comp' (no pom.xml or Dockerfile in docker/$comp)"
+    exit 1
+  fi
+}
+
+# Namespace from the directory name under distributions/ (excluding target/)
+get_namespace() {
+  local dir
+  for dir in "$project_root"/distributions/*/; do
+    local name
+    name=$(basename "$dir")
+    [[ "$name" == "target" ]] && continue
+    [[ -d "$dir" ]] && echo "$name" && return
+  done
+  err_msg "Cannot determine namespace from distributions/"
+  exit 1
+}
+
+# Deploy name convention: prefix-component, but if the component name already
+# starts with the prefix, strip it first to avoid doubling.
+get_deploy_name() {
+  local component="$1"
+  local prefix
+  prefix=$(get_prefix)
+  local stripped="$component"
+  stripped="${stripped#"${prefix}-"}"
+  if [[ "$stripped" == "$prefix" || "$component" == "$prefix" ]]; then
+    echo "$prefix"
+  else
+    echo "${prefix}-${stripped}"
+  fi
 }
 
 case "$1" in
   components)
-    grep -E '^[a-z].*:' "$CONFIG" | cut -d: -f1
+    get_components
+    ;;
+  all)
+    get_all_modules
     ;;
   dir)
-    get_component_dir "${2:?Usage: cxconfig dir <component>}"
+    require_component "${2:?Usage: cxconfig dir <component>}"
+    echo "$2"
     ;;
   deploy)
-    dir=$(get_component_dir "${2:?Usage: cxconfig deploy <component>}")
-    prefix=$(get_deploy_prefix)
-    dir="${dir#cx-}"
-    dir="${dir#marrs-}"
-    if [[ "$dir" == "$prefix" ]]; then
-      echo "$prefix"
-    else
-      echo "${prefix}-${dir}"
-    fi
+    require_component "${2:?Usage: cxconfig deploy <component>}"
+    get_deploy_name "$2"
     ;;
   image)
-    dir=$(get_component_dir "${2:?Usage: cxconfig image <component>}")
-    registry=$(get_setting registry)
-    version=$(get_version)
-    echo "$registry/$dir:$version"
-    ;;
-  modules)
-    component="${2:?Usage: cxconfig modules <component>}"
-    get_component_dir "$component" >/dev/null
-    modules=$(get_component_field "$component" 3)
-    echo "$modules" | tr ',' '\n'
+    component="${2:?Usage: cxconfig image <component>}"
+    require_component "$component"
+    echo "$(get_registry)/${component}:$(get_version)"
     ;;
   timeout)
-    component="${2:?Usage: cxconfig timeout <component>}"
-    get_component_dir "$component" >/dev/null
-    timeout=$(get_component_field "$component" 4)
-    echo "${timeout:-$(get_setting default_timeout)}"
+    echo "300"
     ;;
   registry)
-    get_setting registry
+    get_registry
     ;;
   version)
     get_version
@@ -135,8 +160,8 @@ case "$1" in
   namespace)
     get_namespace
     ;;
-  app)
-    basename "$project_root"
+  prefix)
+    get_prefix
     ;;
   root)
     echo "$project_root"

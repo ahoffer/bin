@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Push an image to a remote k8s node
+# Usage: kpush [-q] [-r host] [-T tarball] <image:tag>
+# Examples:
+#   kpush myapp:1.0                      Push to host from kubectl context
+#   kpush -r bigfish myapp:1.0           Push to specific host
+#   kpush -T image.tar myapp:1.0         Push from tarball instead of docker save
+#   kpush -q myapp:1.0                   Quiet mode
+
+source cx.hostlib
+
+usage() {
+  sed -n '4,9p' "$0"
+  exit 0
+}
+
+quiet=false
+host=""
+tarball=""
+while [[ $# -gt 0 && "$1" == -* ]]; do
+  case "$1" in
+    -h|--help) usage ;;
+    -q|--quiet) quiet=true; shift ;;
+    -r|--remote) host="$2"; shift 2 ;;
+    -T|--tarball) tarball="$2"; shift 2 ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
+
+readonly IMAGE="${1:?Usage: kpush [-q] [-r host] [-T tarball] <image:tag>}"
+
+[[ -z "$host" ]] && host=$(resolve_host)
+require_host "$host" || exit 1
+
+ctr_cmd=$(ctr_import_cmd)
+
+if [[ -n "$tarball" && ! -f "$tarball" ]]; then
+  echo "error: tarball not found: $tarball" >&2
+  exit 1
+fi
+
+$quiet || echo -n "    Pushing image..." >&2
+
+if [[ -n "$tarball" ]]; then
+  remote_exec "$host" "$ctr_cmd - >/dev/null 2>&1" < "$tarball"
+else
+  docker save "$IMAGE" | remote_exec "$host" "$ctr_cmd - >/dev/null 2>&1" \
+    || { echo "error: failed to save or push image '$IMAGE'" >&2; exit 1; }
+fi
+
+$quiet || echo " done" >&2

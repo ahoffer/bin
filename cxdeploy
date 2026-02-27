@@ -11,7 +11,7 @@ set -euo pipefail
 #        cxdeploy app graphql
 #
 # Options:
-#   -r, --remote HOST   Target host (default: CX_HOST or clown)
+#   -r, --remote HOST   Target host (default: from kubectl context)
 #   -n, --namespace NS  Kubernetes namespace (default: auto from app)
 
 source cx.lib
@@ -26,7 +26,7 @@ Usage: cxdeploy [options] <component...>
        cxdeploy app graphql
 
 Options:
-  -r, --remote HOST   Target host (default: CX_HOST or clown)
+  -r, --remote HOST   Target host (default: from kubectl context)
   -n, --namespace NS  Kubernetes namespace (default: auto from app)
 EOF
   echo -e "\nComponents: $(list_components)"

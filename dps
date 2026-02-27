@@ -9,8 +9,15 @@ set -euo pipefail
 
 TAB=$'\t'
 
-# Get base CLI name
-CLI=$(containercli)
+# Detect container runtime
+if command -v docker &>/dev/null; then
+  CLI=docker
+elif command -v nerdctl &>/dev/null; then
+  CLI=nerdctl
+else
+  echo "Error: neither docker nor nerdctl found in PATH" >&2
+  exit 1
+fi
 
 # Test if we need sudo
 if $CLI ps &>/dev/null; then

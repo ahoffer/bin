@@ -1,19 +1,19 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 # Restart a Kubernetes deployment and wait for rollout
-# Usage: k8srestartdeploy [-n namespace] [-t timeout] <deployment>
+# Usage: krestart [-q] [-n namespace] [-t timeout] <deployment>
 # Examples:
-#   k8srestartdeploy cx-app                    # Restart in default namespace
-#   k8srestartdeploy -n prod cx-app            # Restart in specific namespace
-#   k8srestartdeploy -t 300s cx-app            # Custom timeout
+#   krestart cx-app                        Restart in default namespace
+#   krestart -n prod cx-app                Restart in specific namespace
+#   krestart -t 300s cx-app                Custom timeout
 
 usage() {
   sed -n '4,8p' "$0"
   exit 0
 }
 
-namespace="octocx"
+namespace=""
 timeout="120s"
 quiet=false
 while [[ $# -gt 0 && "$1" == -* ]]; do
@@ -26,16 +26,22 @@ while [[ $# -gt 0 && "$1" == -* ]]; do
   esac
 done
 
-readonly DEPLOY="${1:?Usage: k8srestartdeploy [-n namespace] [-t timeout] <deployment>}"
+readonly DEPLOY="${1:?Usage: krestart [-n namespace] [-t timeout] <deployment>}"
+
+if [[ -z "$namespace" ]]; then
+  namespace="${K8S_NS:-}"
+  if [[ -z "$namespace" ]]; then
+    echo "error: no namespace specified. Use -n <ns> or set K8S_NS." >&2
+    exit 1
+  fi
+fi
+
 readonly NAMESPACE="$namespace"
 readonly TIMEOUT="$timeout"
 
 if ! kubectl get deployment "$DEPLOY" -n "$NAMESPACE" >/dev/null 2>&1; then
-  if [[ -f k8s.yml ]]; then
-    kubectl apply -f k8s.yml -n "$NAMESPACE" >/dev/null
-  else
-    exit 0
-  fi
+  echo "error: deployment '$DEPLOY' not found in namespace '$NAMESPACE'" >&2
+  exit 1
 fi
 
 $quiet || echo -n "    Restarting..."
@@ -44,7 +50,6 @@ kubectl rollout restart deployment "$DEPLOY" -n "$NAMESPACE" >/dev/null
 if $quiet; then
   kubectl rollout status deployment "$DEPLOY" -n "$NAMESPACE" --timeout="$TIMEOUT" >/dev/null
 else
-  # Show progress on single line
   kubectl rollout status deployment "$DEPLOY" -n "$NAMESPACE" --timeout="$TIMEOUT" 2>&1 | while read -r line; do
     printf "\r    Rollout: %-60s" "${line:0:60}"
   done
