@@ -118,11 +118,6 @@ fi
 # Always format and fix license headers before compiling.
 goals=(com.spotify.fmt:fmt-maven-plugin:format license:format "${goals[@]}")
 
-colima_sock="$HOME/.colima/default/docker.sock"
-if [[ -S "$colima_sock" && ! -S /var/run/docker.sock ]]; then
-    mvn_args+=("-Ddocker.host=unix://$colima_sock")
-fi
-
 mvn $threads "${mvn_args[@]}" "${goals[@]}" || exit $?
 
 if [[ "${build_docs_separately:-}" == true ]]; then
