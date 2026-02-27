@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 # Push images to a remote k3s node using docker save + k3s ctr import
@@ -83,12 +83,12 @@ for image in "${images[@]}"; do
   source_ref="$(resolve_source "$image")"
   if [[ "$source_ref" == docker-daemon:* ]]; then
     if docker image inspect "$image" >/dev/null 2>&1; then
-      if ! docker save "$image" 2>/dev/null | ssh "$HOST" 'sudo k3s ctr images import - >/dev/null 2>&1'; then
+      if ! docker save "$image" 2>/dev/null | ssh "$HOST" 'sudo /var/lib/rancher/rke2/bin/ctr --address /run/k3s/containerd/containerd.sock --namespace k8s.io images import - >/dev/null 2>&1'; then
         echo "Failed to push image from local docker daemon: $image" >&2
         exit 1
       fi
     elif sudo -n docker image inspect "$image" >/dev/null 2>&1; then
-      if ! sudo -n docker save "$image" 2>/dev/null | ssh "$HOST" 'sudo k3s ctr images import - >/dev/null 2>&1'; then
+      if ! sudo -n docker save "$image" 2>/dev/null | ssh "$HOST" 'sudo /var/lib/rancher/rke2/bin/ctr --address /run/k3s/containerd/containerd.sock --namespace k8s.io images import - >/dev/null 2>&1'; then
         echo "Failed to push image with sudo docker daemon: $image" >&2
         exit 1
       fi
@@ -101,7 +101,7 @@ for image in "${images[@]}"; do
       echo "Failed to pull image: $image" >&2
       exit 1
     fi
-    if ! docker save "$image" 2>/dev/null | ssh "$HOST" 'sudo k3s ctr images import - >/dev/null 2>&1'; then
+    if ! docker save "$image" 2>/dev/null | ssh "$HOST" 'sudo /var/lib/rancher/rke2/bin/ctr --address /run/k3s/containerd/containerd.sock --namespace k8s.io images import - >/dev/null 2>&1'; then
       echo "Failed to push image after pull: $image" >&2
       exit 1
     fi

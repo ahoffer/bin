@@ -1,13 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 # Query component configuration for cx or marrs projects
 #
-# Used by cxbuild to find docker dirs
-# Used by cxdeploy (to find image/deploy/timeout)
-#
+# Reads components.conf from the project root directory.
 # Must be run from within a project directory (walks up to find pom.xml).
-# App is auto-detected from the project root directory name.
 #
 # Usage: cxconfig <command> [args]
 #
@@ -53,21 +50,7 @@ EOF
 require_project_root
 project_root="$PROJECT_ROOT"
 
-# Detect app from project root directory name
-detect_app() {
-  local dirname
-  dirname=$(basename "$project_root")
-  case "$dirname" in
-    marrs) echo "marrs" ;;
-    cx-search) echo "cx" ;;
-    *) echo "cx" ;;  # default
-  esac
-}
-
-app=$(detect_app)
-
-readonly APP="$app"
-readonly CONFIG="$HOME/.config/$APP/components.conf"
+readonly CONFIG="$project_root/components.conf"
 
 if [[ ! -f "$CONFIG" ]]; then
   err_msg "Config file not found: $CONFIG"
@@ -80,9 +63,7 @@ get_setting() {
 
 get_component_field() {
   local component="$1" field="$2"
-  local value
-  value=$(grep "^${component}:" "$CONFIG" | cut -d: -f"$field")
-  echo "$value"
+  grep "^${component}:" "$CONFIG" | cut -d: -f"$field"
 }
 
 get_component_dir() {
@@ -94,19 +75,15 @@ get_component_dir() {
 }
 
 get_namespace() {
-  case "$APP" in
-    cx) echo "octocx" ;;
-    marrs) echo "marrs" ;;
-    *) echo "$APP" ;;
-  esac
+  local ns
+  ns=$(get_setting namespace)
+  echo "${ns:-octocx}"
 }
 
 get_deploy_prefix() {
-  case "$APP" in
-    cx) echo "cx" ;;
-    marrs) echo "marrs" ;;
-    *) echo "$APP" ;;
-  esac
+  local prefix
+  prefix=$(get_setting deploy_prefix)
+  echo "${prefix:-cx}"
 }
 
 get_version() {
@@ -123,10 +100,8 @@ case "$1" in
   deploy)
     dir=$(get_component_dir "${2:?Usage: cxconfig deploy <component>}")
     prefix=$(get_deploy_prefix)
-    # strip any existing prefix, then add the correct one
     dir="${dir#cx-}"
     dir="${dir#marrs-}"
-    # avoid "marrs-marrs" → just "marrs"
     if [[ "$dir" == "$prefix" ]]; then
       echo "$prefix"
     else
@@ -141,13 +116,13 @@ case "$1" in
     ;;
   modules)
     component="${2:?Usage: cxconfig modules <component>}"
-    get_component_dir "$component" >/dev/null  # validate component exists
+    get_component_dir "$component" >/dev/null
     modules=$(get_component_field "$component" 3)
     echo "$modules" | tr ',' '\n'
     ;;
   timeout)
     component="${2:?Usage: cxconfig timeout <component>}"
-    get_component_dir "$component" >/dev/null  # validate component exists
+    get_component_dir "$component" >/dev/null
     timeout=$(get_component_field "$component" 4)
     echo "${timeout:-$(get_setting default_timeout)}"
     ;;
@@ -161,7 +136,7 @@ case "$1" in
     get_namespace
     ;;
   app)
-    echo "$APP"
+    basename "$project_root"
     ;;
   root)
     echo "$project_root"

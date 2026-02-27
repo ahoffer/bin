@@ -85,7 +85,7 @@ verify_pod_images() {
 }
 
 $quiet || echo -n "    Verifying..."
-EXPECTED_HASH=$(ssh "$REMOTE_HOST" "sudo k3s crictl inspecti '$IMAGE' 2>/dev/null" | jq -r '.status.id')
+EXPECTED_HASH=$(ssh "$REMOTE_HOST" "sudo /var/lib/rancher/rke2/bin/crictl --runtime-endpoint unix:///run/k3s/containerd/containerd.sock inspecti '$IMAGE' 2>/dev/null" | jq -r '.status.id')
 : "${EXPECTED_HASH:?ERROR: Could not get image hash for $IMAGE}"
 
 SELECTOR=$(get_pod_selector)

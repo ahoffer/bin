@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Shared utilities for cx* scripts
 #
 # Source this file: source cx.lib

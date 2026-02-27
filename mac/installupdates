@@ -1,0 +1,4 @@
+#!/bin/bash
+# Install all pending software updates silently at login.
+# Runs as a LaunchDaemon (root) so no sudo needed.
+softwareupdate --install --all --agree-to-license 2>/dev/null
