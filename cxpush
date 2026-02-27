@@ -79,8 +79,8 @@ run_parallel _push_one components
 
 echo
 if [[ ${#parallel_failures[@]} -eq 0 ]]; then
-  echo "Pushed $(IFS=', '; echo "${components[*]}") - $(timer_elapsed)"
+  echo "Pushed $(format_components "${components[@]}") - $(timer_elapsed)"
 else
-  echo "Failed $(IFS=', '; echo "${parallel_failures[*]}") - $(timer_elapsed)"
+  echo "Failed $(format_components "${parallel_failures[@]}") - $(timer_elapsed)"
   exit 1
 fi

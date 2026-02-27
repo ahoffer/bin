@@ -81,8 +81,8 @@ run_parallel _deploy_one components
 
 echo
 if [[ ${#parallel_failures[@]} -eq 0 ]]; then
-  echo "Deployed $(IFS=', '; echo "${components[*]}") - $(timer_elapsed)"
+  echo "Deployed $(format_components "${components[@]}") - $(timer_elapsed)"
 else
-  echo "Failed $(IFS=', '; echo "${parallel_failures[*]}") - $(timer_elapsed)"
+  echo "Failed $(format_components "${parallel_failures[@]}") - $(timer_elapsed)"
   exit 1
 fi

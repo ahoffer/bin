@@ -163,9 +163,42 @@ acquire_lock() {
 # Component helpers
 # ─────────────────────────────────────────────────────────────
 
+map_component_name_to_folder() {
+  local component="$1"
+  if [[ "$component" == "edge" ]]; then
+    echo "cx-edge"
+  else
+    echo "$component"
+  fi
+}
+
+display_component_name() {
+  local component="$1"
+  if [[ "$component" == "cx-edge" ]]; then
+    echo "edge"
+  else
+    echo "$component"
+  fi
+}
+
+format_components() {
+  local formatted=()
+  local component
+  for component in "$@"; do
+    formatted+=("$(display_component_name "$component")")
+  done
+  local IFS=','
+  echo "${formatted[*]}"
+}
+
 # List components as space-separated string
 list_components() {
-  "$CXLIB_DIR/cxconfig" components 2>/dev/null | tr '\n' ' '
+  local components=()
+  local component
+  while IFS= read -r component; do
+    components+=("$(display_component_name "$component")")
+  done < <("$CXLIB_DIR/cxconfig" components 2>/dev/null)
+  printf "%s " "${components[@]}"
 }
 
 # Validate component exists
@@ -192,6 +225,10 @@ valid_component() {
 expand_components() {
   local -n targetComponents=$1
   local -n validComponents=$2
+  local i
+  for i in "${!targetComponents[@]}"; do
+    targetComponents[$i]="$(map_component_name_to_folder "${targetComponents[$i]}")"
+  done
   if [[ ${#targetComponents[@]} -eq 1 && "${targetComponents[0]}" == "all" ]]; then
     mapfile -t targetComponents < <("$CXLIB_DIR/cxconfig" all)
   else
@@ -239,11 +276,13 @@ build_components() {
   local project_root="$1"
   shift
   local -a maven_pl=()
+  local -a maven_display=()
   local -a docker_only=()
 
   for comp in "$@"; do
     if [[ -f "$project_root/docker/$comp/pom.xml" ]]; then
       maven_pl+=("docker/$comp")
+      maven_display+=("docker/$(display_component_name "$comp")")
     elif [[ -f "$project_root/docker/$comp/Dockerfile" ]]; then
       docker_only+=("$comp")
     else
@@ -254,10 +293,12 @@ build_components() {
 
   if [[ ${#maven_pl[@]} -gt 0 ]]; then
     local pl_csv
+    local display_csv
     pl_csv=$(IFS=,; echo "${maven_pl[*]}")
+    display_csv=$(IFS=,; echo "${maven_display[*]}")
     local log_file
     log_file=$(logfile cxbuild "maven")
-    run_logged "maven $pl_csv" "$log_file" \
+    run_logged "maven $display_csv" "$log_file" \
       bash -c 'cd "$1" && mvn install -pl "$2" -am -DskipTests -T6' _ "$project_root" "$pl_csv" \
       || return 1
   fi
@@ -265,7 +306,7 @@ build_components() {
   for comp in "${docker_only[@]}"; do
     local log_file
     log_file=$(logfile cxbuild "$comp")
-    run_logged "docker $comp" "$log_file" \
+    run_logged "docker $(display_component_name "$comp")" "$log_file" \
       docker build -t "$("$CXLIB_DIR/cxconfig" image "$comp")" "$project_root/docker/$comp" \
       || return 1
   done
@@ -284,10 +325,10 @@ push_component() {
   local log_file
   log_file=$(logfile cxpush "$component")
   if [[ -f "$tarball" ]]; then
-    run_logged "push $component" "$log_file" \
+    run_logged "push $(display_component_name "$component")" "$log_file" \
       "$CXLIB_DIR/kpush" -q -r "$host" -T "$tarball" "$image"
   else
-    run_logged "push $component" "$log_file" \
+    run_logged "push $(display_component_name "$component")" "$log_file" \
       "$CXLIB_DIR/kpush" -q -r "$host" "$image"
   fi
 }
@@ -304,7 +345,7 @@ deploy_component() {
   timeout=$("$CXLIB_DIR/cxconfig" timeout "$component")
   local log_file
   log_file=$(logfile cxdeploy "$component")
-  run_logged "deploy $component" "$log_file" \
+  run_logged "deploy $(display_component_name "$component")" "$log_file" \
     "$CXLIB_DIR/kdeploy" -q -r "$remote_host" -n "$namespace" -t "$timeout" "$image" "$deploy_name"
 }
 

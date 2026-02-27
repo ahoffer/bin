@@ -35,6 +35,27 @@ EOF
   exit 0
 }
 
+build_docs_component() {
+  local project_root="$1"
+  local version
+  version=$("$SCRIPT_DIR/cxconfig" version)
+  local log_file
+  log_file=$(logfile cxbuild "docs")
+  run_logged "docs" "$log_file" \
+    bash -c '
+      set -e
+      cd "$1"
+      mvn -q install:install-file \
+        -Dfile=docs/pom.xml \
+        -DpomFile=docs/pom.xml \
+        -DgroupId=com.octoconsulting \
+        -DartifactId=docs \
+        -Dversion="$2" \
+        -Dpackaging=pom
+      mvn install -pl docker/docs -DskipTests -T6
+    ' _ "$project_root" "$version"
+}
+
 declare -a components=()
 
 while [[ $# -gt 0 ]]; do
@@ -60,10 +81,34 @@ expand_components components all_components
 
 project_root=$("$SCRIPT_DIR/cxconfig" root)
 
-build_components "$project_root" "${components[@]}" || {
+declare -a image_components=()
+build_docs=""
+for component in "${components[@]}"; do
+  if [[ "$component" == "docs" ]]; then
+    build_docs=1
+  else
+    image_components+=("$component")
+  fi
+done
+
+if [[ ${#image_components[@]} -gt 0 ]]; then
+  build_components "$project_root" "${image_components[@]}" || {
+    err_msg "Build failed"
+    exit 1
+  }
+fi
+
+if [[ -n "${build_docs:-}" ]]; then
+  build_docs_component "$project_root" || {
+    err_msg "Build failed"
+    exit 1
+  }
+fi
+
+if [[ ${#image_components[@]} -eq 0 && -z "${build_docs:-}" ]]; then
   err_msg "Build failed"
   exit 1
-}
+fi
 
 echo
-echo "Built $(IFS=', '; echo "${components[*]}") - $(timer_elapsed)"
+echo "Built $(format_components "${components[@]}") - $(timer_elapsed)"

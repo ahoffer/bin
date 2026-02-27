@@ -95,10 +95,10 @@ run_parallel _deploy_one components
 
 echo
 if [[ ${#parallel_failures[@]} -eq 0 ]]; then
-  echo "Shipped $(IFS=', '; echo "${components[*]}") - $(timer_elapsed)"
+  echo "Shipped $(format_components "${components[@]}") - $(timer_elapsed)"
   run_completion_hook cxship success
 else
-  echo "Failed $(IFS=', '; echo "${parallel_failures[*]}") - $(timer_elapsed)"
+  echo "Failed $(format_components "${parallel_failures[@]}") - $(timer_elapsed)"
   run_completion_hook cxship failure
   exit 1
 fi
