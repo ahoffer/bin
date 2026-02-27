@@ -1,0 +1,28 @@
+#!/bin/sh
+# Builds an Antora docs site, handling both normal git clones and bare
+# repo worktrees. Run from the directory containing site-playbook.yml.
+
+PLAYBOOK=site-playbook.yml
+
+if [ ! -f "$PLAYBOOK" ]; then
+  echo "No $PLAYBOOK found in current directory" >&2
+  exit 1
+fi
+
+if [ -f ../.git ]; then
+  REPO=$(git -C .. rev-parse --path-format=absolute --git-common-dir)
+  BRANCH=$(git -C .. rev-parse --abbrev-ref HEAD)
+  sed -e "s|url: \.\./|url: $REPO|" \
+      -e "s|branches: HEAD|branches: $BRANCH|" \
+      "$PLAYBOOK" > .antora-playbook-local.yml
+  PLAYBOOK=.antora-playbook-local.yml
+fi
+
+DOCSEARCH_ENABLED=true \
+DOCSEARCH_ENGINE=lunr \
+BRANDING_IMAGE=cx-logo.png \
+  npx antora "$PLAYBOOK" --stacktrace "$@"
+STATUS=$?
+
+rm -f .antora-playbook-local.yml
+exit $STATUS
