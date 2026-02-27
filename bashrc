@@ -105,8 +105,8 @@ command -v regctl >/dev/null 2>&1 && source <(regctl completion bash 2>/dev/null
 # Completions for the alias "k" (only if kubectl completion is loaded)
 declare -F __start_kubectl >/dev/null 2>&1 && complete -F __start_kubectl k
 
-
 export SYSTEMD_EDITOR=vim
-
-
 alias cls=clear
+
+# Limit was 16K tokens
+export CLAUDE_CODE_MAX_OUTPUT_TOKENS=32000
