@@ -1,11 +1,6 @@
 {
     "profiles": [
         {
-            "name": "Default profile",
-            "selected": true,
-            "virtual_hid_keyboard": {
-                "keyboard_type_v2": "ansi"
-            },
             "complex_modifications": {
                 "parameters": {
                     "basic.to_if_alone_timeout_milliseconds": 250,
@@ -16,7 +11,17 @@
                         "description": "Super key combos (physical Win = left_command)",
                         "manipulators": [
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "l",
                                     "modifiers": {
@@ -34,20 +39,20 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "left_arrow",
                                     "modifiers": {
@@ -65,20 +70,20 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "right_arrow",
                                     "modifiers": {
@@ -96,20 +101,20 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "up_arrow",
                                     "modifiers": {
@@ -127,20 +132,20 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "down_arrow",
                                     "modifiers": {
@@ -158,20 +163,20 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "page_up",
                                     "modifiers": {
@@ -188,20 +193,20 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "page_down",
                                     "modifiers": {
@@ -218,17 +223,7 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             }
                         ]
                     },
@@ -236,7 +231,17 @@
                         "description": "Alt combos for system actions (physical Alt = left_option)",
                         "manipulators": [
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "tab",
                                     "modifiers": {
@@ -253,20 +258,20 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "tab",
                                     "modifiers": {
@@ -285,20 +290,20 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "grave_accent_and_tilde",
                                     "modifiers": {
@@ -315,20 +320,20 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "f4",
                                     "modifiers": {
@@ -345,17 +350,7 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             }
                         ]
                     },
@@ -363,7 +358,17 @@
                         "description": "Print Screen for screenshot region select",
                         "manipulators": [
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "print_screen"
                                 },
@@ -376,17 +381,7 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             }
                         ]
                     },
@@ -394,7 +389,14 @@
                         "description": "Finder: Del key moves selected item to Trash",
                         "manipulators": [
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "bundle_identifiers": [
+                                            "^com\\.apple\\.finder$"
+                                        ],
+                                        "type": "frontmost_application_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "delete_forward"
                                 },
@@ -406,14 +408,7 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "frontmost_application_if",
-                                        "bundle_identifiers": [
-                                            "^com\\.apple\\.finder$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             }
                         ]
                     },
@@ -421,7 +416,14 @@
                         "description": "Finder: Return opens items, F2 renames",
                         "manipulators": [
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "bundle_identifiers": [
+                                            "^com\\.apple\\.finder$"
+                                        ],
+                                        "type": "frontmost_application_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "return_or_enter"
                                 },
@@ -433,17 +435,17 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "frontmost_application_if",
-                                        "bundle_identifiers": [
-                                            "^com\\.apple\\.finder$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "bundle_identifiers": [
+                                            "^com\\.apple\\.finder$"
+                                        ],
+                                        "type": "frontmost_application_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "f2"
                                 },
@@ -452,14 +454,7 @@
                                         "key_code": "return_or_enter"
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "frontmost_application_if",
-                                        "bundle_identifiers": [
-                                            "^com\\.apple\\.finder$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             }
                         ]
                     },
@@ -467,7 +462,59 @@
                         "description": "Chrome-specific shortcuts",
                         "manipulators": [
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^com\\.google\\.Chrome$"
+                                        ],
+                                        "type": "frontmost_application_if"
+                                    }
+                                ],
+                                "from": {
+                                    "key_code": "h",
+                                    "modifiers": {
+                                        "mandatory": [
+                                            "control"
+                                        ]
+                                    }
+                                },
+                                "to": [
+                                    {
+                                        "key_code": "y",
+                                        "modifiers": [
+                                            "left_command"
+                                        ]
+                                    }
+                                ],
+                                "type": "basic"
+                            },
+                            {
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^com\\.google\\.Chrome$"
+                                        ],
+                                        "type": "frontmost_application_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "left_arrow",
                                     "modifiers": {
@@ -484,26 +531,26 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "frontmost_application_if",
-                                        "bundle_identifiers": [
-                                            "^com\\.google\\.Chrome$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^com\\.google\\.Chrome$"
+                                        ],
+                                        "type": "frontmost_application_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "right_arrow",
                                     "modifiers": {
@@ -520,26 +567,26 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "frontmost_application_if",
-                                        "bundle_identifiers": [
-                                            "^com\\.google\\.Chrome$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^com\\.google\\.Chrome$"
+                                        ],
+                                        "type": "frontmost_application_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "f5"
                                 },
@@ -551,26 +598,26 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "frontmost_application_if",
-                                        "bundle_identifiers": [
-                                            "^com\\.google\\.Chrome$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^com\\.google\\.Chrome$"
+                                        ],
+                                        "type": "frontmost_application_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "i",
                                     "modifiers": {
@@ -589,23 +636,7 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "frontmost_application_if",
-                                        "bundle_identifiers": [
-                                            "^com\\.google\\.Chrome$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             }
                         ]
                     },
@@ -613,7 +644,25 @@
                         "description": "Ctrl overrides: tab passthrough, word nav, document nav",
                         "manipulators": [
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^net\\.kovidgoyal\\.kitty$",
+                                            "^com\\.jetbrains\\.intellij$",
+                                            "^org\\.xpra\\.xpra$"
+                                        ],
+                                        "type": "frontmost_application_unless"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "tab",
                                     "modifiers": {
@@ -633,27 +682,28 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "frontmost_application_unless",
-                                        "bundle_identifiers": [
-                                            "^net\\.kovidgoyal\\.kitty$",
-                                            "^com\\.jetbrains\\.intellij$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^net\\.kovidgoyal\\.kitty$",
+                                            "^com\\.jetbrains\\.intellij$",
+                                            "^org\\.xpra\\.xpra$"
+                                        ],
+                                        "type": "frontmost_application_unless"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "left_arrow",
                                     "modifiers": {
@@ -670,27 +720,28 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "frontmost_application_unless",
-                                        "bundle_identifiers": [
-                                            "^net\\.kovidgoyal\\.kitty$",
-                                            "^com\\.jetbrains\\.intellij$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^net\\.kovidgoyal\\.kitty$",
+                                            "^com\\.jetbrains\\.intellij$",
+                                            "^org\\.xpra\\.xpra$"
+                                        ],
+                                        "type": "frontmost_application_unless"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "right_arrow",
                                     "modifiers": {
@@ -707,27 +758,28 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "frontmost_application_unless",
-                                        "bundle_identifiers": [
-                                            "^net\\.kovidgoyal\\.kitty$",
-                                            "^com\\.jetbrains\\.intellij$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^net\\.kovidgoyal\\.kitty$",
+                                            "^com\\.jetbrains\\.intellij$",
+                                            "^org\\.xpra\\.xpra$"
+                                        ],
+                                        "type": "frontmost_application_unless"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "left_arrow",
                                     "modifiers": {
@@ -746,27 +798,28 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "frontmost_application_unless",
-                                        "bundle_identifiers": [
-                                            "^net\\.kovidgoyal\\.kitty$",
-                                            "^com\\.jetbrains\\.intellij$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^net\\.kovidgoyal\\.kitty$",
+                                            "^com\\.jetbrains\\.intellij$",
+                                            "^org\\.xpra\\.xpra$"
+                                        ],
+                                        "type": "frontmost_application_unless"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "right_arrow",
                                     "modifiers": {
@@ -785,27 +838,28 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "frontmost_application_unless",
-                                        "bundle_identifiers": [
-                                            "^net\\.kovidgoyal\\.kitty$",
-                                            "^com\\.jetbrains\\.intellij$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^net\\.kovidgoyal\\.kitty$",
+                                            "^com\\.jetbrains\\.intellij$",
+                                            "^org\\.xpra\\.xpra$"
+                                        ],
+                                        "type": "frontmost_application_unless"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "delete_or_backspace",
                                     "modifiers": {
@@ -822,27 +876,28 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "frontmost_application_unless",
-                                        "bundle_identifiers": [
-                                            "^net\\.kovidgoyal\\.kitty$",
-                                            "^com\\.jetbrains\\.intellij$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^net\\.kovidgoyal\\.kitty$",
+                                            "^com\\.jetbrains\\.intellij$",
+                                            "^org\\.xpra\\.xpra$"
+                                        ],
+                                        "type": "frontmost_application_unless"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "delete_forward",
                                     "modifiers": {
@@ -859,27 +914,28 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "frontmost_application_unless",
-                                        "bundle_identifiers": [
-                                            "^net\\.kovidgoyal\\.kitty$",
-                                            "^com\\.jetbrains\\.intellij$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^net\\.kovidgoyal\\.kitty$",
+                                            "^com\\.jetbrains\\.intellij$",
+                                            "^org\\.xpra\\.xpra$"
+                                        ],
+                                        "type": "frontmost_application_unless"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "home",
                                     "modifiers": {
@@ -896,27 +952,28 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "frontmost_application_unless",
-                                        "bundle_identifiers": [
-                                            "^net\\.kovidgoyal\\.kitty$",
-                                            "^com\\.jetbrains\\.intellij$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^net\\.kovidgoyal\\.kitty$",
+                                            "^com\\.jetbrains\\.intellij$",
+                                            "^org\\.xpra\\.xpra$"
+                                        ],
+                                        "type": "frontmost_application_unless"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "end",
                                     "modifiers": {
@@ -933,27 +990,28 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "frontmost_application_unless",
-                                        "bundle_identifiers": [
-                                            "^net\\.kovidgoyal\\.kitty$",
-                                            "^com\\.jetbrains\\.intellij$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^net\\.kovidgoyal\\.kitty$",
+                                            "^com\\.jetbrains\\.intellij$",
+                                            "^org\\.xpra\\.xpra$"
+                                        ],
+                                        "type": "frontmost_application_unless"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "home",
                                     "modifiers": {
@@ -972,27 +1030,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "end",
                                     "modifiers": {
@@ -1011,32 +1069,33 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "frontmost_application_unless",
-                                        "bundle_identifiers": [
-                                            "^net\\.kovidgoyal\\.kitty$",
-                                            "^com\\.jetbrains\\.intellij$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             }
                         ]
                     },
                     {
-                        "description": "Home/End as line navigation (not document scroll)",
+                        "description": "Home/End as line navigation (excludes Kitty, IntelliJ, Xpra)",
                         "manipulators": [
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^net\\.kovidgoyal\\.kitty$",
+                                            "^com\\.jetbrains\\.intellij$",
+                                            "^org\\.xpra\\.xpra$"
+                                        ],
+                                        "type": "frontmost_application_unless"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "home"
                                 },
@@ -1048,27 +1107,28 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "frontmost_application_unless",
-                                        "bundle_identifiers": [
-                                            "^net\\.kovidgoyal\\.kitty$",
-                                            "^com\\.jetbrains\\.intellij$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^net\\.kovidgoyal\\.kitty$",
+                                            "^com\\.jetbrains\\.intellij$",
+                                            "^org\\.xpra\\.xpra$"
+                                        ],
+                                        "type": "frontmost_application_unless"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "end"
                                 },
@@ -1080,27 +1140,28 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "frontmost_application_unless",
-                                        "bundle_identifiers": [
-                                            "^net\\.kovidgoyal\\.kitty$",
-                                            "^com\\.jetbrains\\.intellij$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^net\\.kovidgoyal\\.kitty$",
+                                            "^com\\.jetbrains\\.intellij$",
+                                            "^org\\.xpra\\.xpra$"
+                                        ],
+                                        "type": "frontmost_application_unless"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "home",
                                     "modifiers": {
@@ -1118,27 +1179,28 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "frontmost_application_unless",
-                                        "bundle_identifiers": [
-                                            "^net\\.kovidgoyal\\.kitty$",
-                                            "^com\\.jetbrains\\.intellij$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             },
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^net\\.kovidgoyal\\.kitty$",
+                                            "^com\\.jetbrains\\.intellij$",
+                                            "^org\\.xpra\\.xpra$"
+                                        ],
+                                        "type": "frontmost_application_unless"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "end",
                                     "modifiers": {
@@ -1156,24 +1218,7 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "frontmost_application_unless",
-                                        "bundle_identifiers": [
-                                            "^net\\.kovidgoyal\\.kitty$",
-                                            "^com\\.jetbrains\\.intellij$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             }
                         ]
                     },
@@ -1181,7 +1226,24 @@
                         "description": "Ctrl to Cmd for GUI apps (excludes Kitty and IntelliJ)",
                         "manipulators": [
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "identifiers": [
+                                            {
+                                                "product_id": 865,
+                                                "vendor_id": 13364
+                                            }
+                                        ],
+                                        "type": "device_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^net\\.kovidgoyal\\.kitty$",
+                                            "^com\\.jetbrains\\.intellij$"
+                                        ],
+                                        "type": "frontmost_application_unless"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "a",
                                     "modifiers": {
@@ -1202,27 +1264,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "b",
                                     "modifiers": {
@@ -1243,27 +1305,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "c",
                                     "modifiers": {
@@ -1284,27 +1346,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "d",
                                     "modifiers": {
@@ -1325,27 +1387,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "e",
                                     "modifiers": {
@@ -1366,27 +1428,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "f",
                                     "modifiers": {
@@ -1407,27 +1469,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "g",
                                     "modifiers": {
@@ -1448,27 +1510,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "h",
                                     "modifiers": {
@@ -1489,27 +1551,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "i",
                                     "modifiers": {
@@ -1530,27 +1592,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "j",
                                     "modifiers": {
@@ -1571,27 +1633,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "k",
                                     "modifiers": {
@@ -1612,27 +1674,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "l",
                                     "modifiers": {
@@ -1653,27 +1715,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "m",
                                     "modifiers": {
@@ -1694,27 +1756,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "n",
                                     "modifiers": {
@@ -1735,27 +1797,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "o",
                                     "modifiers": {
@@ -1776,27 +1838,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "p",
                                     "modifiers": {
@@ -1817,27 +1879,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "q",
                                     "modifiers": {
@@ -1858,27 +1920,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "r",
                                     "modifiers": {
@@ -1899,27 +1961,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "s",
                                     "modifiers": {
@@ -1940,27 +2002,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "t",
                                     "modifiers": {
@@ -1981,27 +2043,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "u",
                                     "modifiers": {
@@ -2022,27 +2084,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "v",
                                     "modifiers": {
@@ -2063,27 +2125,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "w",
                                     "modifiers": {
@@ -2104,27 +2166,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "x",
                                     "modifiers": {
@@ -2145,27 +2207,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "y",
                                     "modifiers": {
@@ -2186,27 +2248,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "z",
                                     "modifiers": {
@@ -2227,27 +2289,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "0",
                                     "modifiers": {
@@ -2268,27 +2330,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "1",
                                     "modifiers": {
@@ -2309,27 +2371,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "2",
                                     "modifiers": {
@@ -2350,27 +2412,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "3",
                                     "modifiers": {
@@ -2391,27 +2453,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "4",
                                     "modifiers": {
@@ -2432,27 +2494,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "5",
                                     "modifiers": {
@@ -2473,27 +2535,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "6",
                                     "modifiers": {
@@ -2514,27 +2576,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "7",
                                     "modifiers": {
@@ -2555,27 +2617,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "8",
                                     "modifiers": {
@@ -2596,27 +2658,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "9",
                                     "modifiers": {
@@ -2637,27 +2699,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "comma",
                                     "modifiers": {
@@ -2678,27 +2740,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "period",
                                     "modifiers": {
@@ -2719,27 +2781,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "slash",
                                     "modifiers": {
@@ -2760,27 +2822,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "semicolon",
                                     "modifiers": {
@@ -2801,27 +2863,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "quote",
                                     "modifiers": {
@@ -2842,27 +2904,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "open_bracket",
                                     "modifiers": {
@@ -2883,27 +2945,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "close_bracket",
                                     "modifiers": {
@@ -2924,27 +2986,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "backslash",
                                     "modifiers": {
@@ -2965,27 +3027,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "hyphen",
                                     "modifiers": {
@@ -3006,27 +3068,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "equal_sign",
                                     "modifiers": {
@@ -3047,27 +3109,27 @@
                                         ]
                                     }
                                 ],
+                                "type": "basic"
+                            },
+                            {
                                 "conditions": [
                                     {
-                                        "type": "device_if",
                                         "identifiers": [
                                             {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
+                                                "product_id": 865,
+                                                "vendor_id": 13364
                                             }
-                                        ]
+                                        ],
+                                        "type": "device_if"
                                     },
                                     {
-                                        "type": "frontmost_application_unless",
                                         "bundle_identifiers": [
                                             "^net\\.kovidgoyal\\.kitty$",
                                             "^com\\.jetbrains\\.intellij$"
-                                        ]
+                                        ],
+                                        "type": "frontmost_application_unless"
                                     }
-                                ]
-                            },
-                            {
-                                "type": "basic",
+                                ],
                                 "from": {
                                     "key_code": "grave_accent_and_tilde",
                                     "modifiers": {
@@ -3088,28 +3150,16 @@
                                         ]
                                     }
                                 ],
-                                "conditions": [
-                                    {
-                                        "type": "device_if",
-                                        "identifiers": [
-                                            {
-                                                "vendor_id": 13364,
-                                                "product_id": 865
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        "type": "frontmost_application_unless",
-                                        "bundle_identifiers": [
-                                            "^net\\.kovidgoyal\\.kitty$",
-                                            "^com\\.jetbrains\\.intellij$"
-                                        ]
-                                    }
-                                ]
+                                "type": "basic"
                             }
                         ]
                     }
                 ]
+            },
+            "name": "Default profile",
+            "selected": true,
+            "virtual_hid_keyboard": {
+                "keyboard_type_v2": "ansi"
             }
         }
     ]
