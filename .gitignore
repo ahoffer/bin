@@ -56,6 +56,9 @@ regsync
 
 .serena/
 .aider*
+.claude/
+.stfolder/
+*.sync-conflict-*
 
 mac/config/karabiner/automatic_backups/
 mac/config/karabiner/*.bak

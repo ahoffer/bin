@@ -147,7 +147,7 @@ export const render = ({ output, error }) => {
       <div className={section}>
         <div className={row}>
           <span className={label}>mem</span>
-          <span>{memUsed.toFixed(1)} / {memTotal.toFixed(0)} GB</span>
+          <span>{Math.round(memUsed).toString().padStart(2, "0")} / {Math.round(memTotal).toString().padStart(2, "0")} GB</span>
         </div>
         <div className={bar}>
           <div className={barFill(memPct, "#fa5")} />
