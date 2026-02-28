@@ -21,12 +21,11 @@ parser.add_argument(
 args = parser.parse_args()
 
 # ── Read + normalize env vars ──────────────────────────────────────────────────
-HOST  = os.getenv("RUNSHIFT_HOST", "").strip()
-USER  = os.getenv("RUNSHIFT_USER",  "").strip()
-TOKEN = os.getenv("RUNSHIFT_TOKEN", "").strip()
+HOST  = os.getenv("GITLAB_HOST", "").strip()
+TOKEN = os.getenv("GITLAB_BOT_READ_TOKEN", "").strip()
 
-if not all([HOST, USER, TOKEN]):
-    print("Please set RUNSHIFT_HOST, RUNSHIFT_USER and RUNSHIFT_TOKEN.", file=sys.stderr)
+if not all([HOST, TOKEN]):
+    print("Please set GITLAB_HOST and GITLAB_BOT_READ_TOKEN.", file=sys.stderr)
     sys.exit(1)
 
 # ── Prepend scheme if missing, strip trailing slash ──────────────────────────
@@ -37,14 +36,12 @@ HOST = HOST.rstrip("/")
 # ── Connect to GitLab (python-gitlab appends /api/v4) ──────────────────────────
 gl = gitlab.Gitlab(HOST, private_token=TOKEN, ssl_verify=True)
 
-# ── Resolve your user ID ──────────────────────────────────────────────────────
+# ── Resolve your user ID from the token ───────────────────────────────────────
 try:
-    users = gl.users.list(username=USER)
-    if not users:
-        raise RuntimeError(f"user '{USER}' not found")
-    me = users[0].id
+    gl.auth()
+    me = gl.user.id
 except Exception as e:
-    print("ERROR resolving user ID:", e, file=sys.stderr)
+    print("ERROR authenticating:", e, file=sys.stderr)
     sys.exit(1)
 
 # ── Fetch all open MRs (shallow) ───────────────────────────────────────────────

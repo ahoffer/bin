@@ -17,7 +17,7 @@ Environment:
     GITLAB_BOT_READ_TOKEN    Required. GitLab API token for authentication.
 
 Requires:
-    requestgitlab            Script for GitLab API access.
+    glapi                    Script for GitLab API access.
 EOF
     exit 1
 }
@@ -28,15 +28,8 @@ fi
 
 mrurl="$1"
 
-if [[ -z "${GITLAB_BOT_READ_TOKEN:-}" ]]; then
-    echo "Error: GITLAB_BOT_READ_TOKEN is not set or empty." >&2
-    echo "Restart with the token passed at launch:" >&2
-    echo "    GITLAB_BOT_READ_TOKEN=\$GITLAB_BOT_READ_TOKEN claude" >&2
-    exit 1
-fi
-
-if ! command -v requestgitlab &>/dev/null; then
-    echo "Error: requestgitlab script not found in PATH." >&2
+if ! command -v glapi &>/dev/null; then
+    echo "Error: glapi script not found in PATH." >&2
     exit 1
 fi
 
@@ -58,7 +51,7 @@ echo "========================================"
 echo
 
 # Fetch MR details
-mrjson=$(requestgitlab --raw "$mrurl")
+mrjson=$(glapi --raw "$mrurl")
 
 # Check for API errors
 if echo "$mrjson" | jq -e '.error // .message' >/dev/null 2>&1; then
@@ -105,7 +98,7 @@ if [[ -n "$issuenumbers" ]]; then
     for issuenum in $issuenumbers; do
         # Fetch issue from the same project by constructing the web URL
         constructedissueurl="${baseurl}/${projectpath}/-/issues/${issuenum}"
-        issuejson=$(requestgitlab --raw "$constructedissueurl" 2>/dev/null || echo '{}')
+        issuejson=$(glapi --raw "$constructedissueurl" 2>/dev/null || echo '{}')
         issuetitle=$(echo "$issuejson" | jq -r '.title // empty')
         if [[ -n "$issuetitle" ]]; then
             issuestate=$(echo "$issuejson" | jq -r '.state // "unknown"')
@@ -126,7 +119,7 @@ if [[ -n "$issueurls" ]]; then
             # Remove trailing /-/ if present and normalize to web URL format
             issueprojectpath="${issueprojectpath%/-}"
             normalizedissueurl="${baseurl}/${issueprojectpath}/-/issues/${issuenum}"
-            issuejson=$(requestgitlab --raw "$normalizedissueurl" 2>/dev/null || echo '{}')
+            issuejson=$(glapi --raw "$normalizedissueurl" 2>/dev/null || echo '{}')
             issuetitle=$(echo "$issuejson" | jq -r '.title // empty')
             if [[ -n "$issuetitle" ]]; then
                 issuestate=$(echo "$issuejson" | jq -r '.state // "unknown"')
@@ -147,7 +140,7 @@ echo
 echo "COMMENTS:"
 echo "----------------------------------------"
 
-notesjson=$(requestgitlab --raw "$mrurl" "notes?sort=asc&per_page=100")
+notesjson=$(glapi --raw "$mrurl" "notes?sort=asc&per_page=100")
 
 notecount=$(echo "$notesjson" | jq 'length')
 
