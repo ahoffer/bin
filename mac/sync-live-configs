@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_DIR="${ROOT}/config"
+
+copy_file() {
+  local src="$1"
+  local dst="$2"
+
+  mkdir -p "$(dirname "$dst")"
+
+  if [ -L "$dst" ]; then
+    rm "$dst"
+  fi
+
+  /usr/bin/install -m 0644 "$src" "$dst"
+  printf 'synced %s -> %s\n' "$src" "$dst"
+}
+
+find_uebersicht_widget_dir() {
+  find "$HOME/Library/Application Support" -maxdepth 1 -type d -name '*bersicht' ! -name 'tracesOf.*' | head -n 1
+}
+
+sync_uebersicht() {
+  local root
+  root="$(find_uebersicht_widget_dir)"
+
+  if [ -z "$root" ]; then
+    printf 'skip  uebersicht (widgets dir not found)\n'
+    return
+  fi
+
+  copy_file "${CONFIG_DIR}/system-stats.jsx" "${root}/widgets/system-stats.jsx"
+  copy_file "${CONFIG_DIR}/rke2-stats.jsx" "${root}/widgets/rke2-stats.jsx"
+}
+
+sync_xpra() {
+  copy_file "${CONFIG_DIR}/xpra.conf" "$HOME/.xpra/xpra.conf"
+}
+
+sync_intellij_keymap() {
+  local src
+  local found=0
+
+  src="${CONFIG_DIR}/intellij-gnome-keymap.xml"
+
+  while IFS= read -r dir; do
+    found=1
+    copy_file "$src" "${dir}/gnome.xml"
+  done < <(
+    find "$HOME/Library/Application Support/JetBrains" \
+      \( -path '*/keymaps' -o -path '*/settingsSync/keymaps' \) \
+      -type d 2>/dev/null | sort
+  )
+
+  if [ "$found" -eq 0 ]; then
+    printf 'skip  intellij keymap (no JetBrains keymap dirs found)\n'
+  fi
+}
+
+printf 'note  karabiner already live via %s -> %s\n' \
+  "$HOME/.config/karabiner" \
+  "${CONFIG_DIR}/karabiner"
+printf 'note  platform-macos.conf.bak has no mapped live destination yet\n'
+
+sync_uebersicht
+sync_xpra
+sync_intellij_keymap
