@@ -1,4 +1,4 @@
-#! /bin/bash
+#!/usr/bin/env bash
 #
 # Find Here
 #
@@ -14,9 +14,16 @@ if [[ "${pattern}" != *\* ]]; then
   pattern="${pattern}*"
 fi
 
-if command -v fdfind >/dev/null 2>&1; then
+uname_s="$(uname -s)"
+
+if command -v fd >/dev/null 2>&1; then
+  fd -i -g --no-ignore "${pattern}"
+elif command -v fdfind >/dev/null 2>&1; then
   fdfind -i -g --no-ignore "${pattern}"
+elif [[ "${uname_s}" == "Darwin" ]]; then
+  echo "fd not found. Install it with: brew install fd" >&2
+  exit 1
 else
-  echo "fdfind not found. Install it with: sudo apt install fd-find"
+  echo "fdfind not found. Using find. Install it with: sudo apt install fd-find" >&2
   find . -iname "${pattern}" 2>/dev/null
 fi
