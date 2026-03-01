@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""Add xpra exclusion to Karabiner-Elements rules that remap modifiers.
+
+Two rule groups currently remap Ctrl and Super keys without excluding xpra,
+causing the remote GNOME session to receive wrong modifier keys. This script
+adds a frontmost_application_unless condition for xpra to every manipulator
+in both groups.
+"""
+
+import json
+import sys
+from pathlib import Path
+
+CONFIG = Path(__file__).resolve().parent / "karabiner.json"
+XPRA_BUNDLE_ID = "^org\\.xpra\\.xpra$"
+
+CTRL_TO_CMD_DESCRIPTION = "Ctrl to Cmd for GUI apps (excludes Kitty and IntelliJ)"
+SUPER_COMBOS_DESCRIPTION = "Super key combos (physical Win = left_command)"
+
+
+def find_rule(rules, description):
+    for rule in rules:
+        if rule.get("description") == description:
+            return rule
+    print(f"Rule not found: {description}", file=sys.stderr)
+    sys.exit(1)
+
+
+def add_xpra_to_existing_unless(manipulators):
+    """Append xpra bundle id to each manipulator's frontmost_application_unless condition."""
+    patched = 0
+    for manipulator in manipulators:
+        for condition in manipulator.get("conditions", []):
+            if condition.get("type") != "frontmost_application_unless":
+                continue
+            ids = condition.get("bundle_identifiers", [])
+            if XPRA_BUNDLE_ID not in ids:
+                ids.append(XPRA_BUNDLE_ID)
+                patched += 1
+    return patched
+
+
+def add_new_unless_condition(manipulators):
+    """Add a new frontmost_application_unless condition to each manipulator."""
+    patched = 0
+    for manipulator in manipulators:
+        conditions = manipulator.get("conditions", [])
+        already_has = any(
+            c.get("type") == "frontmost_application_unless" for c in conditions
+        )
+        if already_has:
+            continue
+        conditions.append({
+            "bundle_identifiers": [XPRA_BUNDLE_ID],
+            "type": "frontmost_application_unless",
+        })
+        patched += 1
+    return patched
+
+
+def main():
+    config = json.loads(CONFIG.read_text())
+    rules = config["profiles"][0]["complex_modifications"]["rules"]
+
+    ctrl_rule = find_rule(rules, CTRL_TO_CMD_DESCRIPTION)
+    super_rule = find_rule(rules, SUPER_COMBOS_DESCRIPTION)
+
+    ctrl_patched = add_xpra_to_existing_unless(ctrl_rule["manipulators"])
+    super_patched = add_new_unless_condition(super_rule["manipulators"])
+
+    print(f"Ctrl-to-Cmd rule: patched {ctrl_patched} of {len(ctrl_rule['manipulators'])} manipulators")
+    print(f"Super combos rule: patched {super_patched} of {len(super_rule['manipulators'])} manipulators")
+
+    if ctrl_patched == 0 and super_patched == 0:
+        print("Nothing to do, xpra exclusions already present.")
+        return
+
+    CONFIG.write_text(json.dumps(config, indent=4, ensure_ascii=False) + "\n")
+    print(f"Wrote {CONFIG}")
+
+
+if __name__ == "__main__":
+    main()
