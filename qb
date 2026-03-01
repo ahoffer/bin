@@ -101,10 +101,38 @@ is_project_root() {
     [[ -n "$git_root" ]] && [[ "$(realpath "$PWD")" == "$(realpath "$git_root")" ]]
 }
 
+is_projects_docker_context() {
+    local resolved_pwd rel
+    resolved_pwd=$(realpath "$PWD")
+    [[ "$resolved_pwd" == "$HOME/projects/"* ]] || return 1
+    rel="${resolved_pwd#"$HOME/projects/"}"
+    [[ "/$rel/" == *"/docker/"* ]]
+}
+
+ensure_docker_daemon_if_needed() {
+    is_projects_docker_context || return 0
+
+    if ! command -v docker >/dev/null 2>&1; then
+        echo "Error: docker is required for builds under ~/projects/**/docker, but the docker CLI is not installed." >&2
+        exit 1
+    fi
+
+    if ! docker info >/dev/null 2>&1; then
+        echo "Error: docker daemon is unavailable for builds under ~/projects/**/docker." >&2
+        if [[ -n "${DOCKER_HOST:-}" ]]; then
+            echo "Current DOCKER_HOST: ${DOCKER_HOST}" >&2
+        fi
+        echo "Start Colima/Docker first, then rerun qb." >&2
+        exit 1
+    fi
+}
+
 # The docs module uses Antora, not javac, so skip maven entirely.
 if is_docs_context; then
     exec "$HOME/bin/cxappdev/docbuild" "$@"
 fi
+
+ensure_docker_daemon_if_needed
 
 prepare_frontend_if_needed || exit 1
 
