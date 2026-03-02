@@ -13,21 +13,13 @@ trap 'pkill -P $$ 2>/dev/null || true' EXIT
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
-source "$SCRIPT_DIR/cx.hostlib"
+source "$SCRIPT_DIR/lib.sh"
 
 usage() {
   sed -n '4,8p' "$0"
   echo
   echo "If deployment is omitted, it defaults to the image name (before the tag)."
   exit 0
-}
-
-require_optarg() {
-  local opt="$1"
-  if [[ $# -lt 2 || -z "${2:-}" || "${2:0:1}" == "-" ]]; then
-    echo "error: option $opt requires a value" >&2
-    exit 1
-  fi
 }
 
 host=""
@@ -56,13 +48,7 @@ fi
 [[ -z "$host" ]] && host=$(resolve_host)
 require_host "$host" || exit 1
 
-if [[ -z "$namespace" ]]; then
-  namespace="${K8S_NS:-}"
-  if [[ -z "$namespace" ]]; then
-    echo "error: no namespace specified. Use -n <ns> or set K8S_NS." >&2
-    exit 1
-  fi
-fi
+require_namespace namespace
 
 declare -a q_args=()
 $quiet && q_args=(-q)

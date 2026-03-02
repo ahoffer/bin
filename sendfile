@@ -21,9 +21,11 @@ else
     cleanup=true
 fi
 
-baseName=$(basename "$localFile")
-ssh "$remoteDest" "mkdir -p $remoteDir"
+baseName=$(basename -- "$localFile")
 remoteFile="${remoteDir}/${baseName}"
-scp -q "$localFile" "${remoteDest}:${remoteFile}"
-$cleanup && rm -f "$localFile"
+remoteDirEscaped=$(printf '%q' "$remoteDir")
+remoteFileEscaped=$(printf '%q' "$remoteFile")
+ssh -- "$remoteDest" "mkdir -p $remoteDirEscaped"
+scp -q -- "$localFile" "${remoteDest}:${remoteFileEscaped}"
+$cleanup && rm -f -- "$localFile"
 echo "$remoteFile"

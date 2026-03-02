@@ -69,15 +69,7 @@ done
 require_project_root
 acquire_lock "build"
 
-mapfile -t all_components < <("$SCRIPT_DIR/cxconfig" components)
-
-if [[ ${#components[@]} -eq 0 ]]; then
-  err_msg "Specify components or use 'all'"
-  echo "Available: ${all_components[*]}" >&2
-  exit 1
-fi
-
-expand_components components all_components
+load_and_expand_components components
 
 project_root=$("$SCRIPT_DIR/cxconfig" root)
 

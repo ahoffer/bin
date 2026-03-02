@@ -10,19 +10,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
-source "$SCRIPT_DIR/cx.hostlib"
+source "$SCRIPT_DIR/lib.sh"
 
 usage() {
   sed -n '4,8p' "$0"
   exit 0
-}
-
-require_optarg() {
-  local opt="$1"
-  if [[ $# -lt 2 || -z "${2:-}" || "${2:0:1}" == "-" ]]; then
-    echo "error: option $opt requires a value" >&2
-    exit 1
-  fi
 }
 
 namespace=""
@@ -47,13 +39,7 @@ readonly DEPLOY="${2:?Usage: kverify [-n ns] [-r host] [-t timeout] <image:tag> 
 [[ -z "$host" ]] && host=$(resolve_host)
 require_host "$host" || exit 1
 
-if [[ -z "$namespace" ]]; then
-  namespace="${K8S_NS:-}"
-  if [[ -z "$namespace" ]]; then
-    echo "error: no namespace specified. Use -n <ns> or set K8S_NS." >&2
-    exit 1
-  fi
-fi
+require_namespace namespace
 
 readonly NAMESPACE="$namespace"
 readonly REMOTE_HOST="$host"

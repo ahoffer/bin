@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Shared host access and container runtime functions
+# Shared helpers for ~/bin scripts
 #
-# Source this file: source cx.hostlib
+# Source this file: source lib.sh
 #
 # Configurable via environment variables (set in .bashrc or before invocation):
 #   CONTAINERD_SOCK   Containerd socket path (default: /run/k3s/containerd/containerd.sock)
@@ -9,6 +9,30 @@
 
 : "${CONTAINERD_SOCK:=/run/k3s/containerd/containerd.sock}"
 : "${RKE2_BIN:=/var/lib/rancher/rke2/bin}"
+
+# Validate that a CLI option has a non-empty, non-flag value.
+# Usage: require_optarg <option> [value]
+require_optarg() {
+  local opt="$1"
+  if [[ $# -lt 2 || -z "${2:-}" || "${2:0:1}" == "-" ]]; then
+    echo "error: option $opt requires a value" >&2
+    exit 1
+  fi
+}
+
+# Resolve namespace from argument, K8S_NS env var, or fail.
+# Takes the name of the caller's namespace variable by reference.
+# Usage: require_namespace <varname>
+require_namespace() {
+  local -n _ns_ref=$1
+  if [[ -z "$_ns_ref" ]]; then
+    _ns_ref="${K8S_NS:-}"
+    if [[ -z "$_ns_ref" ]]; then
+      echo "error: no namespace specified. Use -n <ns> or set K8S_NS." >&2
+      exit 1
+    fi
+  fi
+}
 
 # Resolve the target k8s host. Flags take priority, then K8S_HOST env var,
 # then kubectl context name. Returns empty string if nothing is set.

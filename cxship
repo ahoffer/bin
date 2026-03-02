@@ -39,14 +39,6 @@ EOF
   exit 0
 }
 
-require_optarg() {
-  local opt="$1"
-  if [[ $# -lt 2 || -z "${2:-}" || "${2:0:1}" == "-" ]]; then
-    err_msg "Option $opt requires a value"
-    exit 1
-  fi
-}
-
 remote_host=""
 namespace=""
 declare -a components=()
@@ -61,22 +53,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -z "$remote_host" ]] && remote_host=$(resolve_default_host)
+[[ -z "$remote_host" ]] && remote_host=$(resolve_host)
 
 require_project_root
 acquire_lock "builddeploy"
 
 [[ -z "$namespace" ]] && namespace=$("$SCRIPT_DIR/cxconfig" namespace)
 
-mapfile -t all_components < <("$SCRIPT_DIR/cxconfig" components)
-
-if [[ ${#components[@]} -eq 0 ]]; then
-  err_msg "Specify components or use 'all'"
-  echo "Available: ${all_components[*]}" >&2
-  exit 1
-fi
-
-expand_components components all_components
+load_and_expand_components components
 
 project_root=$("$SCRIPT_DIR/cxconfig" root)
 
@@ -93,12 +77,4 @@ _deploy_one() {
 }
 run_parallel _deploy_one components
 
-echo
-if [[ ${#parallel_failures[@]} -eq 0 ]]; then
-  echo "Shipped $(format_components "${components[@]}") - $(timer_elapsed)"
-  run_completion_hook cxship success
-else
-  echo "Failed $(format_components "${parallel_failures[@]}") - $(timer_elapsed)"
-  run_completion_hook cxship failure
-  exit 1
-fi
+report_parallel_result "Shipped" components cxship

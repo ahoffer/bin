@@ -34,3 +34,22 @@ After cloning...
 - Source ~/.bashrc
 - Set up secret env var in ~/.bashrc
 
+## MCP server
+
+`mcpserve` starts the Desktop Commander MCP server via `npx @wonderwhy-er/desktop-commander@latest`
+and writes stderr logs to `~/log/mcpserve.log`.
+
+To expose it from another host over SSH, add an SSH alias such as:
+
+    Host clown-mcp
+      HostName clown
+      User aaron
+
+Then point Codex at it with an MCP entry like:
+
+    [mcp_servers.clown]
+    command = "ssh"
+    args = ["clown-mcp", "mcpserve"]
+
+This repo only provides the `mcpserve` wrapper; the Desktop Commander package is downloaded by `npx`
+when the command runs.

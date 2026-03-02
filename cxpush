@@ -37,14 +37,6 @@ EOF
   exit 0
 }
 
-require_optarg() {
-  local opt="$1"
-  if [[ $# -lt 2 || -z "${2:-}" || "${2:0:1}" == "-" ]]; then
-    err_msg "Option $opt requires a value"
-    exit 1
-  fi
-}
-
 remote_host=""
 declare -a components=()
 
@@ -57,30 +49,16 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -z "$remote_host" ]] && remote_host=$(resolve_default_host)
+[[ -z "$remote_host" ]] && remote_host=$(resolve_host)
 
 require_project_root
 acquire_lock "push"
 
-mapfile -t all_components < <("$SCRIPT_DIR/cxconfig" components)
-
-if [[ ${#components[@]} -eq 0 ]]; then
-  err_msg "Specify components or use 'all'"
-  echo "Available: ${all_components[*]}" >&2
-  exit 1
-fi
-
-expand_components components all_components
+load_and_expand_components components
 
 _push_one() {
   push_component "$1" "$remote_host"
 }
 run_parallel _push_one components
 
-echo
-if [[ ${#parallel_failures[@]} -eq 0 ]]; then
-  echo "Pushed $(format_components "${components[@]}") - $(timer_elapsed)"
-else
-  echo "Failed $(format_components "${parallel_failures[@]}") - $(timer_elapsed)"
-  exit 1
-fi
+report_parallel_result "Pushed" components

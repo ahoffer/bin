@@ -5,7 +5,7 @@
 
 CXLIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly CXLIB_DIR
-source "$CXLIB_DIR/cx.hostlib"
+source "$CXLIB_DIR/lib.sh"
 
 # ─────────────────────────────────────────────────────────────
 # Terminal detection
@@ -164,15 +164,6 @@ require_project_root() {
 }
 
 # ─────────────────────────────────────────────────────────────
-# Host resolution (delegates to cx.hostlib)
-# ─────────────────────────────────────────────────────────────
-
-# Return the default k8s host name from cx.hostlib
-resolve_default_host() {
-  resolve_host
-}
-
-# ─────────────────────────────────────────────────────────────
 # Locking (prevent parallel builds)
 # ─────────────────────────────────────────────────────────────
 
@@ -306,6 +297,38 @@ run_parallel() {
   for item in "${itemsToProcess[@]}"; do
     wait "${pids[$item]}" || parallel_failures+=("$item")
   done
+}
+
+# Load all known components, validate user selection is non-empty,
+# and expand "all" keyword. Takes the caller's components array by
+# reference.
+# Usage: load_and_expand_components <components_array_name>
+load_and_expand_components() {
+  local -n _comps=$1
+  mapfile -t _all_components < <("$CXLIB_DIR/cxconfig" components)
+  if [[ ${#_comps[@]} -eq 0 ]]; then
+    err_msg "Specify components or use 'all'"
+    echo "Available: ${_all_components[*]}" >&2
+    exit 1
+  fi
+  expand_components "$1" _all_components
+}
+
+# Report parallel execution results. Exits with 1 on failure.
+# Usage: report_parallel_result <verb> <components_array_name> [hook_name]
+report_parallel_result() {
+  local verb="$1"
+  local -n _rp_comps=$2
+  local hook_name="${3:-}"
+  echo
+  if [[ ${#parallel_failures[@]} -eq 0 ]]; then
+    echo "$verb $(format_components "${_rp_comps[@]}") - $(timer_elapsed)"
+    [[ -n "$hook_name" ]] && run_completion_hook "$hook_name" success
+  else
+    echo "Failed $(format_components "${parallel_failures[@]}") - $(timer_elapsed)"
+    [[ -n "$hook_name" ]] && run_completion_hook "$hook_name" failure
+    exit 1
+  fi
 }
 
 # ─────────────────────────────────────────────────────────────
