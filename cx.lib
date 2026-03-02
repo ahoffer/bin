@@ -99,12 +99,41 @@ timer_elapsed() {
 }
 
 # ─────────────────────────────────────────────────────────────
+# Architecture detection
+# ─────────────────────────────────────────────────────────────
+
+# Return the Docker platform string for the current host.
+# Maps uname output to the linux/ARCH format that Docker and
+# buildx expect for --platform flags.
+host_arch() {
+  case "$(uname -m)" in
+    x86_64|amd64)   echo "linux/amd64" ;;
+    arm64|aarch64)  echo "linux/arm64" ;;
+    *)              echo "linux/$(uname -m)" ;;
+  esac
+}
+
+# Return 0 (true) when the target platform differs from the host
+# and a buildx cross-compile pass is needed. Returns 1 when the
+# target matches the host or is empty.
+needs_cross_build() {
+  local target="${1:-}"
+  [[ -n "$target" && "$target" != "$(host_arch)" ]]
+}
+
+# ─────────────────────────────────────────────────────────────
 # Project detection
 # ─────────────────────────────────────────────────────────────
 
-# Find project root by walking up looking for pom.xml (like git does)
-# Returns the topmost directory containing pom.xml, or empty string if none found
+# Find project root. Prefers git rev-parse --show-toplevel which handles
+# worktrees correctly. Falls back to walking up for non-git directories.
 find_project_root() {
+  local git_root
+  git_root=$(git rev-parse --show-toplevel 2>/dev/null) || true
+  if [[ -n "$git_root" && -f "$git_root/pom.xml" ]]; then
+    echo "$git_root"
+    return
+  fi
   local dir="$PWD"
   local last_with_pom=""
   while [[ "$dir" != "/" ]]; do
@@ -143,11 +172,19 @@ resolve_default_host() {
 # Acquire exclusive lock for the current project
 # Usage: acquire_lock [lock_name]
 # Default lock_name is "build"
-# Dies if another process holds the lock
+# Dies if another process holds the lock.
+# In a git worktree, all worktrees share the same lock because they
+# share Maven artifacts and Docker image tags.
 acquire_lock() {
   local lock_name="${1:-build}"
+  local lock_key="$PROJECT_ROOT"
+  local common_dir
+  common_dir=$(git -C "$PROJECT_ROOT" rev-parse --git-common-dir 2>/dev/null) || true
+  if [[ -n "$common_dir" ]]; then
+    lock_key=$(cd "$PROJECT_ROOT" && cd "$common_dir" && pwd)
+  fi
   local project_hash
-  project_hash=$(echo "$PROJECT_ROOT" | md5sum | cut -c1-8)
+  project_hash=$(echo "$lock_key" | md5sum | cut -c1-8)
   local lock_file="/tmp/${lock_name}-${project_hash}.lock"
 
   exec 9>"$lock_file"
@@ -268,21 +305,26 @@ run_parallel() {
 # Build helpers
 # ─────────────────────────────────────────────────────────────
 
-# Build components with a single maven invocation from the project root.
-# Maven components get -pl docker/X,docker/Y -am. Non-maven components
+# Build components with a single Maven invocation from the project root.
+# Maven components get -pl docker/X,docker/Y -am. Non-Maven components
 # (Dockerfile only) get docker build directly.
+# When CONTAINER_ARCH is set and differs from the host architecture,
+# a second buildx pass cross-compiles the images after the native
+# Maven build assembles the Docker context.
 # Usage: build_components <project_root> <component...>
 build_components() {
   local project_root="$1"
   shift
   local -a maven_pl=()
   local -a maven_display=()
+  local -a maven_comps=()
   local -a docker_only=()
 
   for comp in "$@"; do
     if [[ -f "$project_root/docker/$comp/pom.xml" ]]; then
       maven_pl+=("docker/$comp")
       maven_display+=("docker/$(display_component_name "$comp")")
+      maven_comps+=("$comp")
     elif [[ -f "$project_root/docker/$comp/Dockerfile" ]]; then
       docker_only+=("$comp")
     else
@@ -291,25 +333,91 @@ build_components() {
     fi
   done
 
+  # Run a single Maven invocation for all Maven-based docker modules.
+  # This builds Java/JS artifacts, assembles the Docker context via the
+  # fabric8 assembly descriptor, and produces a native-arch image.
   if [[ ${#maven_pl[@]} -gt 0 ]]; then
-    local pl_csv
-    local display_csv
+    local pl_csv display_csv log_file
     pl_csv=$(IFS=,; echo "${maven_pl[*]}")
     display_csv=$(IFS=,; echo "${maven_display[*]}")
-    local log_file
     log_file=$(logfile cxbuild "maven")
     run_logged "maven $display_csv" "$log_file" \
-      bash -c 'cd "$1" && mvn install -pl "$2" -am -DskipTests -T6' _ "$project_root" "$pl_csv" \
+      bash -c 'cd "$1" && shift && mvn install -pl "$1" -am -DskipTests -T6' \
+      _ "$project_root" "$pl_csv" \
       || return 1
   fi
 
+  # When cross-compiling, rebuild each Maven component using buildx
+  # against the context that the fabric8 plugin already assembled.
+  # The native image from the Maven build is discarded in favor of
+  # the cross-compiled one.
+  if needs_cross_build "${CONTAINER_ARCH:-}"; then
+    for comp in "${maven_comps[@]}"; do
+      buildx_rebuild "$project_root" "$comp" "$CONTAINER_ARCH" || return 1
+    done
+  fi
+
+  # Docker-only components have no Maven lifecycle. Build them directly.
   for comp in "${docker_only[@]}"; do
     local log_file
     log_file=$(logfile cxbuild "$comp")
-    run_logged "docker $(display_component_name "$comp")" "$log_file" \
-      docker build -t "$("$CXLIB_DIR/cxconfig" image "$comp")" "$project_root/docker/$comp" \
-      || return 1
+    if needs_cross_build "${CONTAINER_ARCH:-}"; then
+      run_logged "docker $(display_component_name "$comp")" "$log_file" \
+        docker buildx build --platform "$CONTAINER_ARCH" --load \
+        -t "$("$CXLIB_DIR/cxconfig" image "$comp")" "$project_root/docker/$comp" \
+        || return 1
+    else
+      run_logged "docker $(display_component_name "$comp")" "$log_file" \
+        docker build \
+        -t "$("$CXLIB_DIR/cxconfig" image "$comp")" "$project_root/docker/$comp" \
+        || return 1
+    fi
   done
+}
+
+# Rebuild a component image for a non-native platform. Uses the
+# Docker build context that the fabric8 plugin assembled during
+# the Maven build at target/docker/.../build/. That context
+# contains a Dockerfile with Maven properties already resolved
+# and a maven/ directory with the files from the assembly
+# descriptor, so no Maven property interpolation is needed here.
+# Saves the resulting image as a tarball for push_component.
+# Usage: buildx_rebuild <project_root> <component> <platform>
+buildx_rebuild() {
+  local project_root="$1"
+  local component="$2"
+  local platform="$3"
+  local docker_dir image context_dir
+  docker_dir=$("$CXLIB_DIR/cxconfig" dir "$component")
+  image=$("$CXLIB_DIR/cxconfig" image "$component")
+
+  # The fabric8 plugin nests the context under a path derived from
+  # the image name and version. There is exactly one build/ directory
+  # per component, so a glob find is safe.
+  context_dir=$(find "$project_root/docker/$docker_dir/target/docker" \
+    -type d -name build 2>/dev/null | head -1)
+  if [[ -z "$context_dir" ]]; then
+    err_msg "No assembled context for $component. Run the Maven build first."
+    return 1
+  fi
+
+  local log_file
+  log_file=$(logfile cxbuild "buildx-$component")
+
+  # The --load flag imports the cross-compiled image into the local
+  # Docker daemon so that docker save and docker inspect work normally.
+  # QEMU user-mode emulation handles the foreign architecture instructions
+  # during the multi-stage build.
+  run_logged "buildx $(display_component_name "$component")" "$log_file" \
+    docker buildx build --platform "$platform" --load \
+    --build-arg "GITLAB_NPM_AUTH_TOKEN=${GITLAB_NPM_AUTH_TOKEN:-}" \
+    -t "$image" "$context_dir" \
+    || return 1
+
+  # Overwrite the native-arch tarball so that push_component picks
+  # up the cross-compiled image instead.
+  local tarball="$project_root/docker/$docker_dir/target/image.tar"
+  docker save "$image" -o "$tarball" 2>/dev/null || true
 }
 
 # Push a component image to a k8s host. Uses prebuilt tarball if available,

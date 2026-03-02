@@ -17,6 +17,11 @@ threads="-T6"
 mvn_args=()
 goals=()
 
+# Target architecture for docker image builds. Defaults to the host
+# architecture so native builds need no flag. Set to a different
+# platform like linux/amd64 to cross-compile.
+arch="${CONTAINER_ARCH:-}"
+
 require_value() {
     local opt="$1"
     local val="${2:-}"
@@ -31,9 +36,14 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -t|--test) skip_tests=false ;;
         -1|--single-thread) threads="" ;;
+        -a|--arch) require_value "$1" "${2:-}"; arch="$2"; shift ;;
         -h|--help)
             echo "Usage: qb [OPTIONS] [MAVEN-GOALS]"
-            echo "Options: -t (run tests), -1 (single-thread), -h (help)"
+            echo "Options:"
+            echo "  -t              Run tests"
+            echo "  -1              Single-thread maven build"
+            echo "  -a <platform>   Target architecture (default: auto-detect host)"
+            echo "  -h              Show this help"
             exit 0
             ;;
         -T)
@@ -58,7 +68,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ ${#goals[@]} -eq 0 ]] && goals=(install)
-$skip_tests && mvn_args+=("-DskipTests")
+if $skip_tests; then
+    mvn_args+=("-DskipTests" "-Djacoco.skip=true")
+fi
 
 git_root=$(git rev-parse --show-toplevel 2>/dev/null) || true
 
@@ -147,6 +159,19 @@ fi
 goals=(com.spotify.fmt:fmt-maven-plugin:format license:format "${goals[@]}")
 
 mvn $threads "${mvn_args[@]}" "${goals[@]}" || exit $?
+
+# When the target architecture differs from the host, rebuild the
+# Docker image using buildx. Only applies when qb is run from inside
+# a docker module directory. The Maven build above assembled the
+# context, so buildx_rebuild reuses it.
+if is_projects_docker_context; then
+    source "$HOME/bin/cx.lib"
+    if needs_cross_build "$arch"; then
+        require_project_root
+        local_comp=$(basename "$(realpath "$PWD")")
+        buildx_rebuild "$PROJECT_ROOT" "$local_comp" "$arch" || exit $?
+    fi
+fi
 
 if [[ "${build_docs_separately:-}" == true ]]; then
     ( cd "$git_root/docs" && "$HOME/bin/cxappdev/docbuild" )
