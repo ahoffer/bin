@@ -20,12 +20,6 @@ readonly SCRIPT_DIR
 source "$SCRIPT_DIR/cx.lib"
 timer_start
 
-# Default to amd64 so images work on bigfish and other amd64 hosts.
-# On an amd64 host this is a no-op since needs_cross_build sees a
-# matching arch. Override with CONTAINER_ARCH=linux/arm64 if needed.
-: "${CONTAINER_ARCH:=linux/amd64}"
-export CONTAINER_ARCH
-
 usage() {
   cat <<'EOF'
 Build component Docker images

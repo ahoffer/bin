@@ -1,0 +1,13 @@
+#!/bin/bash
+# Smart paste for Kitty. Transfers clipboard image to bigfish
+# and sends the remote file path to the terminal. Falls back
+# to normal text paste when there is no image.
+
+if /opt/homebrew/bin/pngpaste - > /dev/null 2>&1; then
+    remotePath=$(/Users/aaron/bin/sendfile 2>/dev/null)
+    if [ -n "$remotePath" ]; then
+        kitty @ send-text -- "$remotePath "
+    fi
+else
+    kitty @ action paste_from_clipboard
+fi

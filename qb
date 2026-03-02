@@ -17,9 +17,9 @@ threads="-T6"
 mvn_args=()
 goals=()
 
-# Target architecture for docker image builds. Defaults to the host
-# architecture so native builds need no flag. Set to a different
-# platform like linux/amd64 to cross-compile.
+# Target architecture for docker image builds. Empty means native,
+# no cross-compilation. Set via -a flag or CONTAINER_ARCH env var
+# to cross-compile via buildx after the Maven build.
 arch="${CONTAINER_ARCH:-}"
 
 require_value() {
@@ -160,16 +160,24 @@ goals=(com.spotify.fmt:fmt-maven-plugin:format license:format "${goals[@]}")
 
 mvn $threads "${mvn_args[@]}" "${goals[@]}" || exit $?
 
-# When the target architecture differs from the host, rebuild the
-# Docker image using buildx. Only applies when qb is run from inside
-# a docker module directory. The Maven build above assembled the
-# context, so buildx_rebuild reuses it.
-if is_projects_docker_context; then
+# When the target architecture differs from the host, rebuild Docker
+# images using buildx. In a docker module directory, rebuilds just
+# that component. At the project root, finds all docker modules that
+# Maven built and rebuilds each.
+if [[ -n "$arch" ]]; then
     source "$HOME/bin/cx.lib"
     if needs_cross_build "$arch"; then
         require_project_root
-        local_comp=$(basename "$(realpath "$PWD")")
-        buildx_rebuild "$PROJECT_ROOT" "$local_comp" "$arch" || exit $?
+        if is_projects_docker_context; then
+            local_comp=$(basename "$(realpath "$PWD")")
+            buildx_rebuild "$PROJECT_ROOT" "$local_comp" "$arch" || exit $?
+        elif is_project_root; then
+            for assembled in "$PROJECT_ROOT"/docker/*/target/docker; do
+                [[ -d "$assembled" ]] || continue
+                local_comp=$(basename "$(dirname "$(dirname "$assembled")")")
+                buildx_rebuild "$PROJECT_ROOT" "$local_comp" "$arch" || exit $?
+            done
+        fi
     fi
 fi
 

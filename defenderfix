@@ -1,0 +1,151 @@
+#!/bin/bash
+# Defender status checker and exclusion manager. Uses the macOS askpass
+# dialog so it works from any context including Claude Code.
+
+set -euo pipefail
+
+export SUDO_ASKPASS="$HOME/bin/sudoaskpass"
+
+usage() {
+    echo "Usage: defenderfix {status|exclusions|adddev|addpath <path>|addproc <name>|devprocs}" >&2
+    exit 1
+}
+
+[ $# -eq 0 ] && usage
+
+# Common dev directories to exclude from Defender scanning.
+DEV_FOLDERS=(
+    "$HOME/src"
+    "$HOME/work"
+    "$HOME/.m2"
+    "$HOME/.gradle"
+    "$HOME/.npm"
+    "$HOME/.cache"
+    "$HOME/.cargo"
+    "$HOME/.rustup"
+    "$HOME/go"
+    "/opt/homebrew"
+)
+
+# Common dev tool processes to exclude.
+DEV_PROCS=(
+    java javac node python3 mvn gradle go rustc cargo
+    docker nerdctl containerd kubectl npm git
+)
+
+# Validate that sudo credentials can be cached. On failure, abort rather
+# than retrying so the user sees a clear error.
+acquireSudo() {
+    if ! sudo -A -v 2>/dev/null; then
+        echo "Failed to acquire sudo credentials. Aborting." >&2
+        exit 1
+    fi
+}
+
+doStatus() {
+    echo "Defender processes:"
+    ps -eo pid,%cpu,rss,comm | grep -E 'wdav|netext|epsext' | grep -v grep || echo "  (none found)"
+    echo ""
+
+    if ! command -v mdatp &>/dev/null; then
+        echo "mdatp not found on PATH." >&2
+        return
+    fi
+
+    echo "Key health fields:"
+    for fieldName in real_time_protection_enabled network_protection_status passive_mode_enabled; do
+        local fieldValue
+        fieldValue=$(mdatp health --field "$fieldName" 2>/dev/null || echo "unknown")
+        echo "  $fieldName = $fieldValue"
+    done
+}
+
+doExclusions() {
+    acquireSudo
+    echo "Current exclusions:"
+    sudo -A mdatp exclusion list
+}
+
+# Add a folder exclusion, skipping if it does not exist or is already excluded.
+addFolderExclusion() {
+    local folderPath="$1"
+    if [ ! -d "$folderPath" ]; then
+        echo "  skip $folderPath (does not exist)"
+        return
+    fi
+    echo "  adding folder $folderPath"
+    sudo -A mdatp exclusion folder add --path "$folderPath" 2>&1 || true
+}
+
+# Add a file exclusion.
+addFileExclusion() {
+    local filePath="$1"
+    if [ ! -f "$filePath" ]; then
+        echo "  skip $filePath (does not exist)"
+        return
+    fi
+    echo "  adding file $filePath"
+    sudo -A mdatp exclusion file add --path "$filePath" 2>&1 || true
+}
+
+# Add a process name exclusion.
+addProcessExclusion() {
+    local processName="$1"
+    echo "  adding process $processName"
+    sudo -A mdatp exclusion process add --name "$processName" 2>&1 || true
+}
+
+doAddDev() {
+    acquireSudo
+    echo "Adding dev directory exclusions:"
+    for devFolder in "${DEV_FOLDERS[@]}"; do
+        addFolderExclusion "$devFolder"
+    done
+    echo "Done."
+}
+
+doAddPath() {
+    local targetPath="$1"
+    acquireSudo
+    if [ -d "$targetPath" ]; then
+        addFolderExclusion "$targetPath"
+    elif [ -f "$targetPath" ]; then
+        addFileExclusion "$targetPath"
+    else
+        echo "Path does not exist: $targetPath" >&2
+        exit 1
+    fi
+    echo "Done."
+}
+
+doAddProc() {
+    local processName="$1"
+    acquireSudo
+    addProcessExclusion "$processName"
+    echo "Done."
+}
+
+doDevProcs() {
+    acquireSudo
+    echo "Adding dev process exclusions:"
+    for devProc in "${DEV_PROCS[@]}"; do
+        addProcessExclusion "$devProc"
+    done
+    echo "Done."
+}
+
+case "${1:-}" in
+    status)     doStatus ;;
+    exclusions) doExclusions ;;
+    adddev)     doAddDev ;;
+    addpath)
+        [ $# -lt 2 ] && { echo "Usage: defenderfix addpath <path>" >&2; exit 1; }
+        doAddPath "$2"
+        ;;
+    addproc)
+        [ $# -lt 2 ] && { echo "Usage: defenderfix addproc <name>" >&2; exit 1; }
+        doAddProc "$2"
+        ;;
+    devprocs)   doDevProcs ;;
+    *)          usage ;;
+esac

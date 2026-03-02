@@ -1,0 +1,29 @@
+#!/bin/bash
+# Send a file to bigfish. With no args, grabs clipboard image.
+# Prints remote file path on success.
+
+set -euo pipefail
+
+remoteDest="bigfish"
+remoteDir="/tmp/fromclown"
+
+if [ $# -gt 0 ]; then
+    localFile="$1"
+    [ -f "$localFile" ] || { echo "File not found: $localFile" >&2; exit 1; }
+    cleanup=false
+else
+    stamp=$(date +'%Y%m%d%H%M%S')
+    localFile="/tmp/clipimg${stamp}.png"
+    if ! /opt/homebrew/bin/pngpaste "$localFile" 2>/dev/null; then
+        echo "No image on clipboard" >&2
+        exit 1
+    fi
+    cleanup=true
+fi
+
+baseName=$(basename "$localFile")
+ssh "$remoteDest" "mkdir -p $remoteDir"
+remoteFile="${remoteDir}/${baseName}"
+scp -q "$localFile" "${remoteDest}:${remoteFile}"
+$cleanup && rm -f "$localFile"
+echo "$remoteFile"

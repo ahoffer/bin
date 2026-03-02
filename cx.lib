@@ -121,6 +121,13 @@ needs_cross_build() {
   [[ -n "$target" && "$target" != "$(host_arch)" ]]
 }
 
+# Default to amd64 for container builds. Most deployment targets
+# are amd64 hosts, so scripts like cxbuild and cxship get
+# cross-compilation automatically on arm64 dev machines.
+# Override with CONTAINER_ARCH=linux/arm64 for native arm64 builds.
+: "${CONTAINER_ARCH:=linux/amd64}"
+export CONTAINER_ARCH
+
 # ─────────────────────────────────────────────────────────────
 # Project detection
 # ─────────────────────────────────────────────────────────────

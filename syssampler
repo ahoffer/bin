@@ -1,0 +1,371 @@
+#!/bin/bash
+# Background system sampler that captures snapshots every 10 seconds and
+# writes them to daily log files for post-hoc analysis of slowdowns.
+
+set -euo pipefail
+
+LOG_DIR="$HOME/Library/Logs/syssampler"
+PID_FILE="$HOME/.syssampler.pid"
+SAMPLE_INTERVAL=10
+RETENTION_DAYS=7
+ALERT_THRESHOLD=100
+ALERT_CONSECUTIVE_NEEDED=3
+ALERT_COOLDOWN_SECS=300
+LAUNCHD_PLIST="$HOME/Library/LaunchAgents/com.aaron.syssampler.plist"
+LAUNCHD_LABEL="com.aaron.syssampler"
+
+usage() {
+    echo "Usage: syssampler {start|stop|status|tail|report|run}" >&2
+    exit 1
+}
+
+[ $# -eq 0 ] && usage
+
+todaysLog() {
+    echo "$LOG_DIR/syssampler-$(date +%Y%m%d).log"
+}
+
+# Remove log files older than the retention period.
+purgeOldLogs() {
+    find "$LOG_DIR" -name 'syssampler-*.log' -mtime +"$RETENTION_DAYS" -delete 2>/dev/null || true
+}
+
+# Check whether the PID file points to a live process and clean up stale files.
+isRunning() {
+    if [ -f "$PID_FILE" ]; then
+        samplerPid=$(cat "$PID_FILE")
+        if kill -0 "$samplerPid" 2>/dev/null; then
+            return 0
+        fi
+        rm -f "$PID_FILE"
+    fi
+    return 1
+}
+
+# Capture a single snapshot and append it to the current day's log.
+# Runs with set +e so transient failures do not kill the background sampler.
+captureSample() {
+    local logFile
+    logFile=$(todaysLog)
+
+    local timestamp
+    timestamp=$(date +%Y-%m-%dT%H:%M:%S)
+
+    # Load averages from uptime, for example "load averages: 2.84 2.83 2.88"
+    local uptimeOutput
+    uptimeOutput=$(uptime)
+    local load1 load5 load15
+    load1=$(echo "$uptimeOutput" | awk '{for(i=1;i<=NF;i++) if($i~/averages?:/) {print $(i+1); exit}}' | tr -d ',')
+    load5=$(echo "$uptimeOutput" | awk '{for(i=1;i<=NF;i++) if($i~/averages?:/) {print $(i+2); exit}}' | tr -d ',')
+    load15=$(echo "$uptimeOutput" | awk '{for(i=1;i<=NF;i++) if($i~/averages?:/) {print $(i+3); exit}}' | tr -d ',')
+
+    # Swap usage from sysctl
+    local swapLine swapUsedMb
+    swapLine=$(sysctl -n vm.swapusage 2>/dev/null || echo "total = 0.00M  used = 0.00M  free = 0.00M")
+    swapUsedMb=$(echo "$swapLine" | awk '{for(i=1;i<=NF;i++) if($i=="used") {gsub(/M/,"",$(i+2)); print $(i+2); exit}}')
+
+    echo "SAMPLE ts=$timestamp load1=$load1 load5=$load5 load15=$load15 swap_used_mb=${swapUsedMb:-0}" >> "$logFile"
+
+    # Top 5 processes by CPU. Capture into a variable to avoid SIGPIPE from head.
+    local topProcesses
+    topProcesses=$(ps -eo pid,%cpu,rss,comm -r 2>/dev/null | awk 'NR>1 && NR<=6' || true)
+    local topRank=0
+    while IFS= read -r procLine; do
+        [ -z "$procLine" ] && continue
+        topRank=$((topRank + 1))
+        local procPid procCpu procRss procCmd
+        procPid=$(echo "$procLine" | awk '{print $1}')
+        procCpu=$(echo "$procLine" | awk '{print $2}')
+        procRss=$(echo "$procLine" | awk '{print $3}')
+        # Command may contain spaces, grab everything from field 4 onward and
+        # then extract just the last path component for a short label.
+        procCmd=$(echo "$procLine" | awk '{for(i=4;i<=NF;i++) printf "%s"(i<NF?" ":""),$i}')
+        local shortCmd
+        shortCmd=$(basename "$procCmd" 2>/dev/null || echo "$procCmd")
+        echo "TOP${topRank} pid=$procPid cpu=$procCpu rss=$procRss cmd=$shortCmd" >> "$logFile"
+    done <<< "$topProcesses"
+
+    # Defender-specific CPU totals. Match on the full command line since paths
+    # may contain spaces. Use the last path component for identification.
+    local nextextCpu=0 wdavdaemonCpu=0 enterpriseCpu=0 epsextCpu=0 unprivilegedCpu=0
+    local defenderProcesses
+    defenderProcesses=$(ps -eo %cpu,comm 2>/dev/null | grep -E 'wdav|netext|epsext' || true)
+    while IFS= read -r defenderLine; do
+        [ -z "$defenderLine" ] && continue
+        local defCpu defFullCmd defBaseName
+        defCpu=$(echo "$defenderLine" | awk '{print $1}')
+        # Everything from field 2 onward is the full command path.
+        defFullCmd=$(echo "$defenderLine" | awk '{for(i=2;i<=NF;i++) printf "%s"(i<NF?" ":""),$i}')
+        defBaseName=$(basename "$defFullCmd" 2>/dev/null || echo "$defFullCmd")
+        case "$defBaseName" in
+            netext)                    nextextCpu=$(awk "BEGIN{print $nextextCpu + $defCpu}") ;;
+            wdavdaemon)                wdavdaemonCpu=$(awk "BEGIN{print $wdavdaemonCpu + $defCpu}") ;;
+            wdavdaemon_enterprise)     enterpriseCpu=$(awk "BEGIN{print $enterpriseCpu + $defCpu}") ;;
+            epsext)                    epsextCpu=$(awk "BEGIN{print $epsextCpu + $defCpu}") ;;
+            wdavdaemon_unprivileged)   unprivilegedCpu=$(awk "BEGIN{print $unprivilegedCpu + $defCpu}") ;;
+        esac
+    done <<< "$defenderProcesses"
+
+    local totalDefenderCpu
+    totalDefenderCpu=$(awk "BEGIN{print $nextextCpu + $wdavdaemonCpu + $enterpriseCpu + $epsextCpu + $unprivilegedCpu}")
+    echo "DEFENDER netext=$nextextCpu wdavdaemon=$wdavdaemonCpu enterprise=$enterpriseCpu epsext=$epsextCpu unprivileged=$unprivilegedCpu total=$totalDefenderCpu" >> "$logFile"
+
+    # Check whether Defender CPU warrants a notification
+    local consecutiveFile="$LOG_DIR/.alert_consecutive"
+    local lastAlertFile="$LOG_DIR/.alert_last"
+    local aboveAlertThreshold
+    aboveAlertThreshold=$(awk "BEGIN{print ($totalDefenderCpu > $ALERT_THRESHOLD) ? 1 : 0}")
+    if [ "$aboveAlertThreshold" -eq 1 ]; then
+        local consecutiveCount=0
+        [ -f "$consecutiveFile" ] && consecutiveCount=$(cat "$consecutiveFile")
+        consecutiveCount=$((consecutiveCount + 1))
+        echo "$consecutiveCount" > "$consecutiveFile"
+
+        if [ "$consecutiveCount" -ge "$ALERT_CONSECUTIVE_NEEDED" ]; then
+            local now lastAlertTime=0
+            now=$(date +%s)
+            [ -f "$lastAlertFile" ] && lastAlertTime=$(cat "$lastAlertFile")
+            local elapsed=$((now - lastAlertTime))
+            if [ "$elapsed" -ge "$ALERT_COOLDOWN_SECS" ]; then
+                # Find top Defender process for the notification body
+                local topDefender
+                topDefender=$(printf '%s %s\n%s %s\n%s %s\n%s %s\n%s %s' \
+                    "$nextextCpu" "netext" \
+                    "$wdavdaemonCpu" "wdavdaemon" \
+                    "$enterpriseCpu" "enterprise" \
+                    "$epsextCpu" "epsext" \
+                    "$unprivilegedCpu" "unprivileged" \
+                    | sort -rn | head -1 | awk '{print $2 " (" $1 "%)"}')
+                osascript -e "display notification \"Defender total ${totalDefenderCpu}% CPU. Top: ${topDefender}\" with title \"syssampler\" subtitle \"Sustained high Defender CPU\"" 2>/dev/null || true
+                echo "$now" > "$lastAlertFile"
+            fi
+        fi
+    else
+        echo "0" > "$consecutiveFile"
+    fi
+
+    # Disk I/O from iostat, one-sample snapshot
+    local iostatOutput
+    iostatOutput=$(iostat -c 1 2>/dev/null || echo "")
+    if [ -n "$iostatOutput" ]; then
+        local lastIoLine
+        lastIoLine=$(echo "$iostatOutput" | awk 'NF>=3' | tail -1)
+        local tps mbPerSec ioUser ioSys ioIdle
+        tps=$(echo "$lastIoLine" | awk '{print $1}')
+        mbPerSec=$(echo "$lastIoLine" | awk '{print $2}')
+        ioUser=$(echo "$lastIoLine" | awk '{print $4}')
+        ioSys=$(echo "$lastIoLine" | awk '{print $5}')
+        ioIdle=$(echo "$lastIoLine" | awk '{print $6}')
+        echo "IOSTAT tps=${tps:-0} mbs=${mbPerSec:-0} user=${ioUser:-0} sys=${ioSys:-0} idle=${ioIdle:-0}" >> "$logFile"
+    fi
+
+    # VM statistics with page-in and page-out deltas
+    local vmstatOutput
+    vmstatOutput=$(vm_stat 2>/dev/null || echo "")
+    if [ -n "$vmstatOutput" ]; then
+        local freePages activePages pageins pageouts
+        freePages=$(echo "$vmstatOutput" | awk '/Pages free:/ {gsub(/\./,"",$3); print $3}')
+        activePages=$(echo "$vmstatOutput" | awk '/Pages active:/ {gsub(/\./,"",$3); print $3}')
+        pageins=$(echo "$vmstatOutput" | awk '/Pageins:/ {gsub(/\./,"",$2); print $2}')
+        pageouts=$(echo "$vmstatOutput" | awk '/Pageouts:/ {gsub(/\./,"",$2); print $2}')
+
+        # Compute deltas from previous sample stored in a marker file.
+        local deltaFile="$LOG_DIR/.vmstat_prev"
+        local prevPageins=0 prevPageouts=0
+        if [ -f "$deltaFile" ]; then
+            prevPageins=$(awk 'NR==1{print}' "$deltaFile")
+            prevPageouts=$(awk 'NR==2{print}' "$deltaFile")
+        fi
+        local pageinsD pageoutsD
+        pageinsD=$((${pageins:-0} - prevPageins))
+        pageoutsD=$((${pageouts:-0} - prevPageouts))
+        # Negative deltas mean a counter reset or first run, clamp to zero.
+        [ "$pageinsD" -lt 0 ] && pageinsD=0
+        [ "$pageoutsD" -lt 0 ] && pageoutsD=0
+        printf '%s\n%s\n' "${pageins:-0}" "${pageouts:-0}" > "$deltaFile"
+
+        echo "VMSTAT free=${freePages:-0} active=${activePages:-0} pageins_delta=$pageinsD pageouts_delta=$pageoutsD" >> "$logFile"
+    fi
+
+    echo "" >> "$logFile"
+}
+
+# The main sampling loop, run as a background process by the start subcommand.
+# Disables errexit so transient command failures do not kill the daemon.
+samplerLoop() {
+    set +e
+    mkdir -p "$LOG_DIR"
+    while true; do
+        captureSample
+        sleep "$SAMPLE_INTERVAL"
+    done
+}
+
+doStart() {
+    if isRunning; then
+        samplerPid=$(cat "$PID_FILE")
+        echo "Already running (PID $samplerPid). Run syssampler stop first." >&2
+        exit 1
+    fi
+
+    mkdir -p "$LOG_DIR"
+    purgeOldLogs
+
+    # Prefer launchd if the plist is installed.
+    if [ -f "$LAUNCHD_PLIST" ]; then
+        # Load the plist only if launchd does not already know about it.
+        # Avoiding repeated load/unload cycles prevents macOS from showing
+        # the "Background Items Added" notification every time.
+        if ! launchctl list "$LAUNCHD_LABEL" &>/dev/null; then
+            launchctl load "$LAUNCHD_PLIST" 2>/dev/null || true
+        else
+            launchctl start "$LAUNCHD_LABEL" 2>/dev/null || true
+        fi
+        sleep 1
+        if isRunning; then
+            echo "Started syssampler via launchd (PID $(cat "$PID_FILE")). Logging to $(todaysLog)"
+        else
+            echo "Launchd job started. Check syssampler status in a moment."
+        fi
+        return
+    fi
+
+    # No plist installed, fork the sampler loop into the background.
+    samplerLoop &
+    local bgPid=$!
+    echo "$bgPid" > "$PID_FILE"
+    echo "Started syssampler (PID $bgPid). Logging to $(todaysLog)"
+}
+
+# Run the sampling loop in the foreground. Intended for use by launchd.
+doRun() {
+    mkdir -p "$LOG_DIR"
+    purgeOldLogs
+    echo $$ > "$PID_FILE"
+    trap 'rm -f "$PID_FILE" "$LOG_DIR/.vmstat_prev" "$LOG_DIR/.alert_consecutive" "$LOG_DIR/.alert_last"; exit 0' TERM INT
+    samplerLoop
+}
+
+doStop() {
+    if ! isRunning; then
+        echo "Not running."
+        return
+    fi
+    local samplerPid
+    samplerPid=$(cat "$PID_FILE")
+
+    # If launchd manages the job, stop it without unloading the plist.
+    # Unloading and reloading triggers the macOS "Background Items Added"
+    # notification, so we keep the job registered and just stop it.
+    if [ -f "$LAUNCHD_PLIST" ] && launchctl list "$LAUNCHD_LABEL" &>/dev/null; then
+        launchctl stop "$LAUNCHD_LABEL" 2>/dev/null || true
+    else
+        kill "$samplerPid" 2>/dev/null || true
+    fi
+
+    rm -f "$PID_FILE" "$LOG_DIR/.vmstat_prev" "$LOG_DIR/.alert_consecutive" "$LOG_DIR/.alert_last"
+    echo "Stopped syssampler (PID $samplerPid)."
+}
+
+doStatus() {
+    if isRunning; then
+        local samplerPid
+        samplerPid=$(cat "$PID_FILE")
+        local logFile
+        logFile=$(todaysLog)
+        local logSize="0"
+        [ -f "$logFile" ] && logSize=$(du -h "$logFile" | awk '{print $1}')
+        echo "Running (PID $samplerPid)"
+        echo "Log: $logFile ($logSize)"
+    else
+        echo "Not running."
+    fi
+}
+
+doTail() {
+    local logFile
+    logFile=$(todaysLog)
+    if [ ! -f "$logFile" ]; then
+        echo "No log file for today." >&2
+        exit 1
+    fi
+    tail -f "$logFile"
+}
+
+doReport() {
+    local logFile
+    logFile=$(todaysLog)
+    if [ ! -f "$logFile" ]; then
+        echo "No log file for today." >&2
+        exit 1
+    fi
+
+    local sampleCount
+    sampleCount=$(grep -c '^SAMPLE ' "$logFile")
+    echo "Samples: $sampleCount"
+
+    local firstTs lastTs
+    firstTs=$(grep '^SAMPLE ' "$logFile" | head -1 | sed 's/.*ts=\([^ ]*\).*/\1/')
+    lastTs=$(grep '^SAMPLE ' "$logFile" | tail -1 | sed 's/.*ts=\([^ ]*\).*/\1/')
+    echo "Period: $firstTs to $lastTs"
+    echo ""
+
+    # Peak Defender CPU moments, top 5 by total
+    echo "Peak Defender CPU (top 5):"
+    paste <(grep '^SAMPLE ' "$logFile" | sed 's/.*ts=\([^ ]*\).*/\1/') \
+          <(grep '^DEFENDER ' "$logFile" | sed 's/.*total=\([^ ]*\).*/\1/') \
+        | sort -t$'\t' -k2 -rn | head -5 | while IFS=$'\t' read -r peakTs peakCpu; do
+            echo "  $peakTs  total=$peakCpu%"
+        done
+    echo ""
+
+    # Find sustained high-CPU episodes where Defender total exceeded 100% for
+    # 3 or more consecutive samples. Uses a process substitution with a read
+    # loop so variables persist across iterations.
+    echo "Sustained high-CPU episodes (Defender total >100% for 3+ consecutive samples):"
+    local consecutiveCount=0 episodeStart="" prevTs=""
+    while IFS=$'\t' read -r sampleTs defTotal; do
+        [ -z "$defTotal" ] && continue
+        local aboveThreshold
+        aboveThreshold=$(awk "BEGIN{print ($defTotal > 100) ? 1 : 0}")
+        if [ "$aboveThreshold" -eq 1 ]; then
+            consecutiveCount=$((consecutiveCount + 1))
+            [ "$consecutiveCount" -eq 1 ] && episodeStart="$sampleTs"
+            prevTs="$sampleTs"
+        else
+            if [ "$consecutiveCount" -ge 3 ]; then
+                echo "  $episodeStart to $prevTs ($consecutiveCount samples)"
+            fi
+            consecutiveCount=0
+            episodeStart=""
+        fi
+    done < <(paste <(grep '^SAMPLE ' "$logFile" | sed 's/.*ts=\([^ ]*\).*/\1/') \
+                   <(grep '^DEFENDER ' "$logFile" | sed 's/.*total=\([^ ]*\).*/\1/'))
+    # Flush final episode if the log ends during a high-CPU run.
+    if [ "$consecutiveCount" -ge 3 ]; then
+        echo "  $episodeStart to $prevTs ($consecutiveCount samples, ongoing)"
+    fi
+
+    echo ""
+
+    # Average and max load
+    local avgLoad maxLoad
+    avgLoad=$(grep '^SAMPLE ' "$logFile" | sed 's/.*load1=\([^ ]*\).*/\1/' | awk '{s+=$1; n++} END{if(n>0) printf "%.2f",s/n; else print "0"}')
+    maxLoad=$(grep '^SAMPLE ' "$logFile" | sed 's/.*load1=\([^ ]*\).*/\1/' | sort -rn | head -1)
+    echo "Load average (1m): avg=$avgLoad max=$maxLoad"
+
+    local avgDefCpu maxDefCpu
+    avgDefCpu=$(grep '^DEFENDER ' "$logFile" | sed 's/.*total=\([^ ]*\).*/\1/' | awk '{s+=$1; n++} END{if(n>0) printf "%.1f",s/n; else print "0"}')
+    maxDefCpu=$(grep '^DEFENDER ' "$logFile" | sed 's/.*total=\([^ ]*\).*/\1/' | sort -rn | head -1)
+    echo "Defender CPU total: avg=$avgDefCpu% max=$maxDefCpu%"
+}
+
+case "${1:-}" in
+    start)  doStart ;;
+    stop)   doStop ;;
+    status) doStatus ;;
+    tail)   doTail ;;
+    report) doReport ;;
+    run)    doRun ;;
+    *)      usage ;;
+esac

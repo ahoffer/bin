@@ -2,6 +2,13 @@
 The contents of my bin dir. Useful when I crash, burn, corrupt, despoil, savage, or ravage my system. 
 
 
+## Paused git tracking
+
+.git renamed to .git.paused, so git no longer sees this as a repo.
+.git.paused added to .stignore, so Syncthing won't sync it to other hosts.
+To resume later: mv ~/bin/.git.paused ~/bin/.git
+
+
 ## Notes
 
 * fresh-start is the big script that install almost everything

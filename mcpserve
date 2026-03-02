@@ -1,0 +1,10 @@
+#!/bin/bash
+export PATH="/Users/aaron/.nvm/versions/node/v22.15.0/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH"
+
+LOGFILE="$HOME/log/mcpserve.log"
+mkdir -p "$(dirname "$LOGFILE")"
+
+exec npx -y @wonderwhy-er/desktop-commander@latest \
+  2> >(while IFS= read -r line; do
+    echo "$(date +%Y-%m-%dT%H:%M:%S) mcpserve $line"
+  done >> "$LOGFILE")
