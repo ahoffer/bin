@@ -58,7 +58,8 @@ regsync
 .aider*
 .claude/
 .stfolder/
+.git.paused/
 *.sync-conflict-*
+*.bak
 
 mac/config/karabiner/automatic_backups/
-mac/config/karabiner/*.bak
