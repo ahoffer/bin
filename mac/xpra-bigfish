@@ -4,6 +4,14 @@ set -euo pipefail
 HOST="bigfish"
 PORT="14501"
 
+# This attaches the local macOS Xpra.app client to the long-lived xpra server on bigfish.
+# Once attached, remote GUI apps appear through the normal Xpra app/window flow on macOS.
+# The remote X11 display can then be targeted directly for visible GUI automation, eg:
+#   DISPLAY=:100 npx playwright test
+# Verify the active display on bigfish with:
+#   xpra list
+#   DISPLAY=:100 xdpyinfo | head
+
 # Assumes SSH key auth is configured so `ssh ${HOST}` does not prompt.
 # Bail out quietly if host is unreachable (prevents launchd restart loops)
 if ! nc -z -w 2 "${HOST}" 22 >/dev/null 2>&1; then

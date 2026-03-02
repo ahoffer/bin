@@ -53,3 +53,27 @@ Then point Codex at it with an MCP entry like:
 
 This repo only provides the `mcpserve` wrapper; the Desktop Commander package is downloaded by `npx`
 when the command runs.
+
+## Xpra on bigfish
+
+`mac/xpra-bigfish` is the macOS-side helper that opens `Xpra.app` and attaches it to the forwarded
+xpra session exposed by `bigfish` on `tcp://127.0.0.1:14501`.
+
+On the `bigfish` side, the attached xpra X11 display is currently visible as `:100`:
+
+    xpra list
+    DISPLAY=:100 xdpyinfo | head
+
+That matters for remote GUI debugging. To run a real headed browser that is visible through the
+existing xpra app windows on macOS, point the process at that display instead of using `xvfb-run`.
+For Playwright:
+
+    cd ~/projects/cx-search/proximity/test/playwright
+    DISPLAY=:100 npx playwright test
+
+For a narrower visible smoke test:
+
+    DISPLAY=:100 npx playwright test tests/proximity.spec.ts -g "01 place ship CoT"
+
+This launches Playwright's own browser window on the live xpra display so it can be watched from
+the existing Xpra app flow on the Mac.
