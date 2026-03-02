@@ -1,0 +1,443 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+usage() {
+    cat <<'EOF'
+Usage:
+  gl doctor
+  gl api get [--raw] <gitlab-web-url> [api-sub-resource]
+  gl api mr <mr-url>
+  gl git ro clone <repo-url> [directory]
+  gl git ro fetch [args...]
+  gl git ro pull [args...]
+  gl git ro ls-remote [args...]
+  gl git ro remote update [args...]
+  gl git rw push [args...]
+EOF
+}
+
+die() {
+    printf '%s\n' "$*" >&2
+    exit 1
+}
+
+need_cmd() {
+    command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
+}
+
+require_env_nonempty() {
+    local name="$1"
+    [[ -n "${!name:-}" ]] || die "$name is not set."
+}
+
+ensure_clean_git_url() {
+    local url="$1"
+    [[ "$url" =~ ^https?://[^/]+/.+\.git/?$ ]] || die "Expected an HTTPS GitLab repository URL ending in .git."
+    [[ ! "$url" =~ ^https?://[^/]*@ ]] || die "Repository URL must not contain embedded credentials."
+}
+
+ensure_gitlab_web_url() {
+    local url="$1"
+    [[ "$url" =~ ^https?://[^/]+/.+ ]] || die "Expected a GitLab web URL."
+}
+
+build_api_url() {
+    local web_url="$1"
+    local sub_resource="${2:-}"
+    local without_protocol host path project_path resource_tail encoded_project api_url
+
+    ensure_gitlab_web_url "$web_url"
+
+    without_protocol="${web_url#https://}"
+    without_protocol="${without_protocol#http://}"
+    [[ "$without_protocol" == */* ]] || die "Expected a GitLab web URL."
+
+    host="${without_protocol%%/*}"
+    path="${without_protocol#*/}"
+
+    [[ -n "$host" && -n "$path" && "$path" != "$without_protocol" ]] || die "Expected a GitLab web URL."
+
+    if [[ "$path" == *"/-/"* ]]; then
+        project_path="${path%%/-/*}"
+        resource_tail="${path#*/-/}"
+    else
+        project_path="$path"
+        resource_tail=""
+    fi
+
+    [[ -n "$project_path" ]] || die "Could not determine the project path from the URL."
+
+    encoded_project="${project_path//\//%2F}"
+    api_url="https://${host}/api/v4/projects/${encoded_project}"
+
+    if [[ -n "$resource_tail" ]]; then
+        api_url="${api_url}/${resource_tail}"
+    fi
+
+    if [[ -n "$sub_resource" ]]; then
+        api_url="${api_url}/${sub_resource}"
+    fi
+
+    printf '%s\n' "$api_url"
+}
+
+api_request_raw() {
+    local web_url="$1"
+    local sub_resource="${2:-}"
+    local api_url
+
+    need_cmd curl
+    require_env_nonempty GITLAB_BOT_READ_TOKEN
+    api_url="$(build_api_url "$web_url" "$sub_resource")"
+    curl -fsS -k --header "PRIVATE-TOKEN: $GITLAB_BOT_READ_TOKEN" "$api_url"
+}
+
+api_request_pretty() {
+    local web_url="$1"
+    local sub_resource="${2:-}"
+
+    need_cmd jq
+    api_request_raw "$web_url" "$sub_resource" | jq .
+}
+
+api_request_paginated_array() {
+    need_cmd jq
+
+    local web_url="$1"
+    local sub_resource_base="$2"
+    local page=1
+    local merged='[]'
+    local page_json page_count page_resource
+
+    while :; do
+        page_resource="${sub_resource_base}?page=${page}&per_page=100"
+        page_json="$(api_request_raw "$web_url" "$page_resource")"
+        page_count="$(printf '%s' "$page_json" | jq 'if type == "array" then length else 0 end')"
+
+        if [[ "$page_count" == "0" ]]; then
+            break
+        fi
+
+        merged="$(jq -sc '.[0] + .[1]' <(printf '%s' "$merged") <(printf '%s' "$page_json"))"
+        page=$((page + 1))
+    done
+
+    printf '%s\n' "$merged"
+}
+
+extract_api_error() {
+    jq -er '
+        if type == "object" and (.error or .message) then
+            .error // .message |
+            if type == "array" then join(", ") else tostring end
+        else
+            empty
+        end
+    ' 2>/dev/null || true
+}
+
+run_git_with_token() {
+    local token_var="$1"
+    shift
+
+    local askpass_script status
+    askpass_script="$(mktemp)"
+
+    cat >"$askpass_script" <<'EOF'
+#!/usr/bin/env bash
+case "${1:-}" in
+    *Username*)
+        printf '%s\n' "${GL_GIT_HTTP_USERNAME:-oauth2}"
+        ;;
+    *Password*)
+        printf '%s\n' "${GL_GITLAB_TOKEN:-}"
+        ;;
+    *)
+        exit 1
+        ;;
+esac
+EOF
+    chmod 700 "$askpass_script"
+
+    set +e
+    GL_GITLAB_TOKEN="${!token_var}" \
+    GL_GIT_HTTP_USERNAME="oauth2" \
+    GIT_TERMINAL_PROMPT=0 \
+    GIT_ASKPASS="$askpass_script" \
+    git "$@"
+    status=$?
+    set -e
+
+    rm -f "$askpass_script"
+    return "$status"
+}
+
+cmd_api_get() {
+    local raw=false
+
+    if [[ "${1:-}" == "--raw" ]]; then
+        raw=true
+        shift
+    fi
+
+    [[ -n "${1:-}" ]] || die "Usage: gl api get [--raw] <gitlab-web-url> [api-sub-resource]"
+
+    local web_url="$1"
+    local sub_resource="${2:-}"
+
+    if $raw; then
+        api_request_raw "$web_url" "$sub_resource"
+    else
+        api_request_pretty "$web_url" "$sub_resource"
+    fi
+}
+
+cmd_api_mr() {
+    need_cmd jq
+
+    local mr_url="${1:-}"
+    [[ -n "$mr_url" ]] || die "Usage: gl api mr <mr-url>"
+
+    if [[ ! "$mr_url" =~ ^(https?://[^/]+)/(.+)/-/merge_requests/([0-9]+)$ ]]; then
+        die "Expected a GitLab merge request URL."
+    fi
+
+    local base_url project_path mr_iid
+    base_url="${BASH_REMATCH[1]}"
+    project_path="${BASH_REMATCH[2]}"
+    mr_iid="${BASH_REMATCH[3]}"
+
+    local mr_json error_message
+    mr_json="$(api_request_raw "$mr_url")"
+    error_message="$(printf '%s' "$mr_json" | extract_api_error)"
+
+    [[ -z "$error_message" ]] || die "Error fetching merge request: $error_message"
+
+    local mr_title mr_description mr_state mr_author mr_source_branch mr_target_branch mr_web_url
+    mr_title="$(printf '%s' "$mr_json" | jq -r '.title // "No title"')"
+    mr_description="$(printf '%s' "$mr_json" | jq -r '.description // "No description"')"
+    mr_state="$(printf '%s' "$mr_json" | jq -r '.state // "unknown"')"
+    mr_author="$(printf '%s' "$mr_json" | jq -r '.author.name // .author.username // "unknown"')"
+    mr_source_branch="$(printf '%s' "$mr_json" | jq -r '.source_branch // "unknown"')"
+    mr_target_branch="$(printf '%s' "$mr_json" | jq -r '.target_branch // "unknown"')"
+    mr_web_url="$(printf '%s' "$mr_json" | jq -r '.web_url // ""')"
+
+    printf '========================================\n'
+    printf 'Merge Request: %s!%s\n' "$project_path" "$mr_iid"
+    printf '========================================\n\n'
+    printf 'TITLE: %s\n' "$mr_title"
+    printf 'STATE: %s\n' "$mr_state"
+    printf 'AUTHOR: %s\n' "$mr_author"
+    printf 'BRANCHES: %s -> %s\n' "$mr_source_branch" "$mr_target_branch"
+    printf 'URL: %s\n\n' "$mr_web_url"
+    printf 'DESCRIPTION:\n'
+    printf '%s\n' '----------------------------------------'
+    printf '%s\n' "$mr_description"
+    printf '%s\n\n' '----------------------------------------'
+    printf 'LINKED ISSUES:\n'
+    printf '%s\n' '----------------------------------------'
+
+    local linked_issues=""
+    local issue_numbers issue_urls
+    issue_numbers="$(printf '%s\n' "$mr_description" | grep -oEi '(closes?|fixes?|resolves?|related to)\s*#([0-9]+)' | grep -oE '[0-9]+' || true)"
+    issue_urls="$(printf '%s\n' "$mr_description" | grep -oE "${base_url}/[^[:space:]]*/issues/[0-9]+" || true)"
+
+    local issue_num constructed_issue_url issue_json issue_title issue_state issue_web_url issue_url issue_project_path normalized_issue_url
+
+    if [[ -n "$issue_numbers" ]]; then
+        for issue_num in $issue_numbers; do
+            constructed_issue_url="${base_url}/${project_path}/-/issues/${issue_num}"
+            issue_json="$(api_request_raw "$constructed_issue_url" 2>/dev/null || printf '{}')"
+            issue_title="$(printf '%s' "$issue_json" | jq -r '.title // empty')"
+            if [[ -n "$issue_title" ]]; then
+                issue_state="$(printf '%s' "$issue_json" | jq -r '.state // "unknown"')"
+                issue_web_url="$(printf '%s' "$issue_json" | jq -r '.web_url // ""')"
+                printf '  #%s: %s [%s]\n' "$issue_num" "$issue_title" "$issue_state"
+                printf '    %s\n' "$issue_web_url"
+                linked_issues="found"
+            fi
+        done
+    fi
+
+    if [[ -n "$issue_urls" ]]; then
+        for issue_url in $issue_urls; do
+            if [[ "$issue_url" =~ ${base_url}/(.+)/issues/([0-9]+)$ ]]; then
+                issue_project_path="${BASH_REMATCH[1]}"
+                issue_num="${BASH_REMATCH[2]}"
+                issue_project_path="${issue_project_path%/-}"
+                normalized_issue_url="${base_url}/${issue_project_path}/-/issues/${issue_num}"
+                issue_json="$(api_request_raw "$normalized_issue_url" 2>/dev/null || printf '{}')"
+                issue_title="$(printf '%s' "$issue_json" | jq -r '.title // empty')"
+                if [[ -n "$issue_title" ]]; then
+                    issue_state="$(printf '%s' "$issue_json" | jq -r '.state // "unknown"')"
+                    printf '  %s#%s: %s [%s]\n' "$issue_project_path" "$issue_num" "$issue_title" "$issue_state"
+                    printf '    %s\n' "$issue_url"
+                    linked_issues="found"
+                fi
+            fi
+        done
+    fi
+
+    if [[ -z "$linked_issues" ]]; then
+        printf '  No linked issues found in description.\n'
+    fi
+
+    printf '\nCOMMENTS:\n'
+    printf '%s\n' '----------------------------------------'
+
+    local discussions_json comment_output
+    discussions_json="$(api_request_paginated_array "$mr_url" "discussions")"
+    comment_output="$(
+        printf '%s' "$discussions_json" | jq -r '
+            [
+                .[]
+                | (.notes // [])[]
+                | select(.system | not)
+                | {
+                    created_at: (.created_at // ""),
+                    author_name: (.author.name // .author.username // "unknown"),
+                    body: (.body // "")
+                }
+            ]
+            | sort_by(.created_at)
+            | .[]
+            | "[\(.created_at | split("T")[0])] \(.author_name):\n\(.body)\n"
+        '
+    )"
+
+    if [[ -z "$comment_output" ]]; then
+        printf '  No comments on this merge request.\n'
+    else
+        printf '%s' "$comment_output"
+    fi
+
+    printf '========================================\n'
+    printf 'End of MR %s!%s\n' "$project_path" "$mr_iid"
+    printf '========================================\n'
+}
+
+cmd_git_ro() {
+    require_env_nonempty GITLAB_BOT_READ_TOKEN
+
+    local verb="${1:-}"
+    [[ -n "$verb" ]] || die "Usage: gl git ro <clone|fetch|pull|ls-remote|remote update> [args...]"
+    shift || true
+
+    case "$verb" in
+        clone)
+            local repo_url="${1:-}"
+            [[ -n "$repo_url" ]] || die "Usage: gl git ro clone <repo-url> [directory]"
+            ensure_clean_git_url "$repo_url"
+            run_git_with_token GITLAB_BOT_READ_TOKEN clone "$@"
+            ;;
+        fetch|pull|ls-remote)
+            run_git_with_token GITLAB_BOT_READ_TOKEN "$verb" "$@"
+            ;;
+        remote)
+            [[ "${1:-}" == "update" ]] || die "Only 'gl git ro remote update' is supported."
+            run_git_with_token GITLAB_BOT_READ_TOKEN "$verb" "$@"
+            ;;
+        push)
+            die "Push is not allowed in read-only mode."
+            ;;
+        *)
+            die "Unsupported read-only git command: $verb"
+            ;;
+    esac
+}
+
+cmd_git_rw() {
+    require_env_nonempty GITLAB_WRITE_TOKEN
+
+    local verb="${1:-}"
+    [[ -n "$verb" ]] || die "Usage: gl git rw push [args...]"
+    shift || true
+
+    case "$verb" in
+        push)
+            run_git_with_token GITLAB_WRITE_TOKEN push "$@"
+            ;;
+        *)
+            die "Unsupported write-capable git command: $verb"
+            ;;
+    esac
+}
+
+cmd_api() {
+    local action="${1:-}"
+    shift || true
+
+    case "$action" in
+        get)
+            cmd_api_get "$@"
+            ;;
+        mr)
+            cmd_api_mr "$@"
+            ;;
+        *)
+            die "Usage: gl api <get|mr> ..."
+            ;;
+    esac
+}
+
+cmd_doctor() {
+    local read_token_state="empty"
+    local write_token_state="empty"
+    command -v curl >/dev/null 2>&1 && printf 'curl: ok\n' || printf 'curl: missing\n'
+    command -v jq >/dev/null 2>&1 && printf 'jq: ok\n' || printf 'jq: missing\n'
+    command -v git >/dev/null 2>&1 && printf 'git: ok\n' || printf 'git: missing\n'
+
+    [[ -n "${GITLAB_BOT_READ_TOKEN:-}" ]] && read_token_state="set"
+    [[ -n "${GITLAB_WRITE_TOKEN:-}" ]] && write_token_state="set"
+
+    printf 'GITLAB_BOT_READ_TOKEN: %s\n' "$read_token_state"
+    printf 'GITLAB_WRITE_TOKEN: %s\n' "$write_token_state"
+
+    printf 'api_get: gl api get [--raw] <gitlab-web-url> [api-sub-resource]\n'
+    printf 'api_mr: gl api mr <mr-url>\n'
+    printf 'git_ro: gl git ro <clone|fetch|pull|ls-remote|remote update>\n'
+    printf 'git_rw: gl git rw push [args...]\n'
+}
+
+cmd_git() {
+    local mode="${1:-}"
+    shift || true
+
+    case "$mode" in
+        ro)
+            cmd_git_ro "$@"
+            ;;
+        rw)
+            cmd_git_rw "$@"
+            ;;
+        *)
+            die "Usage: gl git <ro|rw> ..."
+            ;;
+    esac
+}
+
+main() {
+    local command="${1:-}"
+    shift || true
+
+    case "$command" in
+        doctor)
+            cmd_doctor
+            ;;
+        api)
+            cmd_api "$@"
+            ;;
+        git)
+            cmd_git "$@"
+            ;;
+        ""|help|--help|-h)
+            usage
+            ;;
+        *)
+            die "Usage: gl <doctor|api|git> ..."
+            ;;
+    esac
+}
+
+main "$@"
