@@ -4,17 +4,24 @@ use warnings;
 
 $| = 1;
 
-# Gates timestamped Maven log lines by severity level.
-# Reads MVNFILTER_LEVEL from the environment (default 3). Invalid values fall back to 3.
+# Controls how much build output reaches the terminal by filtering lines
+# whose level falls below the requested threshold. A lower level reduces
+# noise during normal iteration; a higher level surfaces diagnostic detail
+# when investigating failures. Reads MVNFILTER_LEVEL from the environment
+# so all pipeline stages share one setting without requiring explicit passing.
+# Default is 3 (INFO); invalid values fall back to 3.
 # Input format after mvntrim: TIMESTAMP LEVEL message.
 #
+# Severity order, most to least critical: ERROR, WARNING, INFO, DEBUG, TRACE, RAW.
+# Each level shows all lines at or above its threshold in this hierarchy.
+#
 # Level gate:
-#   0  silent
-#   1  ERROR only (maximally clean)
-#   2  WARNING and ERROR (maximally clean)
+#   0  silent (suppress everything; useful when only exit code matters)
+#   1  ERROR only (maximally clean; shows only hard build failures)
+#   2  WARNING and ERROR (shows warnings that may require action)
 #   3  INFO, WARNING, ERROR with plugin goal banners suppressed (default)
-#   4  all levels including DEBUG; plugin goal banners pass through
-#   5  raw bypass, handled upstream in qb; mvnlevel passes all through
+#   4  DEBUG and TRACE included; surfaces demoted-noise lines for diagnosis
+#   5  raw bypass, handled upstream in qb before the pipeline; passes all through
 #   9  backward-compat alias for 5
 
 my $raw_level = $ENV{MVNFILTER_LEVEL} // '3';
@@ -28,12 +35,15 @@ while (my $line = <STDIN>) {
     } elsif ($level >= 4) {
         print $line;
     } elsif ($level == 3) {
+        next if $line =~ /^\S+ (?:DEBUG|TRACE) /;
         next if $line =~ /^\S+ INFO ---/;
         print $line;
     } elsif ($level == 2) {
+        next if $line =~ /^\S+ (?:DEBUG|TRACE) /;
         next if $line =~ /^\S+ INFO /;
         print $line;
     } elsif ($level == 1) {
+        next if $line =~ /^\S+ (?:DEBUG|TRACE) /;
         next if $line =~ /^\S+ INFO /;
         next if $line =~ /^\S+ WARNING /;
         print $line;
