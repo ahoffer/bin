@@ -1,0 +1,16 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+# Normalize mixed-case log levels on timestamped lines so downstream
+# filters and colorization see a consistent uppercase token.
+
+$| = 1;
+
+while (my $line = <STDIN>) {
+    if ($line =~ /^(\S+\s+)([A-Za-z]+)(\s+.*?)(\r?\n)?$/) {
+        my ($prefix, $level, $rest, $newline) = ($1, uc($2), $3, $4 // "");
+        $line = $prefix . $level . $rest . $newline;
+    }
+    print $line;
+}

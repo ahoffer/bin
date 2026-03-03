@@ -1,0 +1,17 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+# Downgrade noisy Docker archive extraction chatter so it does not crowd
+# the normal INFO stream.
+
+$| = 1;
+
+while (my $line = <STDIN>) {
+    if ($line =~ /^(\S+\s+)INFO(\s+DOCKER>\s+(?:inflating|extracting|creating):\s+)/) {
+        my ($prefix, $docker) = ($1, $2);
+        my $rest = substr($line, length($prefix) + 4 + length($docker));
+        $line = $prefix . 'DEBUG' . $docker . $rest;
+    }
+    print $line;
+}

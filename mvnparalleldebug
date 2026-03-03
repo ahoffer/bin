@@ -1,0 +1,16 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+# Downgrade the condensed Maven parallel thread-safety warning to DEBUG.
+
+$| = 1;
+
+while (my $line = <STDIN>) {
+    if ($line =~ /^((?:\S+\s+)?)WARNING(\s+Maven parallel execution plugin thread-safety warning(?:\s+in\s+.+?)?:\s+.+\s*)$/) {
+        my ($prefix, $msg) = ($1, $2);
+        chomp $msg;
+        $line = $prefix . 'DEBUG' . $msg . "\n";
+    }
+    print $line;
+}

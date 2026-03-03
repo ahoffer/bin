@@ -2,7 +2,9 @@
 use strict;
 use warnings;
 
-# Suppresses yarn warning lines (non-YN0000 codes) at MVNFILTER_LEVEL <= 1.
+# Suppresses the repetitive peer-dependency warnings that rarely change the
+# immediate build decision at normal verbosity, while still leaving actual
+# failures and opt-in detail available at higher verbosity levels.
 
 $| = 1;
 
@@ -12,7 +14,10 @@ my $level = do {
 };
 
 while (my $line = <STDIN>) {
-    if ($line =~ /^➤ YN(?!0000)\d+:/) {
+    if ($line =~ /^(?:\S+\s+)?YN(?:0002|0060|0086):/) {
+        next if $level <= 3;
+    }
+    if ($line =~ /^(?:\S+\s+)?YN(?!0000)\d+:/) {
         next if $level <= 1;
     }
     print $line;

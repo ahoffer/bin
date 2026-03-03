@@ -22,9 +22,14 @@ $| = 1;
 #
 # Severity-level filtering (MVNFILTER_LEVEL 0-4) is handled downstream by
 # mvnlevel. Set MVNFILTER_LEVEL=9 to bypass all suppression in this script.
+#
+# Expected-noise lines are demoted from INFO or WARNING to DEBUG or TRACE by
+# demote_expected_noise so they are hidden at the default level but visible
+# with -v4.
 
 my $lvl_env = $ENV{MVNFILTER_LEVEL} // '';
 my $raw_mode = ($lvl_env eq '5' || $lvl_env eq '9');
+my $allow_synthetic = (($ENV{MVNFILTER_THREADED} // '0') eq '0');
 
 my $in_reactor_order = 0;
 my $last_module_name;     # Most recently started module, for BUILT and Licenses.
@@ -34,6 +39,7 @@ while (my $line = <STDIN>) {
     normalize(\$line);
     if ($raw_mode) { print $line; next }
 
+    demote_expected_noise(\$line);
     next if suppress_reactor_order(\$line);
     next if handle_module_header(\$line);
     next if suppress_noise(\$line);
@@ -76,13 +82,14 @@ sub suppress_reactor_order {
 }
 
 # Normalize module headers: strip artifact coordinates and version, emit a
-# synthetic BUILT line for the previous module. In parallel builds BUILT is
-# approximate; use qb -1 for clean ordering.
+# synthetic BUILT line for the previous module. This only stays enabled when
+# qb is running single-threaded, because multi-threaded output does not give
+# enough ordering guarantees to attribute completion correctly.
 sub handle_module_header {
     my $r = shift;
     return 0 unless $$r =~ /^\[INFO\] Building (.+) \d+[\d.]*(?:-[A-Za-z0-9]+)*(?:\s+\[(\d+\/\d+)\])?\s*$/;
     my ($module, $progress) = ($1, $2);
-    print "[INFO] BUILT $last_module_name\n" if defined $last_module_name;
+    print "[INFO] BUILT $last_module_name\n" if $allow_synthetic && defined $last_module_name;
     print "[INFO] Building $module" . (defined $progress ? " [$progress]" : "") . "\n";
     $last_module_name = $module;
     $license_emitted = undef;
@@ -99,6 +106,7 @@ sub suppress_noise {
     return 1 if $line =~ /^\[INFO\] <<< /;
     return 1 if $line =~ /^\[INFO\]\s*$/;
     return 1 if $line =~ /^\[WARNING\]\s*$/;
+    return 1 if $line =~ /^\[WARNING\] \*{5,}\s*$/;
     return 1 if $line =~ /^\[WARNING\] .+failed to transfer from .+ during a previous attempt/;
     return 1 if $line =~ /^\[ERROR\]\s*$/;
     return 1 if $line =~ /^\[ERROR\] To see the full stack trace/;
@@ -117,12 +125,13 @@ sub suppress_noise {
     return 0;
 }
 
-# Collapse license-header activity to one attributed line per module.
-# Per-file chatter (Updating license headers, Checking licenses) is suppressed.
+# Collapse license-header activity to one attributed line per module when
+# ordering is trustworthy. In threaded builds, keep suppressing the per-file
+# chatter but avoid emitting a guessed module label.
 sub handle_license_activity {
     my $r = shift;
     return 0 unless $$r =~ /^\[INFO\] (?:Updating license headers|Checking licenses)/;
-    if (defined $last_module_name && !$license_emitted) {
+    if ($allow_synthetic && defined $last_module_name && !$license_emitted) {
         $license_emitted = 1;
         print "[INFO] Licenses :: $last_module_name\n";
     }
@@ -162,13 +171,15 @@ sub suppress_lifecycle {
     return 0;
 }
 
-# Suppress SCM buildnumber-plugin chatter: git invocation details and stored values.
+# Suppress SCM buildnumber-plugin chatter: git invocation details and stored
+# values. These lines only restate branch bookkeeping and do not change how a
+# developer reacts to the build result.
 sub suppress_scm {
     my $r = shift;
     return 1 if $$r =~ /^\[INFO\] ShortRevision tag detected\./;
     return 1 if $$r =~ /^\[INFO\] Executing: \/bin\/sh/;
     return 1 if $$r =~ /^\[INFO\] Working directory: /;
-    return 1 if $$r =~ /^\[INFO\] Storing (?:buildNumber|scmBranch): /;
+    return 1 if $$r =~ /^\[INFO\] Storing (?:buildNumber|scmBranch|buildScmBranch): /;
     return 0;
 }
 
@@ -180,24 +191,44 @@ sub suppress_installs {
     return 0;
 }
 
-# Suppress frontend-maven-plugin yarn progress lines. These never reach
-# yarnfilter when run inside Maven, so they are caught here.
+# Suppress frontend-maven-plugin yarn chatter. These lines bypass the
+# standalone yarn filters, so they must be handled here to keep Maven output
+# focused on build progress and actual failures instead of repetitive setup,
+# version-confirmation, and "everything is fine" boilerplate that does not
+# change what a developer should do next.
 sub suppress_yarn {
     my $r = shift;
-    return 1 if $$r =~ /^\[INFO\] \x{27A4} YN0000: /;
+    return 1 if $$r =~ /^\[INFO\] (?:\S+\s+)?YN(?:0000|0002|0007|0008|0013|0060|0086): /;
+    return 1 if $$r =~ /^\[INFO\] warning package\.json: No license field\s*$/;
+    return 1 if $$r =~ /^\[INFO\] warning No license field\s*$/;
+    return 1 if $$r =~ /^\[INFO\] yarn (?:install|run) v/;
+    return 1 if $$r =~ /^\[INFO\] \[\d+\/\d+\] /;
+    return 1 if $$r =~ /^\[INFO\] \$ yarn /;
+    return 1 if $$r =~ /^\[INFO\] Done in \d/;
+    return 1 if $$r =~ /^\[INFO\] Node v[\d.]+ is already installed\./;
+    return 1 if $$r =~ /^\[INFO\] Yarn .+ was installed, but we need version /;
+    return 1 if $$r =~ /^\[INFO\] Installing Yarn version /;
+    return 1 if $$r =~ /^\[INFO\] Yarn .+ is installed\./;
+    return 1 if $$r =~ /^\[INFO\] Installed Yarn locally\./;
+    return 1 if $$r =~ /^\[INFO\] Unpacking .*\/yarn-[\d.]+\.tar\.gz into /;
+    return 1 if $$r =~ /^\[INFO\]\s+Node Version Check:\s*$/;
+    return 1 if $$r =~ /^\[INFO\]\s+Expected:\s+v[\d.]+ /;
+    return 1 if $$r =~ /^\[INFO\]\s+Current:\s+v[\d.]+ /;
+    return 1 if $$r =~ /^\[INFO\] Checking formatting\.\.\.\s*$/;
+    return 1 if $$r =~ /^\[INFO\] All matched files use Prettier code style!\s*$/;
     return 0;
 }
 
-# Suppress Next.js route table and bundle summary emitted by frontend-maven-plugin.
-# Box-drawing chars identify table rows. Explicit patterns catch the header,
-# bundle total, and legend lines.
+# Suppress the Next.js route table and bundle summary emitted by
+# frontend-maven-plugin. These rows are decorative inventory, not actionable
+# build signal, so match them by structure instead of exact glyphs to keep the
+# filter reliable even when Perl is reading raw UTF-8 bytes.
 sub suppress_frontend {
     my $r = shift;
-    return 1 if $$r =~ /^\[INFO\] [\x{2500}-\x{257F}]/;   # table rows (box-drawing chars)
-    return 1 if $$r =~ /^\[INFO\] Route \(/;               # route table header
-    return 1 if $$r =~ /^\[INFO\] \+ First Load JS/;       # bundle total line
-    return 1 if $$r =~ /^\[INFO\] \x{25CB} /;             # static page legend (U+25CB)
-    return 1 if $$r =~ /^\[INFO\] \x{0192} /;             # dynamic page legend (U+0192)
+    return 1 if $$r =~ /^\[INFO\] [\x80-\xFF]+(?:\s+[\x80-\xFF]+)?\s+\/\S*/;
+    return 1 if $$r =~ /^\[INFO\] Route \(/;
+    return 1 if $$r =~ /^\[INFO\] \+ First Load JS/;
+    return 1 if $$r =~ /^\[INFO\] [\x80-\xFF]+\s+\/\S*/;
     return 0;
 }
 
@@ -224,10 +255,180 @@ sub handle_reactor_summary {
     return 1;
 }
 
-# Emit a synthetic FAILED line immediately before a goal-execution error so
-# the failing module is unambiguous at all severity levels.
+# Changes level tag of a line in place when it matches $pat, so the line
+# survives to print at the new level rather than being suppressed or kept at
+# its original level. Calling this before suppress_* functions means those
+# functions will not see the original level tag and will not suppress the line.
+sub downgrade {
+    my ($r, $new_level, $pat) = @_;
+    $$r =~ s/^\[(?:INFO|WARNING|ERROR)\]/[$new_level]/ if $$r =~ $pat;
+}
+
+# Reassigns log levels for lines that are structurally expected or not
+# immediately actionable so the default INFO view stays focused on real
+# milestones and actual problems. Lines demoted to DEBUG appear with -v4;
+# lines demoted to TRACE appear with -v4 as well and represent even lower
+# signal diagnostics. All patterns match Maven bracket format before
+# timestamps are added downstream by mvnts.
+#
+# This function is called before all suppress_* functions. Demoting a line
+# prevents the suppress functions from matching it, which is intentional:
+# suppressed lines vanish entirely, but demoted lines remain available for
+# diagnosis at higher verbosity levels.
+sub demote_expected_noise {
+    my $r = shift;
+
+    # Non-Java modules like docs intentionally have no src/main/java or
+    # src/test/java. Maven warns about missing source directories every build,
+    # but the warnings carry no signal because the absence is structural.
+    downgrade($r, 'DEBUG', qr/^\[WARNING\] (?:Test )?[Ss]ource directory '.*' does not exist/);
+
+    # qb-install-docs-artifact creates a detached HEAD clone to build docs,
+    # so the license plugin cannot resolve a branch name. The warning fires
+    # every docs build and is never a sign of a broken repository.
+    # mvnbranchdebug also demotes this in the main pipeline for defense in depth.
+    downgrade($r, 'DEBUG', qr/^\[WARNING\] Cannot get the branch information from the git repository/);
+
+    # Antora writes a shared PDF nav file and overwrites it once per module
+    # as each module contributes its nav. The overwrite is intentional, so
+    # the warning repeats but never indicates a real problem.
+    downgrade($r, 'DEBUG', qr/^\[WARNING\] Duplicated destination found: overwriting file:/);
+
+    # Docs module packages content as a ZIP, not a JAR. Maven warns about
+    # the empty JAR because it does not know the ZIP is the real artifact.
+    downgrade($r, 'DEBUG', qr/^\[WARNING\] JAR will be empty - no content was marked for inclusion/);
+
+    # Docs module produces two ZIP classifiers. Maven warns when the second
+    # replaces the first in the build context, but this is the intended layout.
+    downgrade($r, 'DEBUG', qr/^\[WARNING\] artifact .+ already attached, replace previous instance/);
+
+    # A build that skips tests looks identical to one that ran and passed them
+    # at INFO level. Surfacing this at DEBUG keeps CI output unambiguous about
+    # whether test coverage was exercised.
+    downgrade($r, 'DEBUG', qr/^\[INFO\] Tests are skipped\./);
+
+    # When a Docker build fails mid-layer, the step number and command in this
+    # line are the primary way to identify which Dockerfile instruction failed.
+    # Without it the developer must correlate against the Dockerfile manually.
+    downgrade($r, 'DEBUG', qr/^\[INFO\] DOCKER> Step \d/);
+
+    # Next.js emits a route table and per-route bundle size after each compile.
+    # Keeping these at DEBUG preserves a free bundle-regression signal for CI
+    # without flooding the default INFO view during every build.
+    downgrade($r, 'DEBUG', qr/^\[INFO\] Route \(/);
+    downgrade($r, 'DEBUG', qr/^\[INFO\] \+ First Load JS/);
+    downgrade($r, 'DEBUG', qr/^\[INFO\] [\x80-\xFF]+(?:\s+[\x80-\xFF]+)?\s+\/\S*/);
+    downgrade($r, 'DEBUG', qr/^\[INFO\] [\x80-\xFF]+\s+\/\S*/);
+
+    # When a POM fails to parse, Maven emits the parse errors and then this
+    # line naming the project. Without this line the developer must infer
+    # which module is broken from surrounding context rather than reading it.
+    downgrade($r, 'DEBUG', qr/^\[ERROR\] The build could not read /);
+
+    # After a build failure Maven prints the exact command to resume from the
+    # failing module. Suppressing it forces developers to reconstruct the -rf
+    # flag by hand; keeping it at DEBUG means it appears whenever someone runs
+    # qb -v4 to investigate a failure.
+    downgrade($r, 'DEBUG', qr/^\[ERROR\] mvn .+-rf /);
+
+    # Antora emits one Converted line per document page. At INFO this produces
+    # dozens of lines per module; a developer tracking docs build progress
+    # only needs to know the module finished, not each individual page.
+    downgrade($r, 'DEBUG', qr/^\[INFO\] Converted .+\.adoc/);
+
+    # Maven resource copy counts confirm the plugin ran but do not indicate
+    # milestones a developer needs to track. The build result communicates
+    # success or failure without these intermediate accounting lines.
+    downgrade($r, 'DEBUG', qr/^\[INFO\] Copying \d+ resources? from /);
+
+    # Antora resolves basedir automatically from playbook paths and the value
+    # never changes between runs. A developer only needs it when debugging
+    # why Antora cannot find a content source.
+    downgrade($r, 'DEBUG', qr/^\[INFO\] Highest basedir set to:/);
+
+    # The frontend plugin logs which yarn lifecycle phase it is delegating to.
+    # Knowing yarn:validate or yarn:compile ran is only relevant when diagnosing
+    # a yarn failure, not during every passing build.
+    downgrade($r, 'DEBUG', qr/^\[INFO\] Running 'yarn run maven:/);
+
+    # prettier and cross-env/antora command lines confirm the tool was invoked
+    # but add nothing beyond what a tool failure would already report. They are
+    # only useful when debugging the tool invocation itself.
+    downgrade($r, 'DEBUG', qr/^\[INFO\] \$ (?:prettier|cross-env) /);
+
+    # Non-Java modules have no src/main/resources or src/test/resources by
+    # design. Maven notes the absence every build, but it is structural and
+    # not a problem to fix.
+    downgrade($r, 'DEBUG', qr/^\[INFO\] skip non existing resourceDirectory /);
+    downgrade($r, 'DEBUG', qr/^\[INFO\] No sources to compile\b/);
+
+    # fmt-maven-plugin reports zero files when a module has no Java source.
+    # The message confirms the plugin ran without error; with nothing to format
+    # it carries no actionable content.
+    downgrade($r, 'TRACE', qr/^\[INFO\] (?:info )?Processed 0 files/);
+
+    # frontend-maven-plugin downloads and installs a local Node binary when
+    # the required version is not already cached in the M2 repository. These
+    # lines confirm the installation steps completed. They are only useful
+    # when the node installation itself fails, not during every passing build.
+    downgrade($r, 'TRACE', qr/^\[INFO\] (?:Installing node version |Unpacking .+\/node-[\d.]+-|Copying node binary |Installed node locally\.)/);
+
+    # The frontend plugin logs the yarn install invocation it is about to run.
+    # The line confirms yarn started but adds nothing beyond what a yarn failure
+    # would reveal. Only needed when diagnosing why yarn never ran at all.
+    downgrade($r, 'TRACE', qr/^\[INFO\] Running 'yarn install' in /);
+
+    # yarn install output that is structural noise on every docs build. The
+    # package-lock conflict fires because docs tracks both yarn.lock and
+    # package-lock.json. The Node punycode deprecation and unmet peer
+    # dependency warnings come from known stale packages in the Antora toolchain
+    # and require no action. The lockfile save confirmation is a success echo.
+    downgrade($r, 'TRACE', qr/^\[INFO\] warning package-lock\.json found/);
+    downgrade($r, 'TRACE', qr/^\[INFO\] \(node:\d+\)/);
+    downgrade($r, 'TRACE', qr/^\[INFO\] \(Use .+--trace-deprecation/);
+    downgrade($r, 'TRACE', qr/^\[INFO\] warning ".*" has unmet peer dependency /);
+    downgrade($r, 'TRACE', qr/^\[INFO\] success Saved lockfile\b/);
+
+    # Maven prints mojo start and end markers around each goal execution.
+    # At INFO they flood multi-module builds with dozens of lines, but at TRACE
+    # they pinpoint which goal was running at the moment a failure occurred,
+    # which is otherwise hard to determine from the error message alone.
+    downgrade($r, 'TRACE', qr/^\[INFO\] >>> /);
+    downgrade($r, 'TRACE', qr/^\[INFO\] <<< /);
+
+    # Scanning for projects marks the point where Maven takes control from
+    # pre-build steps like yarn formatting. Its timestamp establishes a baseline
+    # for measuring Maven wall-clock time separately from qb wrapper overhead.
+    downgrade($r, 'TRACE', qr/^\[INFO\] Scanning for projects/);
+
+    # Maven logs one line per artifact download. Large builds produce hundreds
+    # of these. At TRACE they confirm whether a missing dependency was never
+    # fetched, which distinguishes a network failure from a source error.
+    downgrade($r, 'TRACE', qr/^\[INFO\] Downloading from /);
+    downgrade($r, 'TRACE', qr/^\[INFO\] Downloaded from /);
+
+    # Maven suppresses retry attempts for artifacts that already failed in the
+    # session. This WARNING was previously dropped entirely, leaving a silent
+    # gap: Maven gave up without retrying and the build later fails with a
+    # compile error that looks unrelated. At TRACE it is available when
+    # diagnosing why a dependency is missing. Pattern covers both the
+    # "previous attempt" phrasing in older Maven versions and the "this session"
+    # phrasing in newer ones.
+    downgrade($r, 'TRACE', qr/^\[WARNING\] .+failed to transfer from .+ during (?:a previous attempt|this session)/);
+
+    # buildnumber-maven-plugin stores the resolved branch name and commit hash
+    # in the project properties at build time. These lines confirm which values
+    # were embedded in the artifact, which is needed when tracing a release
+    # back to a specific commit or verifying a CI build used the right branch.
+    downgrade($r, 'TRACE', qr/^\[INFO\] Storing (?:buildNumber|scmBranch|buildScmBranch): /);
+}
+
+# Emit a synthetic FAILED line immediately before a goal-execution error only
+# when module ordering is deterministic. In threaded builds, the raw Maven
+# error line is more trustworthy than a guessed module label.
 sub emit_failed_marker {
     my $line = shift;
+    return unless $allow_synthetic;
     return unless $line =~ /^\[ERROR\] Failed to execute goal\b.*\bon project /;
     print "[ERROR] FAILED $last_module_name\n" if defined $last_module_name;
 }

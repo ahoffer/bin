@@ -1,0 +1,13 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+# Drop the spotless/license-style zero-work summary line from the filtered
+# output path. Raw mode bypasses this filter entirely.
+
+$| = 1;
+
+while (my $line = <STDIN>) {
+    next if $line =~ /^\S+ INFO Processed 0 files \(0 non-complying\)\.?\s*$/;
+    print $line;
+}

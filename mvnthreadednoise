@@ -1,0 +1,40 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+# Drop ambiguous per-module lines from multi-threaded Maven output.
+#
+# In a single-threaded build, lines like "Compiling 9 source files" are
+# unambiguous because only one module is active at a time. In a multi-threaded
+# build, these lines appear without module context and cannot be attributed to
+# any particular module, making them noise rather than signal.
+#
+# The qb script sets MVNFILTER_THREADED=1 for multi-threaded builds and
+# MVNFILTER_THREADED=0 for single-threaded builds. When 0, all lines pass
+# through unchanged so the output matches what single-threaded mode would show.
+#
+# Dropped in threaded mode:
+#
+# Compilation lines, for example "INFO Compiling 9 source files with javac
+# [debug target 17] to target/classes" and the shorter variant without the
+# tool clause. The phrasing "source file" and "source files" both match.
+#
+# Artifact install lines, for example "INFO Installing
+# /path/to/foo.jar to /path/in/.m2/repository/...". These cover jar, war,
+# zip, ear, and aar artifacts. The pom.xml install lines are already suppressed
+# by mvnfilter, so only artifact paths need matching here.
+
+$| = 1;
+
+my $threaded = $ENV{MVNFILTER_THREADED} // 0;
+
+while (my $line = <STDIN>) {
+    if ($threaded) {
+        # Compilation summary, single-threaded context tells you the module.
+        next if $line =~ /^\S+ INFO Compiling \d+ source files?\b/;
+        # Artifact install to local repo, module is already shown in the
+        # reactor summary so this line adds no value in threaded output.
+        next if $line =~ /^\S+ INFO Installing \S+\.(?:jar|war|zip|ear|aar)\b/;
+    }
+    print $line;
+}

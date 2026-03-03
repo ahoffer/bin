@@ -1,0 +1,71 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+# Collapse Maven's multi-line parallel thread-safety warning block into a
+# single warning line so it does not flood the log.
+
+$| = 1;
+
+my $in_block = 0;
+my @raw = ();
+my @plugins = ();
+my $prefix = '';
+my $scope = '';
+
+sub flush_raw {
+    print @raw;
+    @raw = ();
+    @plugins = ();
+    $prefix = '';
+    $scope = '';
+    $in_block = 0;
+}
+
+while (my $line = <STDIN>) {
+    if (!$in_block) {
+        if ($line =~ /^(\S+\s+)WARNING\s+\* Your build is requesting parallel execution, but this\s+\*\s*$/) {
+            $in_block = 1;
+            $prefix = $1;
+            @raw = ($line);
+            @plugins = ();
+            $scope = '';
+            next;
+        }
+        print $line;
+        next;
+    }
+
+    push @raw, $line;
+
+    if ($line =~ /^\Q$prefix\EWARNING\s+\* /) {
+        next;
+    }
+
+    if ($line =~ /^\Q$prefix\EWARNING The following plugins are not marked as thread-safe in (.+):\s*$/) {
+        $scope = $1;
+        next;
+    }
+
+    if ($line =~ /^\Q$prefix\EWARNING Enable debug to see precisely which goals are not marked as thread-safe\.\s*$/) {
+        my $plugin_text = @plugins ? join(', ', @plugins) : 'unknown plugin';
+        my $scope_text = length($scope) ? " in $scope" : '';
+        print $prefix . 'WARNING Maven parallel execution plugin thread-safety warning' . $scope_text . ': ' . $plugin_text . "\n";
+        @raw = ();
+        @plugins = ();
+        $prefix = '';
+        $scope = '';
+        $in_block = 0;
+        next;
+    }
+
+    if ($line =~ /^\Q$prefix\EWARNING\s+(.+?)\s*$/) {
+        push @plugins, $1;
+        next;
+    }
+
+    flush_raw();
+    print $line;
+}
+
+flush_raw() if $in_block;

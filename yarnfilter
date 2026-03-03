@@ -2,7 +2,9 @@
 use strict;
 use warnings;
 
-# Suppresses yarn progress lines (YN0000) which carry no actionable content.
+# Suppresses yarn progress and boilerplate that does not help diagnose
+# failures. The goal is to keep direct yarn runs readable by preserving real
+# errors while removing status updates that only confirm work is happening.
 # At MVNFILTER_LEVEL <= 3, also suppresses per-file prettier output like
 # "app/src/foo.tsx 4ms (unchanged)".
 
@@ -14,7 +16,13 @@ my $level = do {
 };
 
 while (my $line = <STDIN>) {
-    next if $line =~ /^➤ YN0000:/;
+    next if $line =~ /^(?:\S+\s+)?YN(?:0000|0007|0008|0013):/;
+    next if $line =~ /^warning package\.json: No license field\s*$/;
+    next if $line =~ /^warning No license field\s*$/;
+    next if $line =~ /^yarn (?:install|run) v/;
+    next if $line =~ /^\[\d+\/\d+\] /;
+    next if $line =~ /^\$ yarn /;
+    next if $line =~ /^Done in \d/;
     next if $level <= 3 && $line =~ /^\S+ \d+ms\b/;
     print $line;
 }

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root=${1:?root}; lvl=${2:-3}
+common=$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)
+head=$(git -C "$root" rev-parse HEAD)
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/qb-docs.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+echo "INFO qb docs artifact: installing via temp clone"
+git clone --shared "$common" "$tmp" >/dev/null 2>&1
+git -C "$tmp" checkout --detach "$head" >/dev/null 2>&1
+cd "$tmp"
+MVNFILTER_LEVEL=$lvl mvn --no-transfer-progress -pl docs -Dlicense.skip=true -DskipTests -Djacoco.skip=true install | mvnfilter | mvnformat | mvnts | mvntrim | mvnyarnclean | mvnlevel | mvncolor
+exit ${PIPESTATUS[0]}
