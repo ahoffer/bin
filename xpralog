@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec journalctl --user -f -u xpra-chrome "$@"

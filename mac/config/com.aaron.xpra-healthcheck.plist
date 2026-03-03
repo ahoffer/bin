@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.aaron.xpra-healthcheck</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/aaron/bin/mac/xpra-healthcheck</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>60</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/aaron/Library/Logs/xpra-healthcheck.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/aaron/Library/Logs/xpra-healthcheck.log</string>
+</dict>
+</plist>

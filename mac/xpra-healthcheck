@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HOST="bigfish"
+PORT="14501"
+LOG="$HOME/Library/Logs/xpra-healthcheck.log"
+
+log() { echo "$(date -u +%FT%TZ) $*" >> "$LOG"; }
+
+# macOS lacks GNU timeout; use perl alarm as a portable alternative.
+_timeout() { perl -e 'alarm shift; exec @ARGV or die $!' -- "$@"; }
+
+# Exit quietly if bigfish is unreachable (prevents launchd restart loops).
+if ! nc -z -w 2 "$HOST" 22 >/dev/null 2>&1; then
+    exit 0
+fi
+
+# Kill any Xpra process that has no established connection to the server.
+# Runs on every pass to prevent stale processes accumulating.
+connected_pids=$(lsof -nP -iTCP:${PORT} -sTCP:ESTABLISHED 2>/dev/null \
+    | awk 'NR>1 {print $2}' | sort -u)
+while IFS= read -r stale_pid; do
+    if ! echo "$connected_pids" | grep -qx "$stale_pid"; then
+        log "killing stale Xpra pid $stale_pid (no established connection)"
+        kill -9 "$stale_pid" 2>/dev/null || true
+    fi
+done < <(pgrep -x Xpra 2>/dev/null || true)
+
+# Check SSH tunnel is up and xpra server responds through it.
+tunnel_up=false
+probe_ok=false
+lsof -nP -iTCP:${PORT} -sTCP:LISTEN >/dev/null 2>&1 && tunnel_up=true
+
+if $tunnel_up; then
+    xpra_info=$( _timeout 10 /Applications/Xpra.app/Contents/MacOS/Xpra info \
+        "tcp://127.0.0.1:${PORT}" 2>&1 || true )
+    [ -n "$xpra_info" ] && probe_ok=true
+fi
+
+if $tunnel_up && $probe_ok; then
+    exit 0
+fi
+
+log "unhealthy (tunnel=$tunnel_up probe=$probe_ok), reconnecting"
+
+# Clean up stale processes.
+pkill -x Xpra 2>/dev/null || true
+pkill -f "ssh.*${PORT}:127.0.0.1:${PORT}" 2>/dev/null || true
+sleep 2
+
+# Reconnect.
+"$(dirname "$0")/xpra-bigfish"

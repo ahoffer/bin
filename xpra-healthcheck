@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Probe xpra display :100 with a 10-second timeout.
+# If the probe fails or hangs, restart the chrome session.
+if ! timeout 10 xpra info :100 >/dev/null 2>&1; then
+    echo "xpra-healthcheck: probe failed, restarting xpra-chrome" >&2
+    systemctl --user reset-failed xpra-chrome 2>/dev/null || true
+    systemctl --user start xpra-chrome
+fi

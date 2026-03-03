@@ -23,6 +23,10 @@ if ! lsof -nP -iTCP:${PORT} -sTCP:LISTEN >/dev/null 2>&1; then
   ssh -o ConnectTimeout=5 -N -f -L ${PORT}:127.0.0.1:${PORT} ${HOST} || exit 0
 fi
 
-# For debugging, run the binary directly to see logs:
-# /Applications/Xpra.app/Contents/MacOS/Xpra attach tcp://127.0.0.1:${PORT}
-open -a "Xpra" --args attach "tcp://127.0.0.1:${PORT}" >/dev/null 2>&1
+LOG="$HOME/Library/Logs/xpra-bigfish.log"
+for i in 6 5 4 3 2 1; do
+  [ -f "${LOG}.${i}" ] && mv "${LOG}.${i}" "${LOG}.$((i+1))"
+done
+[ -f "$LOG" ] && mv "$LOG" "${LOG}.1"
+nohup /Applications/Xpra.app/Contents/MacOS/Xpra attach "tcp://127.0.0.1:${PORT}" \
+  >"$LOG" 2>&1 &

@@ -77,3 +77,40 @@ For a narrower visible smoke test:
 
 This launches Playwright's own browser window on the live xpra display so it can be watched from
 the existing Xpra app flow on the Mac.
+
+### Xpra watchdog daemons
+
+Two daemons monitor the session health and restart it automatically.
+
+On bigfish a systemd timer fires every 60 seconds and runs `xpra-healthcheck`.
+The script probes `xpra info :100` with a 10-second timeout. If the probe fails
+or hangs, meaning the session has crashed or frozen, it resets the failure counter
+and restarts `xpra-chrome.service`.
+
+On clown a launchd agent fires every 60 seconds and runs `mac/xpra-healthcheck`.
+The script exits quietly if bigfish is unreachable. Otherwise it checks whether the
+SSH tunnel is up, Xpra.app is running, and the server responds to `xpra info`
+through the tunnel. If any check fails it tears down stale processes and calls
+`mac/xpra-bigfish` to reconnect.
+
+Check watchdog status on bigfish:
+
+    systemctl --user status xpra-healthcheck.timer
+    systemctl --user list-timers xpra-healthcheck.timer
+    journalctl --user -u xpra-healthcheck -n 50
+
+Check watchdog status on clown:
+
+    launchctl list com.aaron.xpra-healthcheck
+    tail -100 ~/Library/Logs/xpra-healthcheck.log
+
+### Xpra log scripts
+
+Four convenience scripts tail the relevant logs.
+
+On bigfish, `xpralog` follows the xpra server journal and `xprawatchlog` follows
+the watchdog journal. Both pass through extra arguments to `journalctl`.
+
+On clown, `xpralogmac` streams Xpra.app output via `log stream` and
+`xprawatchlogmac` tails the watchdog log at `~/Library/Logs/xpra-healthcheck.log`.
+Both pass through extra arguments to the underlying command.
