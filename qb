@@ -15,6 +15,7 @@
 
 skip_tests=true
 threads="-T6"
+filter_level="${MVNFILTER_LEVEL:-1}"
 mvn_args=()
 goals=()
 
@@ -40,6 +41,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -t|--test) skip_tests=false ;;
         -1|--single-thread) threads="" ;;
+        -v[0-9]) filter_level="${1#-v}" ;;
         -a|--arch) require_value "$1" "${2:-}"; arch="$2"; shift ;;
         -h|--help)
             cat <<'EOF'
@@ -51,6 +53,8 @@ Default goal is install with 6 threads. Tests are skipped unless -t is passed.
 
   -t              Run tests, skipped by default to keep iteration fast
   -1              Single-threaded build, useful for debugging output order
+  -v0             Suppress informational output, show only errors and build outcome
+  -v2             Show plugin goal lines, useful when debugging build configuration
   -T <n>          Override thread count, default is 6
   -a <platform>   Cross-compile Docker images via buildx after Maven for a
                   different CPU, for example linux/amd64 or linux/arm64.
@@ -113,8 +117,13 @@ format_frontend() {
     is_frontend_context || return 0
     (
         cd "$git_root/frontend" || { echo "Error: frontend directory not found at $git_root/frontend." >&2; exit 1; }
-        [[ -d node_modules ]] || yarn install
-        yarn fix
+        if [[ ! -d node_modules ]]; then
+            MVNFILTER_LEVEL=$filter_level yarn install | yarnfilter | yarnwarn | mvncolor
+            exit_code=${PIPESTATUS[0]}
+            [[ $exit_code -eq 0 ]] || exit $exit_code
+        fi
+        MVNFILTER_LEVEL=$filter_level yarn fix | yarnfilter | yarnwarn | mvncolor
+        exit ${PIPESTATUS[0]}
     )
 }
 
@@ -186,7 +195,8 @@ fi
 # Always format and fix license headers before compiling.
 goals=(com.spotify.fmt:fmt-maven-plugin:format license:format "${goals[@]}")
 
-mvn $threads "${mvn_args[@]}" "${goals[@]}" || exit $?
+MVNFILTER_LEVEL=$filter_level mvn $threads --no-transfer-progress "${mvn_args[@]}" "${goals[@]}" | mvnfilter | mvnformat | mvnts | mvntrim | mvncolor
+exit ${PIPESTATUS[0]}
 
 # When the target architecture differs from the host, rebuild Docker
 # images using buildx. In a docker module directory, rebuilds just

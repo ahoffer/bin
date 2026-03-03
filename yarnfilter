@@ -1,0 +1,18 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+# Suppresses yarn progress lines (YN0000) which carry no actionable content.
+# At MVNFILTER_LEVEL <= 3, also suppresses per-file prettier output like
+# "app/src/foo.tsx 4ms (unchanged)".
+
+my $level = do {
+    my $raw = $ENV{MVNFILTER_LEVEL} // 1;
+    ($raw =~ /^[0-9]$/) ? int($raw) : 1;
+};
+
+while (my $line = <STDIN>) {
+    next if $line =~ /^➤ YN0000:/;
+    next if $level <= 3 && $line =~ /^\S+ \d+ms\b/;
+    print $line;
+}

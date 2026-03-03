@@ -1,0 +1,16 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use POSIX qw(strftime);
+
+# Prepends an ISO 8601 UTC timestamp and strips brackets from the Maven
+# level tag to produce output compatible with lnav's generic log format.
+# Input:  [WARNING] message
+# Output: 2026-03-02T10:15:30Z WARNING message
+
+while (my $line = <STDIN>) {
+    next unless $line =~ /\S/;
+    my $ts = strftime('%Y-%m-%dT%H:%M:%SZ', gmtime);
+    $line =~ s/^\[(\w+)\] ?/$1 /;
+    print "$ts $line";
+}

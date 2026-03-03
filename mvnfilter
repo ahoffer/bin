@@ -1,0 +1,79 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+# Filters Maven stdout to strip noise while preserving actionable output.
+# Errors, warnings, build success and failure, module progress, and the
+# reactor summary all pass through. Separator lines, plugin banners, mojo
+# markers, download messages, and per-file formatter and license output
+# are suppressed.
+#
+# Verbosity is controlled by the MVNFILTER_LEVEL environment variable.
+# Level 0 suppresses all remaining INFO lines not explicitly kept, yielding
+# only errors, warnings, and the build outcome. Level 1 is the default and
+# applies the standard set of suppressions. Level 2 additionally shows
+# plugin goal execution lines.
+
+my $level = do {
+    my $raw = $ENV{MVNFILTER_LEVEL} // 1;
+    ($raw =~ /^[012]$/) ? int($raw) : 1;
+};
+
+my $in_reactor_order = 0;
+
+while (my $line = <STDIN>) {
+    $line =~ s/\r//g;
+    $line =~ s/\e\[[0-9;]*[a-zA-Z]//g;
+
+    # Reactor Build Order is a multi-line section; suppress until blank INFO.
+    if ($line =~ /^\[INFO\] Reactor Build Order:/) { $in_reactor_order = 1; next }
+    if ($in_reactor_order) {
+        $in_reactor_order = 0 if $line =~ /^\[INFO\]\s*$/;
+        next;
+    }
+
+    # Normalize module headers to name and optional progress counter,
+    # stripping artifact coordinates and version which are never actionable.
+    if ($line =~ /^\[INFO\] Building (.+) \d+[\d.]*(?:-[A-Za-z0-9]+)*(?:\s+\[(\d+\/\d+)\])?\s*$/) {
+        my ($moduleName, $progress) = ($1, $2);
+        if (defined $progress) {
+            print "[INFO] Building $moduleName [$progress]\n";
+        } else {
+            print "[INFO] Building $moduleName\n";
+        }
+        next;
+    }
+
+    # Plugin goal lines are suppressed at levels 0 and 1.
+    # At level 2 they pass through to show what each plugin was asked to do.
+    if ($line =~ /^\[INFO\] --- /) {
+        print $line if $level >= 2;
+        next;
+    }
+
+    next if $line =~ /^\[INFO\] -{10}/;
+    next if $line =~ /^\[INFO\] >>> /;
+    next if $line =~ /^\[INFO\] <<< /;
+    next if $line =~ /^\[INFO\]\s*$/;
+    next if $line =~ /^\[WARNING\]\s*$/;
+    next if $line =~ /^\[ERROR\]\s*$/;
+    next if $line =~ /^\[ERROR\] To see the full stack trace/;
+    next if $line =~ /^\[ERROR\] Re-run Maven using the -X switch/;
+    next if $line =~ /^\[ERROR\] For more information about the errors/;
+    next if $line =~ /^\[ERROR\] \[Help \d+\]/;
+    next if $line =~ /^\[ERROR\] The build could not read /;
+    next if $line =~ /^\[INFO\] Downloading from /;
+    next if $line =~ /^\[INFO\] Downloaded from /;
+    next if $line =~ /^\[INFO\] Scanning for projects/;
+    next if $line =~ /^\[INFO\] Updating file header in /;
+    next if $line =~ /^\[INFO\] Skipping file header /;
+    next if $line =~ /^\[INFO\] Reformatting /;
+    next if $line =~ /^\[INFO\] Skipping \//;
+
+    # At level 0, suppress all INFO lines except build outcome and timing.
+    if ($level == 0 && $line =~ /^\[INFO\]/) {
+        next unless $line =~ /^\[INFO\] (?:BUILD (?:SUCCESS|FAILURE)|Reactor Summary|Total time:|Finished at:)/;
+    }
+
+    print $line;
+}

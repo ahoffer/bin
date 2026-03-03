@@ -1,0 +1,13 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+# Cleans up the message portion of timestamped log lines. Strips redundant
+# level tags like [ERROR] that Maven embeds in some messages, and trims
+# leading whitespace from indented output.
+# Input format: TIMESTAMP LEVEL MESSAGE
+
+while (my $line = <STDIN>) {
+    $line =~ s/^(\S+ \w+) (?:\[\w+\] ?)?\s*/$1 /;
+    print $line;
+}

@@ -1,0 +1,35 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+# Joins continuation lines to their tagged header line, then adds blank
+# lines before module headers and the build outcome section.
+
+# First pass: join continuation lines to their tagged header.
+my @lines;
+my $buf;
+
+while (my $line = <STDIN>) {
+    if ($line =~ /^\[/) {
+        push @lines, $buf if defined $buf;
+        $buf = $line;
+    } elsif (defined $buf && $line =~ /\S/) {
+        chomp $buf;
+        $buf =~ s/\s+$//;
+        (my $cont = $line) =~ s/^\s+//;
+        $cont =~ s/\s+$//;
+        $buf .= " $cont\n";
+    }
+    # Blank continuation lines are dropped.
+}
+push @lines, $buf if defined $buf;
+
+# Second pass: add blank line separators before key sections.
+my $prev_was_blank = 0;
+for my $line (@lines) {
+    if ($line =~ /^\[INFO\] Building / || $line =~ /^\[INFO\] (?:Reactor Summary|BUILD )/) {
+        print "\n" unless $prev_was_blank;
+    }
+    print $line;
+    $prev_was_blank = ($line =~ /^\s*$/);
+}

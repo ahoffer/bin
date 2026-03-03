@@ -1,0 +1,25 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+# Applies ANSI colors to filtered Maven output. Skips colorization when
+# stdout is not a terminal so piped output stays clean.
+
+my $tty = -t STDOUT;
+
+while (my $line = <STDIN>) {
+    unless ($tty) {
+        print $line;
+        next;
+    }
+
+    (my $out = $line) =~ s/\n$/\e[0m\n/;
+
+    if    ($line =~ /^\[ERROR\]/)              { print "\e[31m$out"   }
+    elsif ($line =~ /^\[WARNING\]/)            { print "\e[33m$out"   }
+    elsif ($line =~ /^\[INFO\] BUILD SUCCESS/) { print "\e[1;32m$out" }
+    elsif ($line =~ /^\[INFO\] BUILD FAILURE/) { print "\e[1;31m$out" }
+    elsif ($line =~ /^\[INFO\] Building /)     { print "\e[1;36m$out" }
+    elsif ($line =~ /^\[INFO\] Reactor Sum/)   { print "\e[1m$out"    }
+    else                                       { print $line          }
+}

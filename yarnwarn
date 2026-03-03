@@ -1,0 +1,17 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+# Suppresses yarn warning lines (non-YN0000 codes) at MVNFILTER_LEVEL <= 1.
+
+my $level = do {
+    my $raw = $ENV{MVNFILTER_LEVEL} // 1;
+    ($raw =~ /^[0-9]$/) ? int($raw) : 1;
+};
+
+while (my $line = <STDIN>) {
+    if ($line =~ /^➤ YN(?!0000)\d+:/) {
+        next if $level <= 1;
+    }
+    print $line;
+}
