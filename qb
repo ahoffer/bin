@@ -117,10 +117,29 @@ is_frontend_context() {
     [[ -z "$rel" || "$rel" == "frontend" || "$rel" == frontend/* ]]
 }
 
+ensure_yarn_available() {
+    command -v yarn >/dev/null 2>&1 && return 0
+    command -v corepack >/dev/null 2>&1 || {
+        echo "Error: yarn is not on PATH and corepack is unavailable." >&2
+        exit 1
+    }
+    echo "Info: yarn not found on PATH, running corepack enable." >&2
+    corepack enable >/dev/null 2>&1 || {
+        echo "Error: failed to enable yarn via corepack." >&2
+        exit 1
+    }
+    hash -r
+    command -v yarn >/dev/null 2>&1 || {
+        echo "Error: yarn is still unavailable after corepack enable." >&2
+        exit 1
+    }
+}
+
 format_frontend() {
     is_frontend_context || return 0
     (
         cd "$git_root/frontend" || { echo "Error: frontend directory not found at $git_root/frontend." >&2; exit 1; }
+        ensure_yarn_available
         if [[ ! -d node_modules ]]; then
             MVNFILTER_LEVEL=$filter_level yarn install | yarnfilter | yarnwarn | mvncolor
             exit_code=${PIPESTATUS[0]}
