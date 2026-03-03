@@ -22,14 +22,14 @@ fi
 # export SSF_NEXUS_HOST=
 # export SSF_NEXUS_USER=
 # export SSF_NEXUS_TOKEN=
-# export RUNSHIFT_HOST=
-# export RUNSHIFT_USER=
-# export RUNSHIFT_TOKEN=
+# export GITLAB_HOST=
+# export GITLAB_USER=
+# export GITLAB_TOKEN=
 # export SSF_GITLAB_HOST=
 # export SSF_GITLAB_USER=
 
 # Log into registries and such
-#docker login "$RUNSHIFT_HOST" -u $RUNSHIFT_USER -p "$RUNSHIFT_TOKEN"
+#docker login "$GITLAB_HOST" -u $GITLAB_USER -p "$GITLAB_TOKEN"
 #helm registry login $SSF_NEXUS_HOST -u $export SSF_NEXUS_USER -p "$SSF_NEXUS_TOKEN" 
 # ----------------------------------------------------------------------------------------------------------
 

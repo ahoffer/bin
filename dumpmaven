@@ -2,15 +2,15 @@
 set -euo pipefail
 
 # Validate environment variables
-if [[ -z "${RUNSHIFT_HOST:-}" ]] || [[ -z "${RUNSHIFT_PROJECT_ID:-}" ]] || [[ -z "${RUNSHIFT_TOKEN:-}" ]]; then
+if [[ -z "${GITLAB_HOST:-}" ]] || [[ -z "${RUNSHIFT_PROJECT_ID:-}" ]] || [[ -z "${GITLAB_TOKEN:-}" ]]; then
   echo "Error: Missing required environment variables" >&2
-  echo "Required: RUNSHIFT_HOST, RUNSHIFT_PROJECT_ID, RUNSHIFT_TOKEN" >&2
+  echo "Required: GITLAB_HOST, RUNSHIFT_PROJECT_ID, GITLAB_TOKEN" >&2
   exit 1
 fi
 
-API_BASE="https://${RUNSHIFT_HOST}/api/v4"
+API_BASE="https://${GITLAB_HOST}/api/v4"
 PROJECT_ID="${RUNSHIFT_PROJECT_ID}"
-TOKEN="${RUNSHIFT_TOKEN}"
+TOKEN="${GITLAB_TOKEN}"
 MAX_PARALLEL_JOBS=30
 
 # Function to make authenticated API calls
