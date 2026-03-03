@@ -4,6 +4,8 @@ use warnings;
 
 # Suppresses yarn warning lines (non-YN0000 codes) at MVNFILTER_LEVEL <= 1.
 
+$| = 1;
+
 my $level = do {
     my $raw = $ENV{MVNFILTER_LEVEL} // 1;
     ($raw =~ /^[0-9]$/) ? int($raw) : 1;

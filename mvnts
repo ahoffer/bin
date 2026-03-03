@@ -3,6 +3,8 @@ use strict;
 use warnings;
 use POSIX qw(strftime);
 
+$| = 1;
+
 # Prepends an ISO 8601 UTC timestamp and strips brackets from the Maven
 # level tag to produce output compatible with lnav's generic log format.
 # Input:  [WARNING] message

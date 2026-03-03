@@ -2,78 +2,232 @@
 use strict;
 use warnings;
 
+$| = 1;
+
 # Filters Maven stdout to strip noise while preserving actionable output.
 # Errors, warnings, build success and failure, module progress, and the
-# reactor summary all pass through. Separator lines, plugin banners, mojo
-# markers, download messages, and per-file formatter and license output
-# are suppressed.
+# reactor summary all pass through. Suppressed categories: separator lines,
+# plugin banners, mojo markers, download progress, per-file formatter and
+# license output, lifecycle skipping notices, SCM plugin chatter, pom install
+# lines, embedded yarn and Next.js frontend output, reactor plan module list,
+# Docker build step and cache lines, assembly copy noise, root-skip notices,
+# Maven resume-build hints, and Maven help references (-> [Help N]).
 #
-# Verbosity is controlled by the MVNFILTER_LEVEL environment variable.
-# Level 0 suppresses all remaining INFO lines not explicitly kept, yielding
-# only errors, warnings, and the build outcome. Level 1 is the default and
-# applies the standard set of suppressions. Level 2 additionally shows
-# plugin goal execution lines.
+# Synthetic lines emitted: BUILT when each module's successor starts,
+# Licenses once per module when license activity is detected, FAILED when
+# a goal-execution error is detected.
+#
+# Reactor summary SUCCESS/FAILURE lines are collapsed to the module name,
+# with FAILURE lines promoted to ERROR level.
+#
+# Severity-level filtering (MVNFILTER_LEVEL 0-4) is handled downstream by
+# mvnlevel. Set MVNFILTER_LEVEL=9 to bypass all suppression in this script.
 
-my $level = do {
-    my $raw = $ENV{MVNFILTER_LEVEL} // 1;
-    ($raw =~ /^[012]$/) ? int($raw) : 1;
-};
+my $lvl_env = $ENV{MVNFILTER_LEVEL} // '';
+my $raw_mode = ($lvl_env eq '5' || $lvl_env eq '9');
 
 my $in_reactor_order = 0;
+my $last_module_name;     # Most recently started module, for BUILT and Licenses.
+my $license_emitted;      # Whether a Licenses line has been emitted for the current module.
 
 while (my $line = <STDIN>) {
-    $line =~ s/\r//g;
-    $line =~ s/\e\[[0-9;]*[a-zA-Z]//g;
+    normalize(\$line);
+    if ($raw_mode) { print $line; next }
 
-    # Reactor Build Order is a multi-line section; suppress until blank INFO.
-    if ($line =~ /^\[INFO\] Reactor Build Order:/) { $in_reactor_order = 1; next }
-    if ($in_reactor_order) {
-        $in_reactor_order = 0 if $line =~ /^\[INFO\]\s*$/;
-        next;
-    }
-
-    # Normalize module headers to name and optional progress counter,
-    # stripping artifact coordinates and version which are never actionable.
-    if ($line =~ /^\[INFO\] Building (.+) \d+[\d.]*(?:-[A-Za-z0-9]+)*(?:\s+\[(\d+\/\d+)\])?\s*$/) {
-        my ($moduleName, $progress) = ($1, $2);
-        if (defined $progress) {
-            print "[INFO] Building $moduleName [$progress]\n";
-        } else {
-            print "[INFO] Building $moduleName\n";
-        }
-        next;
-    }
-
-    # Plugin goal lines are suppressed at levels 0 and 1.
-    # At level 2 they pass through to show what each plugin was asked to do.
-    if ($line =~ /^\[INFO\] --- /) {
-        print $line if $level >= 2;
-        next;
-    }
-
-    next if $line =~ /^\[INFO\] -{10}/;
-    next if $line =~ /^\[INFO\] >>> /;
-    next if $line =~ /^\[INFO\] <<< /;
-    next if $line =~ /^\[INFO\]\s*$/;
-    next if $line =~ /^\[WARNING\]\s*$/;
-    next if $line =~ /^\[ERROR\]\s*$/;
-    next if $line =~ /^\[ERROR\] To see the full stack trace/;
-    next if $line =~ /^\[ERROR\] Re-run Maven using the -X switch/;
-    next if $line =~ /^\[ERROR\] For more information about the errors/;
-    next if $line =~ /^\[ERROR\] \[Help \d+\]/;
-    next if $line =~ /^\[ERROR\] The build could not read /;
-    next if $line =~ /^\[INFO\] Downloading from /;
-    next if $line =~ /^\[INFO\] Downloaded from /;
-    next if $line =~ /^\[INFO\] Scanning for projects/;
-    next if $line =~ /^\[INFO\] Updating file header in /;
-    next if $line =~ /^\[INFO\] Skipping file header /;
-    next if $line =~ /^\[INFO\] Reformatting /;
-    next if $line =~ /^\[INFO\] Skipping \//;
-
-    # At level 0, suppress all INFO lines except build outcome and timing.
-    if ($level == 0 && $line =~ /^\[INFO\]/) {
-        next unless $line =~ /^\[INFO\] (?:BUILD (?:SUCCESS|FAILURE)|Reactor Summary|Total time:|Finished at:)/;
-    }
-
+    next if suppress_reactor_order(\$line);
+    next if handle_module_header(\$line);
+    next if suppress_noise(\$line);
+    next if handle_license_activity(\$line);
+    next if suppress_docker(\$line);
+    next if suppress_assembly(\$line);
+    next if suppress_lifecycle(\$line);
+    next if suppress_scm(\$line);
+    next if suppress_installs(\$line);
+    next if suppress_yarn(\$line);
+    next if suppress_frontend(\$line);
+    next if handle_auth_warning(\$line);
+    next if handle_reactor_summary(\$line);
+    emit_failed_marker($line);
     print $line;
+}
+
+# Strip CRLF, ANSI escape sequences, and Maven help-reference suffixes.
+sub normalize {
+    my $r = shift;
+    $$r =~ s/\r//g;
+    $$r =~ s/\e\[[0-9;]*[a-zA-Z]//g;
+    $$r =~ s/\s*->\s*\[Help \d+\]\s*(?=\s*$)//;
+    $$r =~ s/^\[INFO\] (BUILD FAILURE)/[ERROR] $1/;
+}
+
+# Suppress the Reactor Build Order section that Maven prints at startup.
+# The state machine resets on the first blank INFO line; an explicit packaging-
+# type regex catches any module lines that slip through before the reset.
+sub suppress_reactor_order {
+    my $r = shift;
+    if ($$r =~ /^\[INFO\] Reactor Build Order:/) { $in_reactor_order = 1; return 1 }
+    if ($in_reactor_order) {
+        $in_reactor_order = 0 if $$r =~ /^\[INFO\]\s*$/;
+        return 1;
+    }
+    return 1 if $$r =~ /^\[INFO\] .+\s+\[(?:pom|jar|bundle|war|ear|aar|feature|kar|karaf-assembly|zip)\]\s*$/;
+    return 1 if $$r =~ /^\[INFO\] Using the MultiThreadedBuilder/;
+    return 0;
+}
+
+# Normalize module headers: strip artifact coordinates and version, emit a
+# synthetic BUILT line for the previous module. In parallel builds BUILT is
+# approximate; use qb -1 for clean ordering.
+sub handle_module_header {
+    my $r = shift;
+    return 0 unless $$r =~ /^\[INFO\] Building (.+) \d+[\d.]*(?:-[A-Za-z0-9]+)*(?:\s+\[(\d+\/\d+)\])?\s*$/;
+    my ($module, $progress) = ($1, $2);
+    print "[INFO] BUILT $last_module_name\n" if defined $last_module_name;
+    print "[INFO] Building $module" . (defined $progress ? " [$progress]" : "") . "\n";
+    $last_module_name = $module;
+    $license_emitted = undef;
+    return 1;
+}
+
+# Suppress structural noise: separator lines, mojo markers, blank level lines,
+# download progress, formatter output, and reactor plan packaging-type lines.
+sub suppress_noise {
+    my $r = shift;
+    my $line = $$r;
+    return 1 if $line =~ /^\[INFO\] -{10}/;
+    return 1 if $line =~ /^\[INFO\] >>> /;
+    return 1 if $line =~ /^\[INFO\] <<< /;
+    return 1 if $line =~ /^\[INFO\]\s*$/;
+    return 1 if $line =~ /^\[WARNING\]\s*$/;
+    return 1 if $line =~ /^\[WARNING\] .+failed to transfer from .+ during a previous attempt/;
+    return 1 if $line =~ /^\[ERROR\]\s*$/;
+    return 1 if $line =~ /^\[ERROR\] To see the full stack trace/;
+    return 1 if $line =~ /^\[ERROR\] Re-run Maven using the -X switch/;
+    return 1 if $line =~ /^\[ERROR\] For more information about the errors/;
+    return 1 if $line =~ /^\[ERROR\] The build could not read /;
+    return 1 if $line =~ /^\[ERROR\] After correcting the problems,/;
+    return 1 if $line =~ /^\[ERROR\] mvn .*-rf /;
+    return 1 if $line =~ /^\[INFO\] Downloading from /;
+    return 1 if $line =~ /^\[INFO\] Downloaded from /;
+    return 1 if $line =~ /^\[INFO\] Scanning for projects/;
+    return 1 if $line =~ /^\[INFO\] Updating file header in /;
+    return 1 if $line =~ /^\[INFO\] Skipping file header /;
+    return 1 if $line =~ /^\[INFO\] Reformatting /;
+    return 1 if $line =~ /^\[INFO\] Skipping \//;
+    return 0;
+}
+
+# Collapse license-header activity to one attributed line per module.
+# Per-file chatter (Updating license headers, Checking licenses) is suppressed.
+sub handle_license_activity {
+    my $r = shift;
+    return 0 unless $$r =~ /^\[INFO\] (?:Updating license headers|Checking licenses)/;
+    if (defined $last_module_name && !$license_emitted) {
+        $license_emitted = 1;
+        print "[INFO] Licenses :: $last_module_name\n";
+    }
+    return 1;
+}
+
+# Suppress Docker build step and layer-cache lines; image creation and error
+# lines pass through.
+sub suppress_docker {
+    my $r = shift;
+    return 1 if $$r =~ /^\[INFO\] DOCKER> Step \d/;
+    return 1 if $$r =~ /^\[INFO\] DOCKER> --->/;
+    return 1 if $$r =~ /^\[INFO\] DOCKER>\s*$/;
+    return 0;
+}
+
+# Suppress assembly descriptor, file-copy, and root-skip notices.
+sub suppress_assembly {
+    my $r = shift;
+    return 1 if $$r =~ /^\[INFO\] Skipping because we are not in root module/;
+    return 1 if $$r =~ /^\[INFO\] Reading assembly descriptor:/;
+    return 1 if $$r =~ /^\[INFO\] Copying files to /;
+    return 0;
+}
+
+# Suppress lifecycle skipping notices: formatter packaging check, license
+# plugin skip, JaCoCo skip, surefire/failsafe argline placeholder, test skip.
+sub suppress_lifecycle {
+    my $r = shift;
+    return 1 if $$r =~ /^\[INFO\] Skipping format check:/;
+    return 1 if $$r =~ /^\[INFO\] License Plugin is Skipped/;
+    return 1 if $$r =~ /^\[INFO\] Skipping JaCoCo execution/;
+    return 1 if $$r =~ /^\[INFO\] (?:surefire|failsafe)ArgLine set to empty/;
+    return 1 if $$r =~ /^\[INFO\] Tests are skipped\./;
+    return 1 if $$r =~ /^\[INFO\] Test Source directory:/;
+    return 1 if $$r =~ /^\[INFO\] Skipping execution\./;
+    return 0;
+}
+
+# Suppress SCM buildnumber-plugin chatter: git invocation details and stored values.
+sub suppress_scm {
+    my $r = shift;
+    return 1 if $$r =~ /^\[INFO\] ShortRevision tag detected\./;
+    return 1 if $$r =~ /^\[INFO\] Executing: \/bin\/sh/;
+    return 1 if $$r =~ /^\[INFO\] Working directory: /;
+    return 1 if $$r =~ /^\[INFO\] Storing (?:buildNumber|scmBranch): /;
+    return 0;
+}
+
+# Suppress pom.xml artifact install lines and context pom.xml references.
+sub suppress_installs {
+    my $r = shift;
+    return 1 if $$r =~ /^\[INFO\] Installing .*pom\.xml /;
+    return 1 if $$r =~ /^\[INFO\]\s+from .*pom\.xml/;
+    return 0;
+}
+
+# Suppress frontend-maven-plugin yarn progress lines. These never reach
+# yarnfilter when run inside Maven, so they are caught here.
+sub suppress_yarn {
+    my $r = shift;
+    return 1 if $$r =~ /^\[INFO\] \x{27A4} YN0000: /;
+    return 0;
+}
+
+# Suppress Next.js route table and bundle summary emitted by frontend-maven-plugin.
+# Box-drawing chars identify table rows. Explicit patterns catch the header,
+# bundle total, and legend lines.
+sub suppress_frontend {
+    my $r = shift;
+    return 1 if $$r =~ /^\[INFO\] [\x{2500}-\x{257F}]/;   # table rows (box-drawing chars)
+    return 1 if $$r =~ /^\[INFO\] Route \(/;               # route table header
+    return 1 if $$r =~ /^\[INFO\] \+ First Load JS/;       # bundle total line
+    return 1 if $$r =~ /^\[INFO\] \x{25CB} /;             # static page legend (U+25CB)
+    return 1 if $$r =~ /^\[INFO\] \x{0192} /;             # dynamic page legend (U+0192)
+    return 0;
+}
+
+# Collapse 401 auth-failure warnings to one short line: status, repo, artifact.
+# The redundant "cached failure" duplicate is suppressed by suppress_noise.
+sub handle_auth_warning {
+    my $r = shift;
+    return 0 unless $$r =~ /^\[WARNING\] Could not transfer \S+ (\S+) from\/to (\S+) \(.+\): authentication failed .+, status: (\d+)/;
+    print "[WARNING] $3 $2: $1\n";
+    return 1;
+}
+
+# Collapse reactor summary lines to module name only. SUCCESS stays INFO;
+# FAILURE is promoted to ERROR.
+sub handle_reactor_summary {
+    my $r = shift;
+    return 0 unless $$r =~ /^\[INFO\] (.+?)\s+\.{3,}\s+(SUCCESS|FAILURE)\s+\[/;
+    my ($module, $outcome) = ($1, $2);
+    if ($outcome eq 'SUCCESS') {
+        print "[INFO] $module\n";
+    } else {
+        print "[ERROR] $module\n";
+    }
+    return 1;
+}
+
+# Emit a synthetic FAILED line immediately before a goal-execution error so
+# the failing module is unambiguous at all severity levels.
+sub emit_failed_marker {
+    my $line = shift;
+    return unless $line =~ /^\[ERROR\] Failed to execute goal\b.*\bon project /;
+    print "[ERROR] FAILED $last_module_name\n" if defined $last_module_name;
 }

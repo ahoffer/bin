@@ -2,16 +2,30 @@
 use strict;
 use warnings;
 
+$| = 1;
+
 # Joins continuation lines to their tagged header line, then adds blank
 # lines before module headers and the build outcome section.
+# Streams output one line at a time so progress is visible during long builds.
 
-# First pass: join continuation lines to their tagged header.
-my @lines;
 my $buf;
+my $last_was_blank = 0;
+
+sub emit {
+    my ($blank_before) = @_;
+    return unless defined $buf;
+    if ($blank_before && !$last_was_blank) {
+        print "\n";
+    }
+    print $buf;
+    $last_was_blank = 0;
+    $buf = undef;
+}
 
 while (my $line = <STDIN>) {
     if ($line =~ /^\[/) {
-        push @lines, $buf if defined $buf;
+        my $needs_blank = $line =~ /^\[INFO\] (?:Building |Reactor Summary|BUILD )/;
+        emit($needs_blank);
         $buf = $line;
     } elsif (defined $buf && $line =~ /\S/) {
         chomp $buf;
@@ -22,14 +36,4 @@ while (my $line = <STDIN>) {
     }
     # Blank continuation lines are dropped.
 }
-push @lines, $buf if defined $buf;
-
-# Second pass: add blank line separators before key sections.
-my $prev_was_blank = 0;
-for my $line (@lines) {
-    if ($line =~ /^\[INFO\] Building / || $line =~ /^\[INFO\] (?:Reactor Summary|BUILD )/) {
-        print "\n" unless $prev_was_blank;
-    }
-    print $line;
-    $prev_was_blank = ($line =~ /^\s*$/);
-}
+emit(0);

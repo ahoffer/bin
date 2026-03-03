@@ -6,6 +6,8 @@ use warnings;
 # At MVNFILTER_LEVEL <= 3, also suppresses per-file prettier output like
 # "app/src/foo.tsx 4ms (unchanged)".
 
+$| = 1;
+
 my $level = do {
     my $raw = $ENV{MVNFILTER_LEVEL} // 1;
     ($raw =~ /^[0-9]$/) ? int($raw) : 1;
