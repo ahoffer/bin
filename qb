@@ -23,6 +23,9 @@ goals=()
 # to cross-compile via buildx after the Maven build.
 arch="${CONTAINER_ARCH:-}"
 
+original_args=("$@")
+readonly docbuild="$HOME/bin/cxappdev/docbuild"
+
 require_value() {
     local opt="$1"
     local val="${2:-}"
@@ -39,21 +42,23 @@ while [[ $# -gt 0 ]]; do
         -1|--single-thread) threads="" ;;
         -a|--arch) require_value "$1" "${2:-}"; arch="$2"; shift ;;
         -h|--help)
-            echo "Usage: qb [OPTIONS] [MAVEN-GOALS]"
-            echo ""
-            echo "Wraps mvn for local development. Formats code and fixes license headers"
-            echo "before compiling so the build never fails over formatting drift."
-            echo "Default goal is install with 6 threads. Tests are skipped unless -t is passed."
-            echo ""
-            echo "  -t              Run tests, skipped by default to keep iteration fast"
-            echo "  -1              Single-threaded build, useful for debugging output order"
-            echo "  -T <n>          Override thread count, default is 6"
-            echo "  -a <platform>   Cross-compile Docker images via buildx after Maven for a"
-            echo "                  different CPU, for example linux/amd64 or linux/arm64."
-            echo "                  Set CONTAINER_ARCH in the environment to avoid repeating."
-            echo "  -h              Show this help"
-            echo ""
-            echo "All other flags pass through to mvn, including -pl, -rf, -P, -am, and -f."
+            cat <<'EOF'
+Usage: qb [OPTIONS] [MAVEN-GOALS]
+
+Wraps mvn for local development. Formats code and fixes license headers
+before compiling so the build never fails over formatting drift.
+Default goal is install with 6 threads. Tests are skipped unless -t is passed.
+
+  -t              Run tests, skipped by default to keep iteration fast
+  -1              Single-threaded build, useful for debugging output order
+  -T <n>          Override thread count, default is 6
+  -a <platform>   Cross-compile Docker images via buildx after Maven for a
+                  different CPU, for example linux/amd64 or linux/arm64.
+                  Set CONTAINER_ARCH in the environment to avoid repeating.
+  -h              Show this help
+
+All other flags pass through to mvn, including -pl, -rf, -P, -am, and -f.
+EOF
             exit 0
             ;;
         -T)
@@ -65,7 +70,7 @@ while [[ $# -gt 0 ]]; do
             threads="-T$2"
             shift
             ;;
-        -am|-amd) mvn_args+=("$1") ;;
+        -am) mvn_args+=("$1") ;;
         -pl|-rf|-P|-f|-s|-gs)
             require_value "$1" "${2:-}"
             mvn_args+=("$1" "$2")
@@ -84,22 +89,30 @@ fi
 
 git_root=$(git rev-parse --show-toplevel 2>/dev/null) || true
 
+# Returns the path of PWD relative to git_root, with no leading slash.
+# Returns empty string when PWD is the git root itself.
+git_rel() {
+    [[ -n "$git_root" ]] || return 1
+    local r
+    r=$(realpath "$PWD")
+    r="${r#"$git_root"}"
+    echo "${r#/}"
+}
+
 # Returns true when PWD is inside the frontend module or at the project
 # root that contains a frontend module.
 is_frontend_context() {
     [[ -n "$git_root" ]] || return 1
     [[ -d "$git_root/frontend" ]] || return 1
-    local resolved_pwd rel
-    resolved_pwd=$(realpath "$PWD")
-    rel="${resolved_pwd#"$git_root"}"
-    rel="${rel#/}"
+    local rel
+    rel=$(git_rel)
     [[ -z "$rel" || "$rel" == "frontend" || "$rel" == frontend/* ]]
 }
 
-prepare_frontend_if_needed() {
+format_frontend() {
     is_frontend_context || return 0
     (
-        cd "$git_root/frontend" || exit 1
+        cd "$git_root/frontend" || { echo "Error: frontend directory not found at $git_root/frontend." >&2; exit 1; }
         [[ -d node_modules ]] || yarn install
         yarn fix
     )
@@ -107,10 +120,8 @@ prepare_frontend_if_needed() {
 
 is_docs_context() {
     [[ -n "$git_root" ]] || return 1
-    local resolved_pwd rel
-    resolved_pwd=$(realpath "$PWD")
-    rel="${resolved_pwd#"$git_root"}"
-    rel="${rel#/}"
+    local rel
+    rel=$(git_rel)
     [[ "$rel" == "docs" || "$rel" == docs/* ]]
 }
 
@@ -151,24 +162,25 @@ ensure_docker_daemon_if_needed() {
 
 # The docs module uses Antora, not javac, so skip maven entirely.
 if is_docs_context; then
-    exec "$HOME/bin/cxappdev/docbuild" "$@"
+    [[ -x "$docbuild" ]] || { echo "Error: docbuild not found at $docbuild." >&2; exit 1; }
+    exec "$docbuild" "${original_args[@]}"
 fi
 
 ensure_docker_daemon_if_needed
 
-prepare_frontend_if_needed || exit 1
-
-# Only exclude docs from the full root build. Submodule builds like
-# docker/edge or backend/plugins should not be affected.
-if is_worktree && is_project_root && [[ -d "$git_root/docs" ]]; then
-    mvn_args+=("-pl" "!docs")
-    build_docs_separately=true
-fi
+format_frontend || exit $?
 
 # The license plugin uses jgit, which does not support linked worktrees.
 # Skip license formatting in worktrees to avoid a bare-repository error.
+# At the project root, also exclude docs from Maven and build them via
+# docbuild afterward, because Antora cannot resolve content sources from
+# a worktree.
 if is_worktree; then
     mvn_args+=("-Dlicense.skip=true")
+    if is_project_root && [[ -d "$git_root/docs" ]]; then
+        mvn_args+=("-pl" "!docs")
+        build_docs_separately=true
+    fi
 fi
 
 # Always format and fix license headers before compiling.
@@ -181,22 +193,23 @@ mvn $threads "${mvn_args[@]}" "${goals[@]}" || exit $?
 # that component. At the project root, finds all docker modules that
 # Maven built and rebuilds each.
 if [[ -n "$arch" ]]; then
+    [[ -f "$HOME/bin/cx.lib" ]] || { echo "Error: cx.lib not found at $HOME/bin/cx.lib." >&2; exit 1; }
     source "$HOME/bin/cx.lib"
     if needs_cross_build "$arch"; then
         require_project_root
         if is_projects_docker_context; then
-            local_comp=$(basename "$(realpath "$PWD")")
-            buildx_rebuild "$PROJECT_ROOT" "$local_comp" "$arch" || exit $?
+            componentName=$(basename "$(realpath "$PWD")")
+            buildx_rebuild "$PROJECT_ROOT" "$componentName" "$arch" || exit $?
         elif is_project_root; then
-            for assembled in "$PROJECT_ROOT"/docker/*/target/docker; do
-                [[ -d "$assembled" ]] || continue
-                local_comp=$(basename "$(dirname "$(dirname "$assembled")")")
-                buildx_rebuild "$PROJECT_ROOT" "$local_comp" "$arch" || exit $?
+            for dockerTargetDir in "$PROJECT_ROOT"/docker/*/target/docker; do
+                [[ -d "$dockerTargetDir" ]] || continue
+                componentName=$(basename "$(dirname "$(dirname "$dockerTargetDir")")")
+                buildx_rebuild "$PROJECT_ROOT" "$componentName" "$arch" || exit $?
             done
         fi
     fi
 fi
 
 if [[ "${build_docs_separately:-}" == true ]]; then
-    ( cd "$git_root/docs" && "$HOME/bin/cxappdev/docbuild" )
+    ( cd "$git_root/docs" && "$docbuild" )
 fi
