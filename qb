@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 #
-# Quick build. Wraps mvn with sensible defaults for local development,
-# running the code formatter and license header fixer before the
-# requested goals. Tests are skipped unless -t is passed.
+# Quick build for local development. Runs the formatter and license header
+# fixer before compiling so the build never fails over formatting drift,
+# and skips tests by default to keep iteration fast.
 #
-# Module-specific behavior triggered by working directory:
-#   docs/     Delegates to docbuild, bypassing maven entirely.
-#   frontend/ Runs yarn prettier before maven to prevent build failures.
+# In docs modules, delegates to docbuild because Antora cannot be driven
+# through Maven. In frontend modules, runs yarn prettier first because
+# the TypeScript compiler rejects unformatted code.
 #
-# Worktree support: Antora cannot resolve content from a git worktree,
-# so full builds from the project root exclude the docs module from
-# maven and build it separately via docbuild afterward.
+# In a git worktree, skips the license plugin because jgit does not support
+# linked worktrees. Full builds at the project root also exclude docs from
+# Maven and build them via docbuild afterward, because Antora cannot resolve
+# content sources from a worktree.
 
 skip_tests=true
 threads="-T6"
@@ -39,11 +40,20 @@ while [[ $# -gt 0 ]]; do
         -a|--arch) require_value "$1" "${2:-}"; arch="$2"; shift ;;
         -h|--help)
             echo "Usage: qb [OPTIONS] [MAVEN-GOALS]"
-            echo "Options:"
-            echo "  -t              Run tests"
-            echo "  -1              Single-thread maven build"
-            echo "  -a <platform>   Target architecture (default: auto-detect host)"
+            echo ""
+            echo "Wraps mvn for local development. Formats code and fixes license headers"
+            echo "before compiling so the build never fails over formatting drift."
+            echo "Default goal is install with 6 threads. Tests are skipped unless -t is passed."
+            echo ""
+            echo "  -t              Run tests, skipped by default to keep iteration fast"
+            echo "  -1              Single-threaded build, useful for debugging output order"
+            echo "  -T <n>          Override thread count, default is 6"
+            echo "  -a <platform>   Cross-compile Docker images via buildx after Maven for a"
+            echo "                  different CPU, for example linux/amd64 or linux/arm64."
+            echo "                  Set CONTAINER_ARCH in the environment to avoid repeating."
             echo "  -h              Show this help"
+            echo ""
+            echo "All other flags pass through to mvn, including -pl, -rf, -P, -am, and -f."
             exit 0
             ;;
         -T)
@@ -153,6 +163,12 @@ prepare_frontend_if_needed || exit 1
 if is_worktree && is_project_root && [[ -d "$git_root/docs" ]]; then
     mvn_args+=("-pl" "!docs")
     build_docs_separately=true
+fi
+
+# The license plugin uses jgit, which does not support linked worktrees.
+# Skip license formatting in worktrees to avoid a bare-repository error.
+if is_worktree; then
+    mvn_args+=("-Dlicense.skip=true")
 fi
 
 # Always format and fix license headers before compiling.
