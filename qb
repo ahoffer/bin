@@ -119,11 +119,10 @@ collapse_known_error_blocks() {
     perl -0pe 's/\n?\s*Node Version Check:\n(?:.*\n)*?\s*Project requires Node ([^\n]+)\nYou are running Node ([^\n]+)\n(?:    at .*\n)*/\nERROR Node version mismatch: requires $1; current $2\n/s'
 }
 
-( cwd=${PWD#"$HOME"}; [[ "$cwd" != "$PWD" ]] && cwd="~$cwd"
-  printf '%s %s@%s:%s$ qb%s\n' \
-      "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
-      "$USER" "${HOSTNAME%%.*}" "$cwd" \
-      "${original_args[*]:+ ${original_args[*]}}" )
+( branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+  shorthash=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+  printf '%s INFO Starting build "%s %s"\n' \
+      "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$branch" "$shorthash" )
 emit_log_level_info
 
 git_root=$(git rev-parse --show-toplevel 2>/dev/null) || true
