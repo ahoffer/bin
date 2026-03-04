@@ -30,6 +30,12 @@ my $threaded = $ENV{MVNFILTER_THREADED} // 0;
 
 while (my $line = <STDIN>) {
     if ($threaded) {
+        # Module start lines burst all at once when Maven schedules parallel
+        # threads. Without ordering guarantees they carry no useful progress
+        # signal, so demote to TRACE rather than drop so they are still
+        # available at v4.
+        $line =~ s/^(\S+\s+)INFO(\s+Building .+\s+\[\d+\/\d+\]\s*$)/$1TRACE$2/;
+
         # Compilation summary, single-threaded context tells you the module.
         next if $line =~ /^\S+ INFO Compiling \d+ source files?\b/;
         # Artifact install to local repo, module is already shown in the

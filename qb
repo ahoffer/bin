@@ -324,7 +324,7 @@ else
         | mvndockerdebug \
         | mvnbranchdebug \
         | mvnparallelcondense \
-        | mvnparalleldebug \
+        | mvnshadenoise \
         | mvnlevelcaps \
         | mvnzerofilesnoise \
         | MVNFILTER_THREADED=$filter_threaded mvnthreadednoise \

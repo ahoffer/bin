@@ -2,8 +2,9 @@
 use strict;
 use warnings;
 
-# Collapse Maven's multi-line parallel thread-safety warning block into a
-# single warning line so it does not flood the log.
+# Collapse Maven's multi-line parallel thread-safety warning block into two
+# lines: a short WARNING summary and a DEBUG line listing the unsafe plugins.
+# The WARNING stays visible at the default level; plugin names appear at v4.
 
 $| = 1;
 
@@ -50,7 +51,8 @@ while (my $line = <STDIN>) {
     if ($line =~ /^\Q$prefix\EWARNING Enable debug to see precisely which goals are not marked as thread-safe\.\s*$/) {
         my $plugin_text = @plugins ? join(', ', @plugins) : 'unknown plugin';
         my $scope_text = length($scope) ? " in $scope" : '';
-        print $prefix . 'WARNING Maven parallel execution plugin thread-safety warning' . $scope_text . ': ' . $plugin_text . "\n";
+        print $prefix . "WARNING Parallel build: not all plugins are thread-safe\n";
+        print $prefix . 'DEBUG Thread-unsafe plugins' . $scope_text . ': ' . $plugin_text . "\n";
         @raw = ();
         @plugins = ();
         $prefix = '';

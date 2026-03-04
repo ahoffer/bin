@@ -362,10 +362,9 @@ sub demote_expected_noise {
     downgrade($r, 'DEBUG', qr/^\[INFO\] skip non existing resourceDirectory /);
     downgrade($r, 'DEBUG', qr/^\[INFO\] No sources to compile\b/);
 
-    # fmt-maven-plugin reports zero files when a module has no Java source.
-    # The message confirms the plugin ran without error; with nothing to format
-    # it carries no actionable content.
-    downgrade($r, 'TRACE', qr/^\[INFO\] (?:info )?Processed 0 files/);
+    # fmt-maven-plugin and license plugin report processed file counts. Zero
+    # non-complying means the check passed; the count itself carries no signal.
+    downgrade($r, 'TRACE', qr/^\[INFO\] (?:info )?Processed \d+ files? \(0 non-complying\)/);
 
     # frontend-maven-plugin downloads and installs a local Node binary when
     # the required version is not already cached in the M2 repository. These
@@ -421,6 +420,19 @@ sub demote_expected_noise {
     # were embedded in the artifact, which is needed when tracing a release
     # back to a specific commit or verifying a CI build used the right branch.
     downgrade($r, 'TRACE', qr/^\[INFO\] Storing (?:buildNumber|scmBranch|buildScmBranch): /);
+
+    # Shade plugin warns when a shaded bundle contains module-info.class. This
+    # fires on every OSGi bundle shade and is expected; the shade plugin handles
+    # it correctly despite the warning.
+    downgrade($r, 'DEBUG', qr/^\[WARNING\] Discovered module-info\.class\./);
+
+    # Shade artifact replacement confirms the uber-jar was assembled. The build
+    # result communicates success or failure without this intermediate step.
+    downgrade($r, 'TRACE', qr/^\[INFO\] Replacing original artifact with shaded artifact\./);
+
+    # Shade inclusion lines enumerate every artifact bundled into the uber-jar.
+    # Useful when debugging missing classes; irrelevant during passing builds.
+    downgrade($r, 'TRACE', qr/^\[INFO\] Including .+ in the shaded jar\.$/);
 }
 
 # Emit a synthetic FAILED line immediately before a goal-execution error only
