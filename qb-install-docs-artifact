@@ -9,5 +9,5 @@ echo "INFO qb docs artifact: installing via temp clone"
 git clone --shared "$common" "$tmp" >/dev/null 2>&1
 git -C "$tmp" checkout --detach "$head" >/dev/null 2>&1
 cd "$tmp"
-MVNFILTER_LEVEL=$lvl mvn --no-transfer-progress -pl docs -Dlicense.skip=true -DskipTests -Djacoco.skip=true install | mvnfilter | mvnformat | mvnts | mvntrim | mvnyarnclean | mvnlevel | mvncolor
+MVNFILTER_LEVEL=$lvl mvn --no-transfer-progress -pl docs -Dlicense.skip=true -DskipTests -Djacoco.skip=true install | mvnfilter | mvnformat | mvnts | mvntrim | mvnyarnclean | MVNFILTER_LEVEL=$lvl mvnlevel | mvncolor
 exit ${PIPESTATUS[0]}

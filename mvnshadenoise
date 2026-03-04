@@ -6,8 +6,8 @@ use warnings;
 #
 # Category A: each "X.jar, Y.jar define N overlapping classes/resources:"
 # block is a header line followed by one "- item" line per overlap. The
-# header is rewritten to INFO and each item becomes a TRACE line, so the
-# summary is always visible and the full list appears at v4. Maven's
+# header is rewritten to DEBUG and each item becomes a TRACE line, so the
+# summary appears at v4 and the full list appears there too. Maven's
 # "- N more..." truncation marker is dropped because we collect every item.
 #
 # Category B: the multi-line "maven-shade-plugin has detected that some
@@ -23,7 +23,7 @@ my @items  = ();
 
 sub flush_resources {
     return unless $state eq 'resources';
-    print $prefix . "INFO Shade: $header\n";
+    print $prefix . "DEBUG Shade: $header\n";
     print $prefix . "TRACE $_\n" for @items;
     $state  = 'none';
     $prefix = '';
@@ -33,7 +33,7 @@ sub flush_resources {
 
 while (my $line = <STDIN>) {
     if ($state eq 'none') {
-        if ($line =~ /^(\S+\s+)WARNING\s+(.+\bdefine \d+ overlapping \w+:)\s*$/) {
+        if ($line =~ /^(\S+\s+)WARNING\s+(.+\bdefine \d+ overlapping [\w ]+:)\s*$/) {
             $state  = 'resources';
             $prefix = $1;
             $header = $2;
@@ -51,9 +51,11 @@ while (my $line = <STDIN>) {
 
     if ($state eq 'resources') {
         # Drop Maven's truncation marker; we already have all items.
-        next if $line =~ /^\Q$prefix\EWARNING\s+- \d+ more\b/;
+        # Use \S+\s+ instead of the captured prefix because items may arrive
+        # with a different timestamp (second boundary) than the header.
+        next if $line =~ /^\S+\s+WARNING\s+- \d+ more\b/;
 
-        if ($line =~ /^\Q$prefix\EWARNING\s+- (.+?)\s*$/) {
+        if ($line =~ /^\S+\s+WARNING\s+- (.+?)\s*$/) {
             push @items, "- $1";
             next;
         }
@@ -63,14 +65,14 @@ while (my $line = <STDIN>) {
     }
 
     if ($state eq 'explanation') {
-        if ($line =~ /^\Q$prefix\EWARNING\s+See https:\/\/maven\.apache\.org\//) {
-            print $prefix . "INFO Shade: overlapping resources in uber-jar, usually harmless\n";
+        if ($line =~ /^\S+\s+WARNING\s+See https:\/\/maven\.apache\.org\//) {
+            print $prefix . "DEBUG Shade: overlapping resources in uber-jar, usually harmless\n";
             $state  = 'none';
             $prefix = '';
             next;
         }
         # Discard all other lines in the explanatory block.
-        next if $line =~ /^\Q$prefix\EWARNING\s/;
+        next if $line =~ /^\S+\s+WARNING\s/;
         # Unexpected line; exit explanation state and pass through.
         $state  = 'none';
         $prefix = '';

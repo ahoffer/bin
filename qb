@@ -119,10 +119,8 @@ collapse_known_error_blocks() {
     perl -0pe 's/\n?\s*Node Version Check:\n(?:.*\n)*?\s*Project requires Node ([^\n]+)\nYou are running Node ([^\n]+)\n(?:    at .*\n)*/\nERROR Node version mismatch: requires $1; current $2\n/s'
 }
 
-( branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-  shorthash=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-  printf '%s INFO Starting build "%s %s"\n' \
-      "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$branch" "$shorthash" )
+_qb_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+_qb_hash=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 emit_log_level_info
 
 git_root=$(git rev-parse --show-toplevel 2>/dev/null) || true
@@ -311,10 +309,14 @@ install_docs_artifact_if_needed
 goals=(com.spotify.fmt:fmt-maven-plugin:format license:format "${goals[@]}")
 
 if [[ $filter_level -ge 5 ]]; then
+    printf '%s [INFO] Starting build "%s %s"\n' \
+        "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$_qb_branch" "$_qb_hash"
     MVNFILTER_LEVEL=$filter_level mvn $threads --no-transfer-progress "${mvn_args[@]}" "${goals[@]}"
     build_status=$?
 else
-    MVNFILTER_LEVEL=$filter_level mvn $threads --no-transfer-progress "${mvn_args[@]}" "${goals[@]}" \
+    { printf '[INFO] Starting build "%s %s"\n' "$_qb_branch" "$_qb_hash"
+      MVNFILTER_LEVEL=$filter_level mvn $threads --no-transfer-progress "${mvn_args[@]}" "${goals[@]}"
+    } \
         | MVNFILTER_THREADED=$filter_threaded mvnfilter \
         | mvnformat \
         | mvnts \
@@ -328,7 +330,7 @@ else
         | mvnlevelcaps \
         | mvnzerofilesnoise \
         | MVNFILTER_THREADED=$filter_threaded mvnthreadednoise \
-        | mvnlevel \
+        | MVNFILTER_LEVEL=$filter_level mvnlevel \
         | mvncolor
     build_status=${PIPESTATUS[0]}
 fi

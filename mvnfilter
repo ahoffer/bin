@@ -67,6 +67,7 @@ sub normalize {
     # them to uppercase so all downstream patterns match consistently.
     $$r =~ s/^\[([a-z]+)\]/sprintf('[%s]', uc($1))/e;
     $$r =~ s/^\[INFO\] (BUILD FAILURE)/[ERROR] $1/;
+    $$r =~ s/^\[INFO\] (BUILD SUCCESS)/[WARNING] $1/;
 }
 
 # Suppress the Reactor Build Order section that Maven prints at startup.
@@ -164,7 +165,7 @@ sub suppress_assembly {
 # plugin skip, JaCoCo skip, surefire/failsafe argline placeholder, test skip.
 sub suppress_lifecycle {
     my $r = shift;
-    return 1 if $$r =~ /^\[INFO\] Skipping format check:/;
+    return 1 if $$r =~ /^\[INFO\] Skipping format check\b/;
     return 1 if $$r =~ /^\[INFO\] License Plugin is Skipped/;
     return 1 if $$r =~ /^\[INFO\] Skipping JaCoCo execution/;
     return 1 if $$r =~ /^\[INFO\] (?:surefire|failsafe)ArgLine set to empty/;
@@ -434,9 +435,123 @@ sub demote_expected_noise {
     # result communicates success or failure without this intermediate step.
     downgrade($r, 'TRACE', qr/^\[INFO\] Replacing original artifact with shaded artifact\./);
 
+    # Spring Boot repackager renames the original jar to .original after creating
+    # the fat jar. The rename is structural; the "Replacing main artifact" line
+    # above it already communicates what happened.
+    downgrade($r, 'TRACE', qr/^\[INFO\] The original artifact has been renamed to /);
+
     # Shade inclusion lines enumerate every artifact bundled into the uber-jar.
     # Useful when debugging missing classes; irrelevant during passing builds.
     downgrade($r, 'TRACE', qr/^\[INFO\] Including .+ in the shaded jar\.$/);
+
+    # Assembly plugin copies each transitive dependency jar into the distribution.
+    # Hundreds of these fire per build; they add no signal beyond confirming the
+    # assembly ran, which the zip/tar creation line already communicates.
+    downgrade($r, 'TRACE', qr/^\[INFO\] Copying artifact: /);
+
+    # Assembly plugin cannot include pom-type artifacts that have no associated file.
+    # Fires for every pom module in the assembly descriptor and is structural.
+    downgrade($r, 'TRACE', qr/^\[WARNING\] Cannot include project artifact: .+:pom:/);
+
+    # Multi-release jar classes under META-INF/versions/ confuse the bundle plugin.
+    # These are structural JVM artifacts from libraries like SQLite and Lucene.
+    downgrade($r, 'TRACE', qr/^\[WARNING\] Bundle .+ : Classes found in the wrong directory:/);
+
+    # OSGi bundle exports packages whose implementation uses non-exported packages.
+    # Demote to DEBUG so the detail is visible when investigating deployment failures.
+    downgrade($r, 'DEBUG', qr/^\[WARNING\] Bundle .+ : Export .+,\s+has \d+,\s+private references/);
+
+    # Envfile property installs write build metadata to the local .m2 repository.
+    # One fires per module; they are bookkeeping noise, not build milestones.
+    downgrade($r, 'TRACE', qr/^\[INFO\] Installing .+ to .+-envfile\.properties$/);
+
+    # Shade plugin writes a dependency-reduced POM alongside the shaded artifact.
+    # Informational only; the artifact itself is the meaningful output.
+    downgrade($r, 'TRACE', qr/^\[INFO\] Dependency-reduced POM written at: /);
+
+    # Shade plugin replaces the original artifact with the shaded jar.
+    # The path-form variant includes full file paths rather than the generic message.
+    downgrade($r, 'TRACE', qr/^\[INFO\] Replacing .+\.jar with .+-shaded\.jar/);
+
+    # maven-bundle-plugin writes the OSGi manifest and OBR index as intermediate
+    # steps; the resulting bundle jar is the milestone, not these internal steps.
+    downgrade($r, 'TRACE', qr/^\[INFO\] Writing manifest: /);
+    downgrade($r, 'TRACE', qr/^\[INFO\] Writing OBR metadata\b/);
+
+    # Incremental compiler recompiles the module when a dependency changes. This
+    # fires for every module after fmt-maven-plugin touches source files during
+    # formatting, making it structural noise on every incremental build.
+    downgrade($r, 'TRACE', qr/^\[INFO\] Recompiling the module because of changed dependency\./);
+
+    # Compiler confirms no sources changed since the last compile. Structural in
+    # incremental builds; the build result communicates pass/fail without it.
+    downgrade($r, 'TRACE', qr/^\[INFO\] Nothing to compile - all classes are up to date\./);
+
+    # Xlint advisory notes: the compiler emits a note for every file that uses
+    # unchecked or deprecated APIs, then a follow-up prompting -Xlint. These
+    # appear en masse for generated code and test utilities. Available at v4.
+    downgrade($r, 'TRACE', qr/\buses (?:unchecked or unsafe operations|or overrides a deprecated API)\./);
+    downgrade($r, 'TRACE', qr/\bRecompile with -Xlint:(?:unchecked|deprecation) for details\./);
+    downgrade($r, 'TRACE', qr/\bSome input files use unchecked or unsafe operations\./);
+
+    # CXF wsdl2java plugin logs each WSDL file it chooses not to process. These
+    # fire for every WSDL resource in the source tree and carry no build signal.
+    downgrade($r, 'TRACE', qr/^\[INFO\] Ignoring: file:/);
+
+    # Assembly and codegen plugins log the artifact coordinates they are
+    # processing as they configure the descriptor. One fires per dependency in
+    # the assembly; they are bookkeeping noise, not build milestones.
+    downgrade($r, 'TRACE', qr/^\[INFO\] Configured Artifact: /);
+
+    # Helm chart plugin prints setup chatter on every build: repo-exists checks,
+    # repo-update progress, and chart dependency downloads. Keep "Successfully
+    # packaged" at INFO since it confirms the chart artifact was produced.
+    downgrade($r, 'TRACE', qr/^\[INFO\] \[mvn-builder-cx-helm-chart\] (?!Successfully packaged)/);
+
+    # "Some input files use or override a deprecated API" is the aggregate form
+    # of the per-file Note: uses or overrides a deprecated API note. The per-file
+    # form is already matched by the \buses pattern; this covers the plural form.
+    downgrade($r, 'TRACE', qr/\bSome input files use or override a deprecated API\./);
+
+    # ANTLR4 annotation processor declares source version RELEASE_6 and fires
+    # this warning on every module compiled with --source 17. It is a stale
+    # annotation in the upstream library and does not affect build output.
+    downgrade($r, 'DEBUG', qr/^\[WARNING\] Supported source version 'RELEASE_\d+' from annotation processor .+ less than -source '\d+'/);
+
+    # Docker builds run ffmpeg and gst-launch sanity checks during image layer
+    # execution. The version banners carry no build signal.
+    downgrade($r, 'TRACE', qr/^\[INFO\] DOCKER> ffmpeg version \d/);
+    downgrade($r, 'TRACE', qr/^\[INFO\] DOCKER> gst-launch-1\.0 version /);
+
+    # Karaf features plugin intermediate steps. The features-verified result
+    # line is not matched here and stays at INFO.
+    downgrade($r, 'TRACE', qr/^\[INFO\] Generation not enabled\s*$/);
+    downgrade($r, 'TRACE', qr/^\[INFO\] Attaching artifact\s*$/);
+    downgrade($r, 'TRACE', qr/^\[INFO\] Using (?:repositories|local repository at): /);
+    downgrade($r, 'TRACE', qr/^\[INFO\] Installing .+features\.xml\b/);
+
+    # Cache-hit confirmation from the DDF dependency unpack step. Repeats on
+    # every build where the zip is already present.
+    downgrade($r, 'TRACE', qr/^\[INFO\] .+\.zip already unpacked\b/);
+
+    # Generic task start and end markers emitted with no goal or module context.
+    downgrade($r, 'TRACE', qr/^\[INFO\] Execut(?:ing|ed) tasks\s*$/);
+
+    # Next.js prints a static/dynamic legend after the route table. The table
+    # itself is at DEBUG so the legend follows at the same level for context.
+    downgrade($r, 'DEBUG', qr/^\[INFO\] [\x80-\xFF]+\s+\((?:Static|Dynamic)\)\s+/);
+
+    # json tool confirmation that it updated a JSON file in-place. Fires for
+    # package.json updates in the frontend build and carries no build signal.
+    downgrade($r, 'TRACE', qr/^\[INFO\] json: updated ".+" in-place\s*$/);
+
+    # Apollo GraphQL code generation progress lines. "Task started" and "Task
+    # finished" stay at INFO as build milestones; intermediate steps do not.
+    downgrade($r, 'TRACE', qr/^\[INFO\] Generating service: /);
+    downgrade($r, 'TRACE', qr/^\[INFO\] Read schema file\b/);
+    downgrade($r, 'TRACE', qr/^\[INFO\] Read (?:querie|fragment)\S* files\b/);
+    downgrade($r, 'TRACE', qr/^\[INFO\] Add the compiled sources from .+ to project root\b/);
+    downgrade($r, 'TRACE', qr/^\[INFO\] Total time: \d+\.\d+ s\s*$/);
 }
 
 # Emit a synthetic FAILED line immediately before a goal-execution error only
