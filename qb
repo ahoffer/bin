@@ -20,7 +20,7 @@
 
 skip_tests=true
 threads="-T6"
-filter_level="${MVNFILTER_LEVEL:-3}"
+filter_level="${MVNFILTER_LEVEL:-4}"
 filter_threaded=1
 mvn_args=()
 goals=()
@@ -85,11 +85,13 @@ Default goal is install with 6 threads. Tests are skipped unless -t is passed.
   -t              Run tests, skipped by default to keep iteration fast
   -1              Single-threaded build, useful for debugging output order
   -v0             Silent
-  -v1             Errors only (maximally clean)
-  -v2             Errors and warnings (maximally clean)
-  -v3             Default, errors, warnings, and info with module progress
-  -v4             Include debug output and plugin goal lines (use with mvn -X)
-  -v5             Raw Maven output, no filtering
+  -v1             Maven stderr only, stdout suppressed
+  -v2             v1 plus qb metadata and [ERROR] lines
+  -v3             v2 plus [WARNING] lines
+  -v4             Default, v3 plus [INFO] lines
+  -v5             v4 plus demoted [DEBUG] lines
+  -v6             v5 plus demoted [TRACE] lines
+  -v7             Raw Maven output, no filtering
   -T <n>          Override thread count, default is 6
   -a <platform>   Cross-compile Docker images via buildx after Maven for a
                   different CPU, for example linux/amd64 or linux/arm64.
@@ -131,10 +133,12 @@ emit_log_level_info() {
     local label
     case "$filter_level" in
         0) label="silent" ;;
-        1) label="errors" ;;
-        2) label="warnings" ;;
-        3) label="info" ;;
-        4) label="debug" ;;
+        1) label="stderr" ;;
+        2) label="errors" ;;
+        3) label="warnings" ;;
+        4) label="info" ;;
+        5) label="debug" ;;
+        6) label="trace" ;;
         *) label="raw" ;;
     esac
     emit_qb_info "qb log level: v${filter_level} (${label})"
@@ -146,9 +150,11 @@ collapse_known_error_blocks() {
 
 _qb_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 _qb_hash=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-qb_emit_timing=1
-emit_qb_info "qb start: ${qb_started_iso}"
-emit_log_level_info
+if [[ $filter_level -ge 2 ]]; then
+    qb_emit_timing=1
+    emit_qb_info "qb start: ${qb_started_iso}"
+    emit_log_level_info
+fi
 
 git_root=$(git rev-parse --show-toplevel 2>/dev/null) || true
 
@@ -334,9 +340,15 @@ fi
 install_docs_artifact_if_needed
 
 # Always format and fix license headers before compiling.
-goals=(com.spotify.fmt:fmt-maven-plugin:format license:format "${goals[@]}")
+goals=(com.spotify.fmt:fmt-maven-plugin:format license:update-file-header "${goals[@]}")
 
-if [[ $filter_level -ge 5 ]]; then
+if [[ $filter_level -eq 0 ]]; then
+    MVNFILTER_LEVEL=$filter_level mvn $threads --no-transfer-progress "${mvn_args[@]}" "${goals[@]}" >/dev/null 2>&1
+    build_status=$?
+elif [[ $filter_level -eq 1 ]]; then
+    MVNFILTER_LEVEL=$filter_level mvn $threads --no-transfer-progress "${mvn_args[@]}" "${goals[@]}" >/dev/null
+    build_status=$?
+elif [[ $filter_level -ge 7 ]]; then
     printf '%s [INFO] Starting build "%s %s"\n' \
         "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$_qb_branch" "$_qb_hash"
     MVNFILTER_LEVEL=$filter_level mvn $threads --no-transfer-progress "${mvn_args[@]}" "${goals[@]}"

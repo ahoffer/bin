@@ -20,15 +20,15 @@ $| = 1;
 # Reactor summary SUCCESS/FAILURE lines are collapsed to the module name,
 # with FAILURE lines promoted to ERROR level.
 #
-# Severity-level filtering (MVNFILTER_LEVEL 0-4) is handled downstream by
-# mvnlevel. Set MVNFILTER_LEVEL=9 to bypass all suppression in this script.
+# Severity-level filtering (MVNFILTER_LEVEL 0-6) is handled downstream by
+# mvnlevel. Set MVNFILTER_LEVEL=7 or higher to bypass all suppression in this script.
 #
 # Expected-noise lines are demoted from INFO or WARNING to DEBUG or TRACE by
 # demote_expected_noise so they are hidden at the default level but visible
 # with -v4.
 
 my $lvl_env = $ENV{MVNFILTER_LEVEL} // '';
-my $raw_mode = ($lvl_env eq '5' || $lvl_env eq '9');
+my $raw_mode = ($lvl_env ne '' && $lvl_env =~ /^[0-9]+$/ && $lvl_env >= 7);
 my $allow_synthetic = (($ENV{MVNFILTER_THREADED} // '0') eq '0');
 
 my $in_reactor_order = 0;

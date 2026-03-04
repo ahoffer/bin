@@ -9,16 +9,16 @@ use warnings;
 $| = 1;
 
 my $level = do {
-    my $raw = $ENV{MVNFILTER_LEVEL} // 1;
-    ($raw =~ /^[0-9]$/) ? int($raw) : 1;
+    my $raw = $ENV{MVNFILTER_LEVEL} // 4;
+    ($raw =~ /^[0-9]$/) ? int($raw) : 4;
 };
 
 while (my $line = <STDIN>) {
     if ($line =~ /^(?:\S+\s+)?YN(?:0002|0060|0086):/) {
-        next if $level <= 3;
+        next if $level <= 4;
     }
     if ($line =~ /^(?:\S+\s+)?YN(?!0000)\d+:/) {
-        next if $level <= 1;
+        next if $level <= 2;
     }
     print $line;
 }

@@ -5,14 +5,14 @@ use warnings;
 # Suppresses yarn progress and boilerplate that does not help diagnose
 # failures. The goal is to keep direct yarn runs readable by preserving real
 # errors while removing status updates that only confirm work is happening.
-# At MVNFILTER_LEVEL <= 3, also suppresses per-file prettier output like
+# At MVNFILTER_LEVEL <= 4, also suppresses per-file prettier output like
 # "app/src/foo.tsx 4ms (unchanged)".
 
 $| = 1;
 
 my $level = do {
-    my $raw = $ENV{MVNFILTER_LEVEL} // 1;
-    ($raw =~ /^[0-9]$/) ? int($raw) : 1;
+    my $raw = $ENV{MVNFILTER_LEVEL} // 4;
+    ($raw =~ /^[0-9]$/) ? int($raw) : 4;
 };
 
 while (my $line = <STDIN>) {
@@ -23,6 +23,6 @@ while (my $line = <STDIN>) {
     next if $line =~ /^\[\d+\/\d+\] /;
     next if $line =~ /^\$ yarn /;
     next if $line =~ /^Done in \d/;
-    next if $level <= 3 && $line =~ /^\S+ \d+ms\b/;
+    next if $level <= 4 && $line =~ /^\S+ \d+ms\b/;
     print $line;
 }

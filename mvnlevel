@@ -9,40 +9,43 @@ $| = 1;
 # noise during normal iteration; a higher level surfaces diagnostic detail
 # when investigating failures. Reads MVNFILTER_LEVEL from the environment
 # so all pipeline stages share one setting without requiring explicit passing.
-# Default is 3 (INFO); invalid values fall back to 3.
+# Default is 4 (INFO); invalid values fall back to 4.
 # Input format after mvntrim: TIMESTAMP LEVEL message.
 #
 # Severity order, most to least critical: ERROR, WARNING, INFO, DEBUG, TRACE, RAW.
 # Each level shows all lines at or above its threshold in this hierarchy.
 #
 # Level gate:
-#   0  silent (suppress everything; useful when only exit code matters)
-#   1  ERROR only (maximally clean; shows only hard build failures)
-#   2  WARNING and ERROR (shows warnings that may require action)
-#   3  INFO, WARNING, ERROR with plugin goal banners suppressed (default)
-#   4  DEBUG and TRACE included; surfaces demoted-noise lines for diagnosis
-#   5  raw bypass, handled upstream in qb before the pipeline; passes all through
-#   9  backward-compat alias for 5
+#   0  silent, suppress everything, useful when only exit code matters
+#   1  not reached, stderr-only handled upstream in qb, treated as 2 here
+#   2  ERROR only, maximally clean, shows only hard build failures
+#   3  WARNING and ERROR, shows warnings that may require action
+#   4  INFO, WARNING, ERROR with plugin goal banners suppressed (default)
+#   5  DEBUG included, surfaces demoted-noise lines for diagnosis
+#   6  TRACE included, deepest diagnostic detail
+#   7+ raw bypass, handled upstream in qb before the pipeline
 
-my $raw_level = $ENV{MVNFILTER_LEVEL} // '3';
-my $level = ($raw_level =~ /^[0-9]$/) ? int($raw_level) : 3;
-$level = 5 if $level == 9;
-$level = 3 unless $level >= 0 && $level <= 5;
+my $raw_level = $ENV{MVNFILTER_LEVEL} // '4';
+my $level = ($raw_level =~ /^[0-9]$/) ? int($raw_level) : 4;
+$level = 4 unless $level >= 0 && $level <= 7;
 
 while (my $line = <STDIN>) {
     if ($level == 0) {
         next;
-    } elsif ($level >= 4) {
+    } elsif ($level >= 6) {
         print $line;
-    } elsif ($level == 3) {
+    } elsif ($level == 5) {
+        next if $line =~ /^\S+ TRACE /;
+        print $line;
+    } elsif ($level == 4) {
         next if $line =~ /^\S+ (?:DEBUG|TRACE) /;
         next if $line =~ /^\S+ INFO ---/;
         print $line;
-    } elsif ($level == 2) {
+    } elsif ($level == 3) {
         next if $line =~ /^\S+ (?:DEBUG|TRACE) /;
         next if $line =~ /^\S+ INFO /;
         print $line;
-    } elsif ($level == 1) {
+    } elsif ($level <= 2) {
         next if $line =~ /^\S+ (?:DEBUG|TRACE) /;
         next if $line =~ /^\S+ INFO /;
         next if $line =~ /^\S+ WARNING /;

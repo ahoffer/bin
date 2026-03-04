@@ -44,7 +44,18 @@ Messages like `Processed 0 files (0 non-complying).` do not help a developer dec
 
 ### `mvnlevel`
 
-This is the actual severity gate. Everything before it decides whether a message should be rewritten, normalized, condensed, or reclassified. `mvnlevel` decides whether that message belongs in the selected verbosity at all. The default `qb` mode is `INFO`, so `DEBUG` stays hidden unless the user explicitly asks for more detail.
+This is the actual severity gate. Everything before it decides whether a message should be rewritten, normalized, condensed, or reclassified. `mvnlevel` decides whether that message belongs in the selected verbosity at all. The default `qb` mode is `v4` (INFO), so `DEBUG` and `TRACE` stay hidden unless the user asks for more detail with `-v5` or `-v6`. The full gate is:
+
+| Flag | Label    | What reaches the terminal |
+|------|----------|---------------------------|
+| v0   | silent   | nothing |
+| v1   | stderr   | Maven OS stderr only, stdout suppressed |
+| v2   | errors   | v1 plus qb metadata and ERROR lines |
+| v3   | warnings | v2 plus WARNING lines |
+| v4   | info     | v3 plus INFO lines (default) |
+| v5   | debug    | v4 plus demoted DEBUG lines |
+| v6   | trace    | v5 plus demoted TRACE lines |
+| v7   | raw      | unfiltered Maven stdout and stderr |
 
 ### `mvncolor`
 
