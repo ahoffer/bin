@@ -2,7 +2,6 @@
 set -euo pipefail
 
 HOST="bigfish"
-PORT="14501"
 LOG="$HOME/Library/Logs/xpra-healthcheck.log"
 
 log() { echo "$(date -u +%FT%TZ) $*" >> "$LOG"; }
@@ -10,14 +9,16 @@ log() { echo "$(date -u +%FT%TZ) $*" >> "$LOG"; }
 # macOS lacks GNU timeout; use perl alarm as a portable alternative.
 _timeout() { perl -e 'alarm shift; exec @ARGV or die $!' -- "$@"; }
 
+# Format: "port/connect-script". Add a line here when a new session is introduced.
+sessions=("14501/xpra-bigfish" "14502/xpra-signal")
+
 # Exit quietly if bigfish is unreachable (prevents launchd restart loops).
 if ! nc -z -w 2 "$HOST" 22 >/dev/null 2>&1; then
     exit 0
 fi
 
-# Kill any Xpra process that has no established connection to the server.
-# Runs on every pass to prevent stale processes accumulating.
-connected_pids=$(lsof -nP -iTCP:${PORT} -sTCP:ESTABLISHED 2>/dev/null \
+# Kill any Xpra process that has no established connection to any known xpra port.
+connected_pids=$(lsof -nP -iTCP:14501 -iTCP:14502 -sTCP:ESTABLISHED 2>/dev/null \
     | awk 'NR>1 {print $2}' | sort -u)
 while IFS= read -r stale_pid; do
     if ! echo "$connected_pids" | grep -qx "$stale_pid"; then
@@ -26,27 +27,36 @@ while IFS= read -r stale_pid; do
     fi
 done < <(pgrep -x Xpra 2>/dev/null || true)
 
-# Check SSH tunnel is up and xpra server responds through it.
-tunnel_up=false
-probe_ok=false
-lsof -nP -iTCP:${PORT} -sTCP:LISTEN >/dev/null 2>&1 && tunnel_up=true
+# Check each session and reconnect only the ones that are unhealthy.
+for entry in "${sessions[@]}"; do
+    port="${entry%%/*}"
+    connect_script="${entry##*/}"
+    # Must match the control socket path used by the corresponding connect script.
+    control_path="${HOME}/.ssh/cm-xpra-${HOST}-${port}"
 
-if $tunnel_up; then
-    xpra_info=$( _timeout 10 /Applications/Xpra.app/Contents/MacOS/Xpra info \
-        "tcp://127.0.0.1:${PORT}" 2>&1 || true )
-    [ -n "$xpra_info" ] && probe_ok=true
-fi
+    tunnel_up=false
+    probe_ok=false
+    lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1 && tunnel_up=true
 
-if $tunnel_up && $probe_ok; then
-    exit 0
-fi
+    if $tunnel_up; then
+        xpra_info=$( _timeout 10 /Applications/Xpra.app/Contents/MacOS/Xpra info \
+            "tcp://127.0.0.1:${port}" 2>&1 || true )
+        [ -n "$xpra_info" ] && probe_ok=true
+    fi
 
-log "unhealthy (tunnel=$tunnel_up probe=$probe_ok), reconnecting"
+    if $tunnel_up && $probe_ok; then
+        continue
+    fi
 
-# Clean up stale processes.
-pkill -x Xpra 2>/dev/null || true
-pkill -f "ssh.*${PORT}:127.0.0.1:${PORT}" 2>/dev/null || true
-sleep 2
+    log "port $port unhealthy (tunnel=$tunnel_up probe=$probe_ok), reconnecting via $connect_script"
 
-# Reconnect.
-"$(dirname "$0")/xpra-bigfish"
+    # Kill only the Xpra client bound to this port and its dedicated tunnel.
+    # Avoid killing unrelated SSH sessions that may share the same destination host.
+    lsof -nP -iTCP:"${port}" -sTCP:ESTABLISHED 2>/dev/null | awk '$1=="Xpra" {print $2}' \
+        | sort -u | xargs -r kill -9 2>/dev/null || true
+    ssh -S "${control_path}" -O exit "${HOST}" >/dev/null 2>&1 || true
+    pkill -f "ssh.*-o ControlPath=${control_path}.*${port}:127.0.0.1:${port}" 2>/dev/null || true
+    sleep 2
+
+    "$(dirname "$0")/$connect_script"
+done

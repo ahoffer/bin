@@ -2,25 +2,23 @@
 set -euo pipefail
 
 HOST="bigfish"
-PORT="14501"
+PORT="14502"
 # Dedicated control socket keeps this tunnel isolated from shared SSH masters.
 CONTROL_PATH="${HOME}/.ssh/cm-xpra-${HOST}-${PORT}"
 
-# This attaches the local macOS Xpra.app client to the long-lived xpra server on bigfish.
-# Once attached, remote GUI apps appear through the normal Xpra app/window flow on macOS.
-# The remote X11 display can then be targeted directly for visible GUI automation, eg:
-#   DISPLAY=:100 npx playwright test
+# Attaches the local macOS Xpra.app client to the long-lived xpra server on bigfish.
+# The remote X11 display :101 hosts the Signal Desktop session.
 # Verify the active display on bigfish with:
 #   xpra list
-#   DISPLAY=:100 xdpyinfo | head
+#   DISPLAY=:101 xdpyinfo | head
 
-# Assumes SSH key auth is configured so `ssh ${HOST}` does not prompt.
-# Bail out quietly if host is unreachable (prevents launchd restart loops)
+# Assumes SSH key auth is configured so ssh bigfish does not prompt.
+# Bail out quietly if host is unreachable (prevents launchd restart loops).
 if ! nc -z -w 2 "${HOST}" 22 >/dev/null 2>&1; then
   exit 0
 fi
 
-# Ensure tunnel is up (reuse if already present)
+# Ensure tunnel is up (reuse if already present).
 if ! lsof -nP -iTCP:${PORT} -sTCP:LISTEN >/dev/null 2>&1; then
   mkdir -p "${HOME}/.ssh"
   # Force a per-port master so watchdog cleanup can target only this tunnel.
@@ -33,7 +31,7 @@ if ! lsof -nP -iTCP:${PORT} -sTCP:LISTEN >/dev/null 2>&1; then
     -N -f -L ${PORT}:127.0.0.1:${PORT} ${HOST} || exit 0
 fi
 
-LOG="$HOME/Library/Logs/xpra-bigfish.log"
+LOG="$HOME/Library/Logs/xpra-signal.log"
 for i in 6 5 4 3 2 1; do
   [ -f "${LOG}.${i}" ] && mv "${LOG}.${i}" "${LOG}.$((i+1))"
 done
