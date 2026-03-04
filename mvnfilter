@@ -63,6 +63,9 @@ sub normalize {
     $$r =~ s/\r//g;
     $$r =~ s/\e\[[0-9;]*[a-zA-Z]//g;
     $$r =~ s/\s*->\s*\[Help \d+\]\s*(?=\s*$)//;
+    # fmt-maven-plugin emits lowercase [info]/[warning]/[error] tags. Normalize
+    # them to uppercase so all downstream patterns match consistently.
+    $$r =~ s/^\[([a-z]+)\]/sprintf('[%s]', uc($1))/e;
     $$r =~ s/^\[INFO\] (BUILD FAILURE)/[ERROR] $1/;
 }
 
@@ -363,8 +366,9 @@ sub demote_expected_noise {
     downgrade($r, 'DEBUG', qr/^\[INFO\] No sources to compile\b/);
 
     # fmt-maven-plugin and license plugin report processed file counts. Zero
-    # non-complying means the check passed; the count itself carries no signal.
-    downgrade($r, 'TRACE', qr/^\[INFO\] (?:info )?Processed \d+ files? \(0 non-complying\)/);
+    # non-complying or zero reformatted means the check passed; the count
+    # carries no signal.
+    downgrade($r, 'TRACE', qr/^\[INFO\] (?:info )?Processed \d+ files? \(0 (?:non-complying|reformatted)\)/);
 
     # frontend-maven-plugin downloads and installs a local Node binary when
     # the required version is not already cached in the M2 repository. These
