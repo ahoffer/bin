@@ -22,4 +22,5 @@ cleanup() {
 }
 trap cleanup EXIT
 
-script -q -f --log-out "$rawFile" -- "$realBinary" "$@"
+cmd=$(printf '%q ' "$realBinary" "$@")
+script -q -f -e -O "$rawFile" -c "$cmd"
