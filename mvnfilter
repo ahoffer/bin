@@ -34,14 +34,18 @@ my $allow_synthetic = (($ENV{MVNFILTER_THREADED} // '0') eq '0');
 my $in_reactor_order = 0;
 my $last_module_name;     # Most recently started module, for BUILT and Licenses.
 my $license_emitted;      # Whether a Licenses line has been emitted for the current module.
+my %missing_test_source_seen;   # Deduplicate repeated missing-test-source lines per module.
+my %missing_resource_dir_seen;  # Deduplicate repeated missing-resource-directory lines per module.
 
 while (my $line = <STDIN>) {
     normalize(\$line);
     if ($raw_mode) { print $line; next }
 
+    rewrite_expected_noise(\$line);
     demote_expected_noise(\$line);
     next if suppress_reactor_order(\$line);
     next if handle_module_header(\$line);
+    next if suppress_duplicate_expected_noise(\$line);
     next if suppress_noise(\$line);
     next if handle_license_activity(\$line);
     next if suppress_docker(\$line);
@@ -68,6 +72,14 @@ sub normalize {
     $$r =~ s/^\[([a-z]+)\]/sprintf('[%s]', uc($1))/e;
     $$r =~ s/^\[INFO\] (BUILD FAILURE)/[ERROR] $1/;
     $$r =~ s/^\[INFO\] (BUILD SUCCESS)/[WARNING] $1/;
+}
+
+# Normalize plugin-grammar quirks so expected-noise lines are readable and
+# consistent before level demotion and deduplication logic runs.
+sub rewrite_expected_noise {
+    my $r = shift;
+    $$r =~ s/^\[INFO\] No sources to compile\s*$/[INFO] No sources to compile.\n/;
+    $$r =~ s{^\[INFO\] skip non existing resourceDirectory (.+?)\s*$}{[INFO] Skipping nonexistent resource directory: $1\n};
 }
 
 # Suppress the Reactor Build Order section that Maven prints at startup.
@@ -97,7 +109,27 @@ sub handle_module_header {
     print "[INFO] Building $module" . (defined $progress ? " [$progress]" : "") . "\n";
     $last_module_name = $module;
     $license_emitted = undef;
+    %missing_test_source_seen = ();
+    %missing_resource_dir_seen = ();
     return 1;
+}
+
+# Maven plugins can emit the same missing-directory notice multiple times in a
+# single module (for example fmt:format and fmt:check). Keep the first line and
+# suppress repeats until the next module starts.
+sub suppress_duplicate_expected_noise {
+    my $r = shift;
+    if ($$r =~ /^\[(?:INFO|DEBUG|TRACE)\] (?:Test )?[Ss]ource directory '(.+?)' does not exist\.?\s*$/) {
+        my $key = lc $1;
+        return 1 if $missing_test_source_seen{$key}++;
+        return 0;
+    }
+    if ($$r =~ /^\[(?:INFO|DEBUG|TRACE)\] Skipping nonexistent resource directory: (.+?)\s*$/) {
+        my $key = lc $1;
+        return 1 if $missing_resource_dir_seen{$key}++;
+        return 0;
+    }
+    return 0;
 }
 
 # Suppress structural noise: separator lines, mojo markers, blank level lines,
@@ -169,21 +201,18 @@ sub suppress_lifecycle {
     return 1 if $$r =~ /^\[INFO\] License Plugin is Skipped/;
     return 1 if $$r =~ /^\[INFO\] Skipping JaCoCo execution/;
     return 1 if $$r =~ /^\[INFO\] (?:surefire|failsafe)ArgLine set to empty/;
-    return 1 if $$r =~ /^\[INFO\] Tests are skipped\./;
     return 1 if $$r =~ /^\[INFO\] Test Source directory:/;
     return 1 if $$r =~ /^\[INFO\] Skipping execution\./;
     return 0;
 }
 
-# Suppress SCM buildnumber-plugin chatter: git invocation details and stored
-# values. These lines only restate branch bookkeeping and do not change how a
-# developer reacts to the build result.
+# Suppress SCM buildnumber-plugin chatter: git invocation details that do not
+# change how a developer reacts to the build result.
 sub suppress_scm {
     my $r = shift;
     return 1 if $$r =~ /^\[INFO\] ShortRevision tag detected\./;
     return 1 if $$r =~ /^\[INFO\] Executing: \/bin\/sh/;
     return 1 if $$r =~ /^\[INFO\] Working directory: /;
-    return 1 if $$r =~ /^\[INFO\] Storing (?:buildNumber|scmBranch|buildScmBranch): /;
     return 0;
 }
 
@@ -363,8 +392,8 @@ sub demote_expected_noise {
     # Non-Java modules have no src/main/resources or src/test/resources by
     # design. Maven notes the absence every build, but it is structural and
     # not a problem to fix.
-    downgrade($r, 'DEBUG', qr/^\[INFO\] skip non existing resourceDirectory /);
-    downgrade($r, 'DEBUG', qr/^\[INFO\] No sources to compile\b/);
+    downgrade($r, 'DEBUG', qr/^\[INFO\] Skipping nonexistent resource directory: /);
+    downgrade($r, 'DEBUG', qr/^\[INFO\] No sources to compile\.\s*$/);
 
     # fmt-maven-plugin and license plugin report processed file counts. Zero
     # non-complying or zero reformatted means the check passed; the count
@@ -478,6 +507,11 @@ sub demote_expected_noise {
     downgrade($r, 'TRACE', qr/^\[INFO\] Writing manifest: /);
     downgrade($r, 'TRACE', qr/^\[INFO\] Writing OBR metadata\b/);
 
+    # maven-bundle-plugin emits a second "Installing" line with a relative
+    # bundle path but no source or destination details. Keep it available for
+    # diagnosis without cluttering INFO where the full install context appears.
+    downgrade($r, 'TRACE', qr/^\[INFO\] Installing [^\/\s].+\.jar\s*$/);
+
     # Incremental compiler recompiles the module when a dependency changes. This
     # fires for every module after fmt-maven-plugin touches source files during
     # formatting, making it structural noise on every incremental build.
@@ -485,7 +519,7 @@ sub demote_expected_noise {
 
     # Compiler confirms no sources changed since the last compile. Structural in
     # incremental builds; the build result communicates pass/fail without it.
-    downgrade($r, 'TRACE', qr/^\[INFO\] Nothing to compile - all classes are up to date\./);
+    downgrade($r, 'DEBUG', qr/^\[INFO\] Nothing to compile - all classes are up to date\./);
 
     # Xlint advisory notes: the compiler emits a note for every file that uses
     # unchecked or deprecated APIs, then a follow-up prompting -Xlint. These
@@ -551,7 +585,7 @@ sub demote_expected_noise {
     downgrade($r, 'TRACE', qr/^\[INFO\] Read schema file\b/);
     downgrade($r, 'TRACE', qr/^\[INFO\] Read (?:querie|fragment)\S* files\b/);
     downgrade($r, 'TRACE', qr/^\[INFO\] Add the compiled sources from .+ to project root\b/);
-    downgrade($r, 'TRACE', qr/^\[INFO\] Total time: \d+\.\d+ s\s*$/);
+    downgrade($r, 'TRACE', qr/^\[INFO\] Total time:\s+\d+(?:\.\d+)?\s+s(?: \(Wall Clock\))?\s*$/);
 }
 
 # Emit a synthetic FAILED line immediately before a goal-execution error only

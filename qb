@@ -33,6 +33,31 @@ arch="${QB_ARCH:-}"
 original_args=("$@")
 readonly docbuild="$HOME/bin/cxappdev/docbuild"
 
+now_iso_utc() {
+    date -u '+%Y-%m-%dT%H:%M:%SZ'
+}
+
+emit_qb_info() {
+    printf '%s INFO %s\n' "$(now_iso_utc)" "$1"
+}
+
+qb_started_epoch=$(date +%s)
+qb_started_iso=$(now_iso_utc)
+qb_emit_timing=0
+
+emit_qb_timing_on_exit() {
+    local status=$?
+    [[ "${qb_emit_timing:-0}" -eq 1 ]] || return "$status"
+    local qb_finished_epoch qb_finished_iso qb_elapsed
+    qb_finished_epoch=$(date +%s)
+    qb_finished_iso=$(now_iso_utc)
+    qb_elapsed=$((qb_finished_epoch - qb_started_epoch))
+    emit_qb_info "qb exit: ${qb_finished_iso} (status ${status})"
+    emit_qb_info "qb wall clock: ${qb_elapsed}s"
+}
+
+trap emit_qb_timing_on_exit EXIT
+
 require_value() {
     local opt="$1"
     local val="${2:-}"
@@ -112,7 +137,7 @@ emit_log_level_info() {
         4) label="debug" ;;
         *) label="raw" ;;
     esac
-    printf 'INFO qb log level: v%s (%s)\n' "$filter_level" "$label"
+    emit_qb_info "qb log level: v${filter_level} (${label})"
 }
 
 collapse_known_error_blocks() {
@@ -121,6 +146,8 @@ collapse_known_error_blocks() {
 
 _qb_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 _qb_hash=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+qb_emit_timing=1
+emit_qb_info "qb start: ${qb_started_iso}"
 emit_log_level_info
 
 git_root=$(git rev-parse --show-toplevel 2>/dev/null) || true
@@ -280,7 +307,8 @@ ensure_colima_space_if_needed() {
 # The docs module uses Antora, not javac, so skip maven entirely.
 if is_docs_context; then
     [[ -x "$docbuild" ]] || { echo "Error: docbuild not found at $docbuild." >&2; exit 1; }
-    exec "$docbuild" "${original_args[@]}"
+    "$docbuild" "${original_args[@]}"
+    exit $?
 fi
 
 ensure_docker_daemon_if_needed
@@ -345,7 +373,7 @@ fi
 # that component. At the project root, finds all docker modules that
 # Maven built and rebuilds each.
 if [[ -n "$arch" ]]; then
-    echo "INFO qb post-build buildx target: $arch"
+    emit_qb_info "qb post-build buildx target: ${arch}"
     [[ -f "$HOME/bin/cx.lib" ]] || { echo "Error: cx.lib not found at $HOME/bin/cx.lib." >&2; exit 1; }
     source "$HOME/bin/cx.lib"
     if needs_cross_build "$arch"; then
