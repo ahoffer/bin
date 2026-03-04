@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Wraps a TUI binary with script(1) to capture a human-readable session log.
+# Usage: wraplog TOOLNAME REALBINARY [ARGS...]
+
+toolName="$1"
+realBinary="$2"
+shift 2
+
+logFile="$PWD/${toolName}-$(date +%Y%m%d-%H%M%S).log"
+rawFile="${logFile%.log}.raw"
+
+cleanup() {
+    exitCode=$?
+    if [[ -f "$rawFile" ]]; then
+        sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b[()][0-9A-Za-z]//g; s/\r//g' "$rawFile" \
+            | col -b > "$logFile"
+        rm -f "$rawFile"
+    fi
+    exit $exitCode
+}
+trap cleanup EXIT
+
+script -q -f --log-out "$rawFile" -- "$realBinary" "$@"

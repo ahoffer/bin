@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+realCodex="$(PATH="${PATH//$HOME\/bin:/}" command -v codex 2>/dev/null || echo "")"
+if [[ -z "$realCodex" ]]; then
+    echo "error: codex not found outside ~/bin" >&2
+    exit 1
+fi
+
+sessionName="codex"
+
+if [[ -n "${TMUX:-}" ]]; then
+    exec wraplog "codex" "$realCodex" "$@"
+fi
+
+if tmux has-session -t "$sessionName" 2>/dev/null; then
+    exec tmux attach-session -t "$sessionName"
+else
+    exec tmux new-session -s "$sessionName" -- "$0" "$@"
+fi
