@@ -38,9 +38,15 @@ while (my $line = <STDIN>) {
 
         # Compilation summary, single-threaded context tells you the module.
         next if $line =~ /^\S+ INFO Compiling \d+ source files?\b/;
-        # Artifact install to local repo, module is already shown in the
-        # reactor summary so this line adds no value in threaded output.
-        next if $line =~ /^\S+ INFO Installing \S+\.(?:jar|war|zip|ear|aar)\b/;
+        # Artifact install to local repo. Demote to TRACE rather than drop so
+        # the confirmation is still available at -v4 for diagnosis.
+        $line =~ s/^(\S+\s+)INFO(\s+Installing \S+\.(?:jar|war|zip|ear|aar)\b.*)/$1TRACE$2/;
+        # Context-dependent lines that derive meaning from the preceding plugin
+        # banner. Order cannot be guaranteed in threaded builds, so drop them.
+        next if $line =~ /^\S+ DEBUG Tests are skipped\./;
+        next if $line =~ /^\S+ DEBUG No sources to compile\b/;
+        next if $line =~ /^\S+ DEBUG Nothing to compile - all classes are up to date\./;
+        next if $line =~ /^\S+ TRACE Writing OBR metadata\b/;
     }
     print $line;
 }
