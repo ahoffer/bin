@@ -8,7 +8,7 @@ XPRA_BIN="${XPRA_HEALTHCHECK_XPRA_BIN:-/Applications/Xpra.app/Contents/MacOS/Xpr
 
 log() { echo "$(date -u +%FT%TZ) $*" >> "$LOG"; }
 
-# macOS lacks GNU timeout; use perl alarm as a portable alternative.
+# macOS lacks GNU timeout, use perl alarm as portable alternative.
 _timeout() { perl -e 'alarm shift; exec @ARGV or die $!' -- "$@"; }
 
 kill_pid_gracefully() {
@@ -33,7 +33,7 @@ kill_pattern_gracefully() {
     done < <(pgrep -f "$pattern" 2>/dev/null || true)
 }
 
-# Format: "port/connect-script". Add a line here when a new session is introduced.
+# Format is port/connect-script. Add a line here to introduce a new session.
 sessions=("14501/xpra-bigfish" "14502/xpra-signal")
 
 # Avoid overlapping launchd runs if a probe hangs.
@@ -43,7 +43,7 @@ if ! mkdir "$LOCKDIR" 2>/dev/null; then
 fi
 trap 'rm -rf "$LOCKDIR"' EXIT
 
-# Exit quietly if bigfish is unreachable (prevents launchd restart loops).
+# Exit quietly if bigfish is unreachable, prevents launchd restart loops.
 if ! ssh -o ConnectTimeout=3 -o BatchMode=yes -o ControlMaster=no "$HOST" true 2>/dev/null; then
     exit 0
 fi
@@ -55,6 +55,8 @@ for entry in "${sessions[@]}"; do
 done
 
 # Kill any Xpra process that has no established connection to any known xpra port.
+# lsof on macOS exits 1 if any specified port has no matches, even when others do.
+# The || true prevents pipefail from aborting when some sessions are disconnected.
 connected_pids=$(lsof -nP "${lsof_port_args[@]}" -sTCP:ESTABLISHED 2>/dev/null \
     | awk 'NR>1 {print $2}' | sort -u || true)
 while IFS= read -r stale_pid; do
