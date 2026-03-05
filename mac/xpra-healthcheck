@@ -37,18 +37,23 @@ kill_pattern_gracefully() {
 sessions=("14501/xpra-chrome" "14502/xpra-signal")
 
 # Avoid overlapping launchd runs if a probe hangs.
-# Remove a stale lock held for more than 5 minutes (indicates a stuck previous run).
+# Use pid file inside lockdir to detect stale locks left by dead processes.
+# Second mkdir after rm -rf guards the TOCTOU window between two racing cleaners.
 if ! mkdir "$LOCKDIR" 2>/dev/null; then
-    lock_age=$(( $(date +%s) - $(stat -f %m "$LOCKDIR" 2>/dev/null || echo 0) ))
-    if [ "$lock_age" -gt 300 ]; then
-        log "removing stale lock held for ${lock_age}s"
+    lock_pid=$(cat "$LOCKDIR/pid" 2>/dev/null || true)
+    if [ -n "$lock_pid" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
+        log "removing stale lock held by dead pid $lock_pid"
         rm -rf "$LOCKDIR"
-        mkdir "$LOCKDIR"
+        if ! mkdir "$LOCKDIR" 2>/dev/null; then
+            log "another run is active, skipping"
+            exit 0
+        fi
     else
-        log "another run is active, skipping"
+        log "another run is active (pid ${lock_pid:-unknown}), skipping"
         exit 0
     fi
 fi
+echo $$ > "$LOCKDIR/pid"
 trap 'rm -rf "$LOCKDIR"' EXIT
 
 # Exit quietly if bigfish is unreachable, prevents launchd restart loops.
