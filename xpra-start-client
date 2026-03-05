@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Attaches the local macOS Xpra.app client to a named xpra session on bigfish.
+# Usage: xpra-start-client <session-name>
+# Add a case line here to introduce a new session.
+case "$1" in
+  chrome) PORT=14501 ;;
+  signal) PORT=14502 ;;
+  *) echo "unknown session: $1" >&2; exit 1 ;;
+esac
+
 HOST="bigfish"
-PORT="14501"
+LOG="$HOME/Library/Logs/xpra-$1.log"
 # Dedicated control socket keeps this tunnel isolated from shared SSH masters.
 CONTROL_PATH="${HOME}/.ssh/cm-xpra-${HOST}-${PORT}"
-
-# Attaches the local macOS Xpra.app client to the long-lived xpra server on bigfish.
-# The remote X11 display :100 hosts the Chrome session.
-# Runs Xpra in the background. The launchd KeepAlive job polls every ThrottleInterval
-# seconds. The connected-guard exits immediately when Xpra is already attached.
-# Verify the active display on bigfish with:
-#   xpra list
-#   DISPLAY=:100 xdpyinfo | head
 
 # Assumes SSH key auth is configured so ssh bigfish does not prompt.
 # Bail out quietly if host is unreachable, prevents launchd restart loops.
@@ -38,7 +39,6 @@ if ! lsof -nP -iTCP:${PORT} -sTCP:LISTEN >/dev/null 2>&1; then
     -N -f -L ${PORT}:127.0.0.1:${PORT} ${HOST} || exit 0
 fi
 
-LOG="$HOME/Library/Logs/xpra-chrome.log"
 for i in 6 5 4 3 2 1; do
   [ -f "${LOG}.${i}" ] && mv "${LOG}.${i}" "${LOG}.$((i+1))"
 done

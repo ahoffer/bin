@@ -10,7 +10,7 @@ for entry in "${sessions[@]}"; do
     service="${entry##*/}"
 
     if ! timeout 10 xpra info "$display" >/dev/null 2>&1; then
-        echo "xpra-healthcheck: probe failed for $display, restarting $service" >&2
+        echo "xpra-healthcheck-server: probe failed for $display, restarting $service" >&2
         systemctl --user reset-failed "$service" 2>/dev/null || true
         systemctl --user start "$service"
     fi

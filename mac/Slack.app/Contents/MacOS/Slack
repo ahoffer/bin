@@ -1,2 +1,2 @@
 #!/bin/bash
-exec "$HOME/bin/mac/xpra-chrome"
+exec "$HOME/bin/xpra-start-client" chrome

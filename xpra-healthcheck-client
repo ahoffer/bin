@@ -33,8 +33,8 @@ kill_pattern_gracefully() {
     done < <(pgrep -f "$pattern" 2>/dev/null || true)
 }
 
-# Format is port/connect-script. Add a line here to introduce a new session.
-sessions=("14501/xpra-chrome" "14502/xpra-signal")
+# Format is session-name/port. Add a line here to introduce a new session.
+sessions=("chrome/14501" "signal/14502")
 
 # Avoid overlapping launchd runs if a probe hangs.
 # Use pid file inside lockdir to detect stale locks left by dead processes.
@@ -64,7 +64,7 @@ fi
 # Build a single lsof query from the configured sessions so ports are not duplicated.
 lsof_port_args=()
 for entry in "${sessions[@]}"; do
-    lsof_port_args+=("-iTCP:${entry%%/*}")
+    lsof_port_args+=("-iTCP:${entry##*/}")
 done
 
 # Kill any Xpra process that has no established connection to any known xpra port.
@@ -81,9 +81,9 @@ done < <(pgrep -x Xpra 2>/dev/null || true)
 
 # Check each session and reconnect only the ones that are unhealthy.
 for entry in "${sessions[@]}"; do
-    port="${entry%%/*}"
-    connect_script="${entry##*/}"
-    # Must match the control socket path used by the corresponding connect script.
+    session_name="${entry%%/*}"
+    port="${entry##*/}"
+    # Must match the control socket path used by xpra-start-client.
     control_path="${HOME}/.ssh/cm-xpra-${HOST}-${port}"
 
     tunnel_up=false
@@ -98,7 +98,7 @@ for entry in "${sessions[@]}"; do
         continue
     fi
 
-    log "port $port unhealthy (tunnel=$tunnel_up probe=$probe_ok), reconnecting via $connect_script"
+    log "port $port unhealthy (tunnel=$tunnel_up probe=$probe_ok), reconnecting $session_name"
 
     # Kill only the Xpra client bound to this port and its dedicated tunnel.
     # Avoid killing unrelated SSH sessions that may share the same destination host.
@@ -109,5 +109,5 @@ for entry in "${sessions[@]}"; do
     kill_pattern_gracefully "ssh.*-o ControlPath=${control_path}.*${port}:127.0.0.1:${port}"
     sleep 2
 
-    "$(dirname "$0")/$connect_script"
+    "$(dirname "$0")/xpra-start-client" "$session_name"
 done

@@ -1,2 +1,0 @@
-#!/usr/bin/env bash
-exec tail -f "$HOME/Library/Logs/xpra-signal.log" "$@"
