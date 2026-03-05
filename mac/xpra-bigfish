@@ -15,9 +15,14 @@ CONTROL_PATH="${HOME}/.ssh/cm-xpra-${HOST}-${PORT}"
 #   DISPLAY=:100 xdpyinfo | head
 
 # Assumes SSH key auth is configured so `ssh ${HOST}` does not prompt.
-# Bail out quietly if host is unreachable (prevents launchd restart loops)
-if ! nc -z -w 2 "${HOST}" 22 >/dev/null 2>&1; then
+# Bail out quietly if host is unreachable (prevents launchd restart loops).
+if ! ssh -o ConnectTimeout=3 -o BatchMode=yes -o ControlMaster=no "${HOST}" true 2>/dev/null; then
   exit 0
+fi
+
+# Already connected on this port — nothing to do.
+if lsof -nP -iTCP:"${PORT}" -sTCP:ESTABLISHED 2>/dev/null | awk '$1=="Xpra" {found=1} END {exit !found}'; then
+    exit 0
 fi
 
 # Ensure tunnel is up (reuse if already present)

@@ -44,7 +44,7 @@ fi
 trap 'rm -rf "$LOCKDIR"' EXIT
 
 # Exit quietly if bigfish is unreachable (prevents launchd restart loops).
-if ! nc -z -w 2 "$HOST" 22 >/dev/null 2>&1; then
+if ! ssh -o ConnectTimeout=3 -o BatchMode=yes -o ControlMaster=no "$HOST" true 2>/dev/null; then
     exit 0
 fi
 
@@ -56,7 +56,7 @@ done
 
 # Kill any Xpra process that has no established connection to any known xpra port.
 connected_pids=$(lsof -nP "${lsof_port_args[@]}" -sTCP:ESTABLISHED 2>/dev/null \
-    | awk 'NR>1 {print $2}' | sort -u)
+    | awk 'NR>1 {print $2}' | sort -u || true)
 while IFS= read -r stale_pid; do
     if ! echo "$connected_pids" | grep -qx "$stale_pid"; then
         log "killing stale Xpra pid $stale_pid (no established connection)"
