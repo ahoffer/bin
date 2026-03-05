@@ -41,6 +41,20 @@ emit_qb_info() {
     printf 'INFO %s %s\n' "$(now_iso_utc)" "$1"
 }
 
+emit_qb_info_at_level() {
+    local min_level="$1"
+    shift
+    [[ "$filter_level" =~ ^[0-9]+$ ]] || return 0
+    (( filter_level >= min_level )) || return 0
+    emit_qb_info "$*"
+}
+
+emit_qb_warning() {
+    [[ "$filter_level" =~ ^[0-9]+$ ]] || return 0
+    (( filter_level >= 3 )) || return 0
+    printf 'WARNING %s %s\n' "$(now_iso_utc)" "$1" >&2
+}
+
 qb_started_epoch=$(date +%s)
 qb_started_iso=$(now_iso_utc)
 qb_emit_timing=0
@@ -184,7 +198,7 @@ ensure_yarn_available() {
         echo "Error: yarn is not on PATH and corepack is unavailable." >&2
         exit 1
     }
-    echo "Info: yarn not found on PATH, running corepack enable." >&2
+    emit_qb_info_at_level 4 "yarn not found on PATH; running corepack enable"
     corepack enable >/dev/null 2>&1 || {
         echo "Error: failed to enable yarn via corepack." >&2
         exit 1
@@ -205,7 +219,7 @@ ensure_required_node_version() {
     export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
     . "$NVM_DIR/nvm.sh" && nvm use "$req" >/dev/null 2>&1 || { echo "Error: Node v$req required; run: nvm install $req" >&2; exit 1; }
     hash -r
-    echo "INFO qb node version: $(node -v)"
+    emit_qb_info_at_level 4 "qb node version: $(node -v)"
 }
 
 format_frontend() {
@@ -298,16 +312,16 @@ ensure_colima_space_if_needed() {
     fi
 
     if [[ -n ${conf_g:-} ]]; then
-        echo "INFO qb colima disk usage: ${used_g} GiB used; configured capacity ${conf_g} GiB"
+        emit_qb_info_at_level 4 "qb colima disk usage: ${used_g} GiB used; configured capacity ${conf_g} GiB"
     else
-        echo "INFO qb colima disk usage: ${used_g} GiB used"
+        emit_qb_info_at_level 4 "qb colima disk usage: ${used_g} GiB used"
     fi
 
     (( avail_k < 2097152 )) && {
         echo "ERROR Colima free space too low for Docker build: $avail_g GiB available, need at least 2.0 GiB" >&2
         exit 1
     }
-    (( avail_k < 5242880 )) && echo "WARNING Colima free space is low for Docker build: $avail_g GiB available" >&2
+    (( avail_k < 5242880 )) && emit_qb_warning "Colima free space is low for Docker build: $avail_g GiB available"
 }
 
 # The docs module uses Antora for HTML and asciidoctor for PDFs.
