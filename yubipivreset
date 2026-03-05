@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Unblocks PIV PIN on YubiKey Nano using PUK.
+# Reads YUBI_NANO_PUK and YUBI_NANO_PIN from environment.
+
+if [[ -z "${YUBI_NANO_PUK:-}" ]]; then
+    echo "YUBI_NANO_PUK is not set" >&2
+    exit 1
+fi
+if [[ -z "${YUBI_NANO_PIN:-}" ]]; then
+    echo "YUBI_NANO_PIN is not set" >&2
+    exit 1
+fi
+
+ykman piv access unblock-pin --puk "$YUBI_NANO_PUK" --new-pin "$YUBI_NANO_PIN"
