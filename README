@@ -54,6 +54,51 @@ Then point Codex at it with an MCP entry like:
 This repo only provides the `mcpserve` wrapper; the Desktop Commander package is downloaded by `npx`
 when the command runs.
 
+## Claude Code and Codex session wrappers
+
+`claude` and `codex` in ~/bin wrap the real binaries in named tmux sessions so sessions
+survive SSH/mosh disconnects. Running `claude` from a new shell either starts a new
+tmux session named `claude` or reattaches to one already running. Same for `codex`.
+If already inside tmux the wrapper passes through directly to the real binary.
+
+The real binaries are at `~/.local/bin/claude` and the nvm-managed path for codex.
+The wrappers strip ~/bin from PATH before resolving the real binary to prevent
+self-invocation.
+
+### Human-readable session logs
+
+`wraplog` records terminal output and writes cleaned logs to `~/logs/`:
+
+    ~/logs/claude-YYYYMMDD-HHMMSS-<session-uuid>.log
+    ~/logs/codex-YYYYMMDD-HHMMSS-rollout-<ts>-<uuid>.log
+
+The session ID suffix matches the basename of the corresponding JSON session file,
+making it easy to correlate the terminal recording with the structured session data.
+If no session file was created (for example the tool exited immediately), the suffix
+is omitted.
+
+### Claude Code session JSONs
+
+Stored at `~/.claude/projects/`. Each project gets a subdirectory named after its path
+slug, for example `-home-aaron-bin`. Each conversation is one UUID-named `.jsonl` file.
+Subagent threads nest under a session UUID in a `subagents/` subdirectory.
+
+Global prompt history is at `~/.claude/history.jsonl`.
+
+No rotation is performed. Files accumulate indefinitely.
+
+### Codex session JSONs
+
+Stored at `~/.codex/sessions/2026/MM/DD/` as `rollout-<timestamp>-<uuid>.jsonl`.
+Directories are created per calendar day.
+
+Global prompt history is at `~/.codex/history.jsonl`.
+
+Persistent conversation state lives in `~/.codex/state_5.sqlite` with standard SQLite
+WAL files alongside it. The TUI process log is at `~/.codex/log/codex-tui.log`.
+
+No rotation is performed on any of these files.
+
 ## Xpra on bigfish
 
 `mac/xpra-bigfish` is the macOS-side helper that opens `Xpra.app` and attaches it to the forwarded
@@ -78,20 +123,34 @@ For a narrower visible smoke test:
 This launches Playwright's own browser window on the live xpra display so it can be watched from
 the existing Xpra app flow on the Mac.
 
+### Xpra sessions
+
+| App     | Display | Port  | Service        | Connect script    |
+|---------|---------|-------|----------------|-------------------|
+| Chrome  | :100    | 14501 | xpra-chrome    | mac/xpra-bigfish  |
+| Signal  | :101    | 14502 | xpra-signal    | mac/xpra-signal   |
+
+Signal uses a dedicated user-data dir at `~/.config/signal-xpra`, isolated from any native
+Signal installation. Connect from clown with `xprasignal` (delegates to `mac/xpra-signal`).
+
+To add another session: create a service file and connect script following the same pattern,
+then add a line to `xpra-healthcheck` on bigfish and `mac/xpra-healthcheck` on clown.
+
 ### Xpra watchdog daemons
 
-Two daemons monitor the session health and restart it automatically.
+One pair of daemons covers all sessions.
 
-On bigfish a systemd timer fires every 60 seconds and runs `xpra-healthcheck`.
-The script probes `xpra info :100` with a 10-second timeout. If the probe fails
-or hangs, meaning the session has crashed or frozen, it resets the failure counter
-and restarts `xpra-chrome.service`.
+On bigfish a systemd timer fires every 60 seconds and runs `xpra-healthcheck`. The script
+loops over every known display/service pair, probes each with a 10-second timeout, and
+restarts the matching service if a probe fails or hangs.
 
-On clown a launchd agent fires every 60 seconds and runs `mac/xpra-healthcheck`.
-The script exits quietly if bigfish is unreachable. Otherwise it checks whether the
-SSH tunnel is up, Xpra.app is running, and the server responds to `xpra info`
-through the tunnel. If any check fails it tears down stale processes and calls
-`mac/xpra-bigfish` to reconnect.
+On clown a launchd agent fires every 60 seconds and runs `mac/xpra-healthcheck`. The script
+exits quietly if bigfish is unreachable. Otherwise it loops over every known port/connect-script
+pair, checks tunnel and probe health for each, and reconnects only the sessions that are
+unhealthy. Each tunnel uses its own SSH control socket (`~/.ssh/cm-xpra-bigfish-<port>`), so
+reconnects terminate only the dedicated xpra tunnel instead of any shared SSH master session.
+The stale-process killer at the top of the script queries all known ports together, so it never
+mistakes a healthy session for a stale one.
 
 Check watchdog status on bigfish:
 
@@ -106,11 +165,10 @@ Check watchdog status on clown:
 
 ### Xpra log scripts
 
-Four convenience scripts tail the relevant logs.
+On bigfish, `xpralog` follows the Chrome server journal, `xprasignallog` follows the Signal
+server journal, and `xprawatchlog` follows the single shared watchdog journal. All three
+pass through extra arguments to `journalctl`.
 
-On bigfish, `xpralog` follows the xpra server journal and `xprawatchlog` follows
-the watchdog journal. Both pass through extra arguments to `journalctl`.
-
-On clown, `xpralogmac` streams Xpra.app output via `log stream` and
-`xprawatchlogmac` tails the watchdog log at `~/Library/Logs/xpra-healthcheck.log`.
-Both pass through extra arguments to the underlying command.
+On clown, `xpralogmac` streams Xpra.app output via `log stream` and `xprawatchlogmac`
+tails the watchdog log at `~/Library/Logs/xpra-healthcheck.log`. `xprasignalclientlog`
+tails `~/Library/Logs/xpra-signal.log`, the Xpra.app client output for the Signal session.
