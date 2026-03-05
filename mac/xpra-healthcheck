@@ -34,7 +34,7 @@ kill_pattern_gracefully() {
 }
 
 # Format is port/connect-script. Add a line here to introduce a new session.
-sessions=("14501/xpra-bigfish" "14502/xpra-signal")
+sessions=("14501/xpra-chrome" "14502/xpra-signal")
 
 # Avoid overlapping launchd runs if a probe hangs.
 if ! mkdir "$LOCKDIR" 2>/dev/null; then

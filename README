@@ -120,7 +120,7 @@ Check disabled state:
 
 ## Xpra on bigfish
 
-`mac/xpra-bigfish` is the macOS-side helper that opens `Xpra.app` and attaches it to the forwarded
+`mac/xpra-chrome` is the macOS-side helper that opens `Xpra.app` and attaches it to the forwarded
 xpra session exposed by `bigfish` on `tcp://127.0.0.1:14501`.
 
 On the `bigfish` side, the attached xpra X11 display is currently visible as `:100`:
@@ -146,7 +146,7 @@ the existing Xpra app flow on the Mac.
 
 | App     | Display | Port  | Service        | Connect script    |
 |---------|---------|-------|----------------|-------------------|
-| Chrome  | :100    | 14501 | xpra-chrome    | mac/xpra-bigfish  |
+| Chrome  | :100    | 14501 | xprachrome     | mac/xpra-chrome   |
 | Signal  | :101    | 14502 | xpra-signal    | mac/xpra-signal   |
 
 Signal uses a dedicated user-data dir at `~/.config/signal-xpra`, isolated from any native
@@ -166,7 +166,7 @@ restarts the matching service if a probe fails or hangs.
 On clown a launchd agent fires every 60 seconds and runs `mac/xpra-healthcheck`. The script
 exits quietly if bigfish is unreachable. Otherwise it loops over every known port/connect-script
 pair, checks tunnel and probe health for each, and reconnects only the sessions that are
-unhealthy. Each tunnel uses its own SSH control socket (`~/.ssh/cm-xpra-bigfish-<port>`), so
+unhealthy. Each tunnel uses its own SSH control socket (`~/.ssh/cm-xpra-bigfish-PORT`), so
 reconnects terminate only the dedicated xpra tunnel instead of any shared SSH master session.
 The stale-process killer at the top of the script queries all known ports together, so it never
 mistakes a healthy session for a stale one.
@@ -191,3 +191,4 @@ pass through extra arguments to `journalctl`.
 On clown, `xpralogmac` streams Xpra.app output via `log stream` and `xprawatchlogmac`
 tails the watchdog log at `~/Library/Logs/xpra-healthcheck.log`. `xprasignalclientlog`
 tails `~/Library/Logs/xpra-signal.log`, the Xpra.app client output for the Signal session.
+`xprachromeclientlog` tails `~/Library/Logs/xpra-chrome.log`, the equivalent for the Chrome session.
