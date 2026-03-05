@@ -37,8 +37,26 @@ now_iso_utc() {
     date -u '+%Y-%m-%dT%H:%M:%SZ'
 }
 
+emit_qb_colored_stdout() {
+    local line="$1"
+    if command -v mvncolor >/dev/null 2>&1; then
+        printf '%s\n' "$line" | mvncolor
+    else
+        printf '%s\n' "$line"
+    fi
+}
+
+emit_qb_colored_stderr() {
+    local line="$1"
+    if command -v mvncolor >/dev/null 2>&1; then
+        printf '%s\n' "$line" | mvncolor >&2
+    else
+        printf '%s\n' "$line" >&2
+    fi
+}
+
 emit_qb_info() {
-    printf '%s INFO %s\n' "$(now_iso_utc)" "$1"
+    emit_qb_colored_stdout "$(now_iso_utc) INFO $1"
 }
 
 emit_qb_info_at_level() {
@@ -52,7 +70,7 @@ emit_qb_info_at_level() {
 emit_qb_warning() {
     [[ "$filter_level" =~ ^[0-9]+$ ]] || return 0
     (( filter_level >= 3 )) || return 0
-    printf '%s WARNING %s\n' "$(now_iso_utc)" "$1" >&2
+    emit_qb_colored_stderr "$(now_iso_utc) WARNING $1"
 }
 
 qb_started_epoch=$(date +%s)
