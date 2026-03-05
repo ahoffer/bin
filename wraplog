@@ -1,23 +1,43 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Wraps a TUI binary with script(1) to capture a human-readable session log.
+# Wraps TUI binary with script(1) to capture human-readable session log.
 # Usage: wraplog TOOLNAME REALBINARY [ARGS...]
 
 toolName="$1"
 realBinary="$2"
 shift 2
 
-logFile="$PWD/${toolName}-$(date +%Y%m%d-%H%M%S).log"
+mkdir -p "$HOME/logs"
+logFile="$HOME/logs/${toolName}-$(date +%Y%m%d-%H%M%S).log"
 rawFile="${logFile%.log}.raw"
+
+case "$toolName" in
+    claude) sessionDir="$HOME/.claude/projects" ;;
+    codex)  sessionDir="$HOME/.codex/sessions" ;;
+    *)      sessionDir="" ;;
+esac
+
+# Timestamp marker for detecting session files created during this run.
+timeRef=$(mktemp)
 
 cleanup() {
     exitCode=$?
     if [[ -f "$rawFile" ]]; then
-        sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b[()][0-9A-Za-z]//g; s/\r//g' "$rawFile" \
-            | col -b > "$logFile"
-        rm -f "$rawFile"
+        sed 's/\x1b\[[^A-Za-z]*[A-Za-z]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b[()][0-9A-Za-z]//g; s/\x1b[A-Za-z]//g; s/\r//g' "$rawFile" \
+            | col -b \
+            | grep -Ev '^Script (started|done) on ' > "$logFile"
     fi
+    if [[ -n "$sessionDir" && -f "$logFile" && -f "$timeRef" ]]; then
+        newSession=$(find "$sessionDir" -name "*.jsonl" ! -path "*/subagents/*" \
+            -newer "$timeRef" 2>/dev/null | head -1)
+        if [[ -n "$newSession" ]]; then
+            sessionId=$(basename "$newSession" .jsonl)
+            mv "$logFile" "${logFile%.log}-${sessionId}.log"
+            [[ -f "$rawFile" ]] && mv "$rawFile" "${rawFile%.raw}-${sessionId}.raw"
+        fi
+    fi
+    rm -f "$timeRef"
     exit $exitCode
 }
 trap cleanup EXIT
