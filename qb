@@ -274,6 +274,27 @@ is_worktree() {
     [[ -n "$git_root" ]] && [[ -f "$git_root/.git" ]]
 }
 
+# Returns true when the root pom.xml declares an artifact with the given ID.
+# Used to skip formatter goals in projects that do not define the plugin.
+pom_declares_plugin() {
+    local artifact_id="$1"
+    local root_pom="${git_root:-.}/pom.xml"
+    [[ -f "$root_pom" ]] && grep -q "<artifactId>${artifact_id}</artifactId>" "$root_pom"
+}
+
+# Prints the groupId declared alongside fmt-maven-plugin in the root pom.xml.
+# The groupId line appears just before the artifactId line in a standard plugin stanza.
+# Prints nothing and returns 1 when the plugin is absent or groupId cannot be found.
+fmt_plugin_groupid() {
+    local root_pom="${git_root:-.}/pom.xml"
+    [[ -f "$root_pom" ]] || return 1
+    local groupid
+    groupid=$(grep -B5 "<artifactId>fmt-maven-plugin</artifactId>" "$root_pom" \
+        | grep "<groupId>" | tail -1 \
+        | sed 's/[[:space:]]*<groupId>\([^<]*\)<\/groupId>.*/\1/')
+    [[ -n "$groupid" ]] && echo "$groupid"
+}
+
 is_project_root() {
     [[ -n "$git_root" ]] && [[ "$(realpath "$PWD")" == "$(realpath "$git_root")" ]]
 }
@@ -416,7 +437,10 @@ fi
 install_docs_artifact_if_needed
 
 # Always format and fix license headers before compiling.
-goals=(com.spotify.fmt:fmt-maven-plugin:format license:format "${goals[@]}")
+format_goals=()
+fmt_groupid=$(fmt_plugin_groupid) && format_goals+=("${fmt_groupid}:fmt-maven-plugin:format")
+pom_declares_plugin "license-maven-plugin" && format_goals+=("license:format")
+goals=("${format_goals[@]}" "${goals[@]}")
 
 if [[ $filter_level -eq 0 ]]; then
     MVNFILTER_LEVEL=$filter_level mvn $threads --no-transfer-progress "${mvn_args[@]}" "${goals[@]}" >/dev/null 2>&1
