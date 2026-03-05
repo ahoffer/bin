@@ -70,8 +70,8 @@ sub normalize {
     # fmt-maven-plugin emits lowercase [info]/[warning]/[error] tags. Normalize
     # them to uppercase so all downstream patterns match consistently.
     $$r =~ s/^\[([a-z]+)\]/sprintf('[%s]', uc($1))/e;
-    $$r =~ s/^\[INFO\] (BUILD FAILURE)/[ERROR] $1/;
-    $$r =~ s/^\[INFO\] (BUILD SUCCESS)/[WARNING] $1/;
+    $$r =~ s/^\[\w+\] (BUILD FAILURE)/[ERROR] $1/;
+    $$r =~ s/^\[\w+\] (BUILD SUCCESS)/[INFO] $1/;
 }
 
 # Normalize plugin-grammar quirks so expected-noise lines are readable and

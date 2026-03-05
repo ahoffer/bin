@@ -340,7 +340,7 @@ fi
 install_docs_artifact_if_needed
 
 # Always format and fix license headers before compiling.
-goals=(com.spotify.fmt:fmt-maven-plugin:format license:update-file-header "${goals[@]}")
+goals=(com.spotify.fmt:fmt-maven-plugin:format license:format "${goals[@]}")
 
 if [[ $filter_level -eq 0 ]]; then
     MVNFILTER_LEVEL=$filter_level mvn $threads --no-transfer-progress "${mvn_args[@]}" "${goals[@]}" >/dev/null 2>&1
