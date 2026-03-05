@@ -99,6 +99,69 @@ WAL files alongside it. The TUI process log is at `~/.codex/log/codex-tui.log`.
 
 No rotation is performed on any of these files.
 
+## Colima scripts
+
+This repo includes three Colima helper scripts in `~/bin`:
+
+1. `colima-start-guarded`
+1. `start-colima-docker.command`
+1. `stop-colima-docker.command`
+
+### `colima-start-guarded`
+
+Purpose: start Colima in foreground mode and recover from a known Lima disk-lock failure.
+
+Behavior:
+- writes logs to `~/Library/Logs/colima-autostart.log`
+- runs `colima start -f`
+- if startup fails with an `attach disk ... in use by instance` error, runs
+  `LIMA_HOME="$HOME/.colima/_lima" limactl disk unlock colima` and retries
+- exits non-zero for non-recoverable startup failures
+
+Dependencies: `colima`, `limactl`, `rg`, `bash`.
+
+### `start-colima-docker.command`
+
+Purpose: convenience launcher to start Colima default profile with a macOS notification.
+
+Behavior:
+- sets `PROFILE=default`
+- exports `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock` for the script process
+- runs `colima start default`
+- sends a notification via `osascript`
+
+Dependencies: `colima`, `osascript`, `bash`.
+
+### `stop-colima-docker.command`
+
+Purpose: convenience launcher to stop Colima default profile with a macOS notification.
+
+Behavior:
+- sets `PROFILE=default`
+- runs `colima stop default`
+- sends a notification via `osascript`
+
+Dependencies: `colima`, `osascript`, `bash`.
+
+### launchd integration
+
+On clown, `colima-start-guarded` may be wired to:
+
+- `~/Library/LaunchAgents/local.colima.guarded.plist`
+- label: `local.colima.guarded`
+
+Disable without deleting:
+
+    launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/local.colima.guarded.plist
+
+Enable again:
+
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.colima.guarded.plist
+
+Check status:
+
+    launchctl print gui/$(id -u)/local.colima.guarded
+
 ## Xpra on bigfish
 
 `mac/xpra-bigfish` is the macOS-side helper that opens `Xpra.app` and attaches it to the forwarded

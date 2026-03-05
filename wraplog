@@ -24,8 +24,8 @@ timeRef=$(mktemp)
 cleanup() {
     exitCode=$?
     if [[ -f "$rawFile" ]]; then
-        sed 's/\x1b\[[^A-Za-z]*[A-Za-z]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b[()][0-9A-Za-z]//g; s/\x1b[A-Za-z]//g; s/\r//g' "$rawFile" \
-            | col -b \
+        sed $'s/\033\\[[0-9;?]*[A-Za-z]//g\ns/\033][^\a]*\a//g\ns/\033[()][0-9A-Za-z]//g\ns/\033[A-Za-z]//g\ns/\r//g\ns/[[:blank:]]*$//' "$rawFile" \
+            | grep -Pv '[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f]' \
             | grep -Ev '^Script (started|done) on ' > "$logFile"
     fi
     if [[ -n "$sessionDir" && -f "$logFile" && -f "$timeRef" ]]; then

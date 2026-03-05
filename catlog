@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# View raw log file with control codes stripped.
+set -euo pipefail
+
+if [[ $# -ne 1 ]]; then
+    echo "Usage: catlog <logfile>" >&2
+    exit 1
+fi
+
+sed $'s/\033\\[[0-9;?]*[A-Za-z]//g\ns/\033][^\a]*\a//g\ns/\033[()][0-9A-Za-z]//g\ns/\033[A-Za-z]//g\ns/\r//g\ns/[[:blank:]]*$//' "$1" \
+    | grep -Pv '[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f]' \
+    | less
