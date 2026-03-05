@@ -101,66 +101,22 @@ No rotation is performed on any of these files.
 
 ## Colima scripts
 
-This repo includes three Colima helper scripts in `~/bin`:
+Colima launch helpers were removed from `~/bin` to avoid conflicting startup paths.
+
+Removed files:
 
 1. `colima-start-guarded`
 1. `start-colima-docker.command`
 1. `stop-colima-docker.command`
 
-### `colima-start-guarded`
+On clown, Colima-related launchd labels were also disabled:
 
-Purpose: start Colima in foreground mode and recover from a known Lima disk-lock failure.
+1. `local.colima.guarded`
+1. `homebrew.mxcl.colima`
 
-Behavior:
-- writes logs to `~/Library/Logs/colima-autostart.log`
-- runs `colima start -f`
-- if startup fails with an `attach disk ... in use by instance` error, runs
-  `LIMA_HOME="$HOME/.colima/_lima" limactl disk unlock colima` and retries
-- exits non-zero for non-recoverable startup failures
+Check disabled state:
 
-Dependencies: `colima`, `limactl`, `rg`, `bash`.
-
-### `start-colima-docker.command`
-
-Purpose: convenience launcher to start Colima default profile with a macOS notification.
-
-Behavior:
-- sets `PROFILE=default`
-- exports `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock` for the script process
-- runs `colima start default`
-- sends a notification via `osascript`
-
-Dependencies: `colima`, `osascript`, `bash`.
-
-### `stop-colima-docker.command`
-
-Purpose: convenience launcher to stop Colima default profile with a macOS notification.
-
-Behavior:
-- sets `PROFILE=default`
-- runs `colima stop default`
-- sends a notification via `osascript`
-
-Dependencies: `colima`, `osascript`, `bash`.
-
-### launchd integration
-
-On clown, `colima-start-guarded` may be wired to:
-
-- `~/Library/LaunchAgents/local.colima.guarded.plist`
-- label: `local.colima.guarded`
-
-Disable without deleting:
-
-    launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/local.colima.guarded.plist
-
-Enable again:
-
-    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.colima.guarded.plist
-
-Check status:
-
-    launchctl print gui/$(id -u)/local.colima.guarded
+    launchctl print-disabled gui/$(id -u) | rg -i colima
 
 ## Xpra on bigfish
 
