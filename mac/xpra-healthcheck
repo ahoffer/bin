@@ -1,29 +1,66 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HOST="bigfish"
-LOG="$HOME/Library/Logs/xpra-healthcheck.log"
+HOST="${XPRA_HEALTHCHECK_HOST:-bigfish}"
+LOG="${XPRA_HEALTHCHECK_LOG:-$HOME/Library/Logs/xpra-healthcheck.log}"
+LOCKDIR="${XPRA_HEALTHCHECK_LOCKDIR:-${TMPDIR:-/tmp}/xpra-healthcheck.lock}"
+XPRA_BIN="${XPRA_HEALTHCHECK_XPRA_BIN:-/Applications/Xpra.app/Contents/MacOS/Xpra}"
 
 log() { echo "$(date -u +%FT%TZ) $*" >> "$LOG"; }
 
 # macOS lacks GNU timeout; use perl alarm as a portable alternative.
 _timeout() { perl -e 'alarm shift; exec @ARGV or die $!' -- "$@"; }
 
+kill_pid_gracefully() {
+    local pid="$1"
+    if [ -z "$pid" ]; then
+        return 0
+    fi
+    kill "$pid" 2>/dev/null || true
+    for _ in 1 2 3; do
+        if ! kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+        sleep 1
+    done
+    kill -9 "$pid" 2>/dev/null || true
+}
+
+kill_pattern_gracefully() {
+    local pattern="$1"
+    while IFS= read -r pid; do
+        kill_pid_gracefully "$pid"
+    done < <(pgrep -f "$pattern" 2>/dev/null || true)
+}
+
 # Format: "port/connect-script". Add a line here when a new session is introduced.
 sessions=("14501/xpra-bigfish" "14502/xpra-signal")
+
+# Avoid overlapping launchd runs if a probe hangs.
+if ! mkdir "$LOCKDIR" 2>/dev/null; then
+    log "another run is active, skipping"
+    exit 0
+fi
+trap 'rm -rf "$LOCKDIR"' EXIT
 
 # Exit quietly if bigfish is unreachable (prevents launchd restart loops).
 if ! nc -z -w 2 "$HOST" 22 >/dev/null 2>&1; then
     exit 0
 fi
 
+# Build a single lsof query from the configured sessions so ports are not duplicated.
+lsof_port_args=()
+for entry in "${sessions[@]}"; do
+    lsof_port_args+=("-iTCP:${entry%%/*}")
+done
+
 # Kill any Xpra process that has no established connection to any known xpra port.
-connected_pids=$(lsof -nP -iTCP:14501 -iTCP:14502 -sTCP:ESTABLISHED 2>/dev/null \
+connected_pids=$(lsof -nP "${lsof_port_args[@]}" -sTCP:ESTABLISHED 2>/dev/null \
     | awk 'NR>1 {print $2}' | sort -u)
 while IFS= read -r stale_pid; do
     if ! echo "$connected_pids" | grep -qx "$stale_pid"; then
         log "killing stale Xpra pid $stale_pid (no established connection)"
-        kill -9 "$stale_pid" 2>/dev/null || true
+        kill_pid_gracefully "$stale_pid"
     fi
 done < <(pgrep -x Xpra 2>/dev/null || true)
 
@@ -38,10 +75,8 @@ for entry in "${sessions[@]}"; do
     probe_ok=false
     lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1 && tunnel_up=true
 
-    if $tunnel_up; then
-        xpra_info=$( _timeout 10 /Applications/Xpra.app/Contents/MacOS/Xpra info \
-            "tcp://127.0.0.1:${port}" 2>&1 || true )
-        [ -n "$xpra_info" ] && probe_ok=true
+    if $tunnel_up && _timeout 10 "$XPRA_BIN" info "tcp://127.0.0.1:${port}" >/dev/null 2>&1; then
+        probe_ok=true
     fi
 
     if $tunnel_up && $probe_ok; then
@@ -52,10 +87,11 @@ for entry in "${sessions[@]}"; do
 
     # Kill only the Xpra client bound to this port and its dedicated tunnel.
     # Avoid killing unrelated SSH sessions that may share the same destination host.
-    lsof -nP -iTCP:"${port}" -sTCP:ESTABLISHED 2>/dev/null | awk '$1=="Xpra" {print $2}' \
-        | sort -u | xargs -r kill -9 2>/dev/null || true
+    while IFS= read -r xpra_pid; do
+        kill_pid_gracefully "$xpra_pid"
+    done < <(lsof -nP -iTCP:"${port}" -sTCP:ESTABLISHED 2>/dev/null | awk '$1=="Xpra" {print $2}' | sort -u)
     ssh -S "${control_path}" -O exit "${HOST}" >/dev/null 2>&1 || true
-    pkill -f "ssh.*-o ControlPath=${control_path}.*${port}:127.0.0.1:${port}" 2>/dev/null || true
+    kill_pattern_gracefully "ssh.*-o ControlPath=${control_path}.*${port}:127.0.0.1:${port}"
     sleep 2
 
     "$(dirname "$0")/$connect_script"
