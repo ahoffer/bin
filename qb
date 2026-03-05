@@ -62,11 +62,10 @@ qb_emit_timing=0
 emit_qb_timing_on_exit() {
     local status=$?
     [[ "${qb_emit_timing:-0}" -eq 1 ]] || return "$status"
-    local qb_finished_epoch qb_finished_iso qb_elapsed
+    local qb_finished_epoch qb_elapsed
     qb_finished_epoch=$(date +%s)
-    qb_finished_iso=$(now_iso_utc)
     qb_elapsed=$((qb_finished_epoch - qb_started_epoch))
-    emit_qb_info "qb exit: ${qb_finished_iso} (status ${status})"
+    emit_qb_info "qb exit status ${status}"
     emit_qb_info "qb wall clock: ${qb_elapsed}s"
 }
 

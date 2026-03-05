@@ -8,8 +8,8 @@ CONTROL_PATH="${HOME}/.ssh/cm-xpra-${HOST}-${PORT}"
 
 # Attaches the local macOS Xpra.app client to the long-lived xpra server on bigfish.
 # The remote X11 display :100 hosts the Chrome session.
-# Uses exec so the launchd KeepAlive job tracks Xpra directly.
-# When Xpra exits, launchd restarts this script after ThrottleInterval.
+# Runs Xpra in the background. The launchd KeepAlive job polls every ThrottleInterval
+# seconds. The connected-guard exits immediately when Xpra is already attached.
 # Verify the active display on bigfish with:
 #   xpra list
 #   DISPLAY=:100 xdpyinfo | head
@@ -43,7 +43,8 @@ for i in 6 5 4 3 2 1; do
   [ -f "${LOG}.${i}" ] && mv "${LOG}.${i}" "${LOG}.$((i+1))"
 done
 [ -f "$LOG" ] && mv "$LOG" "${LOG}.1"
-# Replace this process with Xpra. launchd tracks Xpra directly and restarts this
-# script when Xpra exits, without bash getting stuck waiting on Xpra subprocesses.
-exec /Applications/Xpra.app/Contents/MacOS/Xpra attach "tcp://127.0.0.1:${PORT}" \
-  >"$LOG" 2>&1
+nohup /Applications/Xpra.app/Contents/MacOS/Xpra attach "tcp://127.0.0.1:${PORT}" \
+  >"$LOG" 2>&1 &
+# Detach from bash job table so bash does not emit job-death messages to stderr
+# when this script is called as a subprocess (e.g., from the healthcheck).
+disown

@@ -37,9 +37,17 @@ kill_pattern_gracefully() {
 sessions=("14501/xpra-chrome" "14502/xpra-signal")
 
 # Avoid overlapping launchd runs if a probe hangs.
+# Remove a stale lock held for more than 5 minutes (indicates a stuck previous run).
 if ! mkdir "$LOCKDIR" 2>/dev/null; then
-    log "another run is active, skipping"
-    exit 0
+    lock_age=$(( $(date +%s) - $(stat -f %m "$LOCKDIR" 2>/dev/null || echo 0) ))
+    if [ "$lock_age" -gt 300 ]; then
+        log "removing stale lock held for ${lock_age}s"
+        rm -rf "$LOCKDIR"
+        mkdir "$LOCKDIR"
+    else
+        log "another run is active, skipping"
+        exit 0
+    fi
 fi
 trap 'rm -rf "$LOCKDIR"' EXIT
 
