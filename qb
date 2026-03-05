@@ -74,20 +74,28 @@ emit_qb_warning() {
 }
 
 qb_started_epoch=$(date +%s)
-qb_started_iso=$(now_iso_utc)
-qb_emit_timing=0
 
-emit_qb_timing_on_exit() {
-    local status=$?
-    [[ "${qb_emit_timing:-0}" -eq 1 ]] || return "$status"
-    local qb_finished_epoch qb_elapsed
+supplement_build_summary() {
+    local status="$1"
+    local qb_finished_epoch elapsed time_str
     qb_finished_epoch=$(date +%s)
-    qb_elapsed=$((qb_finished_epoch - qb_started_epoch))
-    emit_qb_info "qb exit status ${status}"
-    emit_qb_info "qb wall clock: ${qb_elapsed}s"
+    elapsed=$((qb_finished_epoch - qb_started_epoch))
+    if [[ $status -eq 0 ]] && (( filter_level < 4 )); then
+        emit_qb_info "BUILD SUCCESS"
+    fi
+    local show_time=0
+    (( elapsed <  60 && filter_level < 6 )) && show_time=1
+    (( elapsed >= 60 && filter_level < 4 )) && show_time=1
+    if (( show_time )); then
+        if (( elapsed >= 60 )); then
+            time_str=$(printf '%d:%02d min' $((elapsed / 60)) $((elapsed % 60)))
+        else
+            time_str="${elapsed}s"
+        fi
+        emit_qb_info "Total time:  ${time_str} (Wall Clock)"
+    fi
 }
 
-trap emit_qb_timing_on_exit EXIT
 
 require_value() {
     local opt="$1"
@@ -182,8 +190,7 @@ collapse_known_error_blocks() {
 _qb_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 _qb_hash=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 if [[ $filter_level -ge 2 ]]; then
-    qb_emit_timing=1
-    emit_qb_info "qb start: ${qb_started_iso}"
+    emit_qb_info "Starting build..."
     emit_log_level_info
 fi
 
@@ -362,8 +369,7 @@ if is_docs_context; then
             "${docs_extra_args[@]}" "${mvn_args[@]}" "${goals[@]}" >/dev/null
         build_status=$?
     elif [[ $filter_level -ge 7 ]]; then
-        printf '[INFO] %s Starting docs Maven install "%s %s"\n' \
-            "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$_qb_branch" "$_qb_hash"
+        emit_qb_info "Starting docs Maven install \"${_qb_branch} ${_qb_hash}\""
         MVNFILTER_LEVEL=$filter_level mvn $threads --no-transfer-progress \
             "${docs_extra_args[@]}" "${mvn_args[@]}" "${goals[@]}"
         build_status=$?
@@ -382,6 +388,7 @@ if is_docs_context; then
             | MVNFILTER_LEVEL=$filter_level mvnlevel \
             | mvncolor
         build_status=${PIPESTATUS[0]}
+        supplement_build_summary "$build_status"
     fi
     exit $build_status
 fi
@@ -418,8 +425,7 @@ elif [[ $filter_level -eq 1 ]]; then
     MVNFILTER_LEVEL=$filter_level mvn $threads --no-transfer-progress "${mvn_args[@]}" "${goals[@]}" >/dev/null
     build_status=$?
 elif [[ $filter_level -ge 7 ]]; then
-    printf '[INFO] %s Starting build "%s %s"\n' \
-        "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$_qb_branch" "$_qb_hash"
+    emit_qb_info "Starting build \"${_qb_branch} ${_qb_hash}\""
     MVNFILTER_LEVEL=$filter_level mvn $threads --no-transfer-progress "${mvn_args[@]}" "${goals[@]}"
     build_status=$?
 else
@@ -442,6 +448,7 @@ else
         | MVNFILTER_LEVEL=$filter_level mvnlevel \
         | mvncolor
     build_status=${PIPESTATUS[0]}
+    supplement_build_summary "$build_status"
 fi
 
 # Deferred work only makes sense after a successful Maven phase. This keeps

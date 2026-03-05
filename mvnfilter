@@ -154,6 +154,7 @@ sub suppress_noise {
     return 1 if $line =~ /^\[INFO\] Downloading from /;
     return 1 if $line =~ /^\[INFO\] Downloaded from /;
     return 1 if $line =~ /^\[INFO\] Scanning for projects/;
+    return 1 if $line =~ /^\[INFO\] Finished at: /;
     return 1 if $line =~ /^\[INFO\] Updating file header in /;
     return 1 if $line =~ /^\[INFO\] Skipping file header /;
     return 1 if $line =~ /^\[INFO\] Reformatting /;

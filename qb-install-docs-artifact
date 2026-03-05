@@ -5,7 +5,12 @@ common=$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)
 head=$(git -C "$root" rev-parse HEAD)
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/qb-docs.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
-echo "INFO qb docs artifact: installing via temp clone"
+printf '[INFO] qb docs artifact: installing via temp clone\n' \
+  | mvnts \
+  | mvntrim \
+  | mvnlevelcaps \
+  | MVNFILTER_LEVEL=$lvl mvnlevel \
+  | mvncolor
 git clone --shared "$common" "$tmp" >/dev/null 2>&1
 git -C "$tmp" checkout --detach "$head" >/dev/null 2>&1
 cd "$tmp"
