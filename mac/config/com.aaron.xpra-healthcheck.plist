@@ -7,7 +7,7 @@
     <string>com.aaron.xpra-healthcheck</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/aaron/bin/mac/xpra-healthcheck</string>
+        <string>/Users/aaron/bin/xpra-healthcheck-client</string>
     </array>
     <key>StartInterval</key>
     <integer>60</integer>
