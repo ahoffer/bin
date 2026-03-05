@@ -184,7 +184,7 @@ Check watchdog status on clown:
 
 ### Xpra log scripts
 
-On bigfish, `xpralog` follows the Chrome server journal, `xprasignallog` follows the Signal
+On bigfish, `xprachromelog` follows the Chrome server journal, `xprasignallog` follows the Signal
 server journal, and `xprawatchlog` follows the single shared watchdog journal. All three
 pass through extra arguments to `journalctl`.
 

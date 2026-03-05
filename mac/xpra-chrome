@@ -8,8 +8,8 @@ CONTROL_PATH="${HOME}/.ssh/cm-xpra-${HOST}-${PORT}"
 
 # Attaches the local macOS Xpra.app client to the long-lived xpra server on bigfish.
 # The remote X11 display :100 hosts the Chrome session.
-# Runs Xpra in the foreground so the launchd KeepAlive job lives as long as Xpra does.
-# When Xpra exits the tunnel is torn down, and launchd restarts this script to reconnect.
+# Uses exec so the launchd KeepAlive job tracks Xpra directly.
+# When Xpra exits, launchd restarts this script after ThrottleInterval.
 # Verify the active display on bigfish with:
 #   xpra list
 #   DISPLAY=:100 xdpyinfo | head
@@ -18,6 +18,11 @@ CONTROL_PATH="${HOME}/.ssh/cm-xpra-${HOST}-${PORT}"
 # Bail out quietly if host is unreachable, prevents launchd restart loops.
 if ! ssh -o ConnectTimeout=3 -o BatchMode=yes -o ControlMaster=no "${HOST}" true 2>/dev/null; then
   exit 0
+fi
+
+# Already connected on this port, nothing to do.
+if lsof -nP -iTCP:"${PORT}" -sTCP:ESTABLISHED 2>/dev/null | awk '$1=="Xpra" {found=1} END {exit !found}'; then
+    exit 0
 fi
 
 # Ensure tunnel is up, reuse if already present.
@@ -33,13 +38,12 @@ if ! lsof -nP -iTCP:${PORT} -sTCP:LISTEN >/dev/null 2>&1; then
     -N -f -L ${PORT}:127.0.0.1:${PORT} ${HOST} || exit 0
 fi
 
-# Tear down the tunnel when Xpra exits or this script is terminated.
-trap 'ssh -S "${CONTROL_PATH}" -O exit "${HOST}" >/dev/null 2>&1 || true' EXIT
-
 LOG="$HOME/Library/Logs/xpra-chrome.log"
 for i in 6 5 4 3 2 1; do
   [ -f "${LOG}.${i}" ] && mv "${LOG}.${i}" "${LOG}.$((i+1))"
 done
 [ -f "$LOG" ] && mv "$LOG" "${LOG}.1"
-/Applications/Xpra.app/Contents/MacOS/Xpra attach "tcp://127.0.0.1:${PORT}" \
+# Replace this process with Xpra. launchd tracks Xpra directly and restarts this
+# script when Xpra exits, without bash getting stuck waiting on Xpra subprocesses.
+exec /Applications/Xpra.app/Contents/MacOS/Xpra attach "tcp://127.0.0.1:${PORT}" \
   >"$LOG" 2>&1
