@@ -43,3 +43,6 @@ done
 [ -f "$LOG" ] && mv "$LOG" "${LOG}.1"
 nohup /Applications/Xpra.app/Contents/MacOS/Xpra attach "tcp://127.0.0.1:${PORT}" \
   >"$LOG" 2>&1 &
+# Detach from bash job table so bash does not emit job-death messages to stderr
+# when this script is called as a subprocess (e.g., from the healthcheck).
+disown
