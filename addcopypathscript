@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Install required packages, skipping any already present.
+apt-get install -y xclip python3-nautilus > /dev/null
+
+# When run via sudo, write into the invoking user's home, not root's.
+if [[ -n "${SUDO_USER:-}" ]]; then
+    user_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+else
+    user_home="$HOME"
+fi
+
+# Remove the older Scripts-submenu version if present.
+old_script="$user_home/.local/share/nautilus/scripts/Copy path"
+if [[ -f "$old_script" ]]; then
+    rm "$old_script"
+    printf 'Removed old scripts-submenu version.\n'
+fi
+
+ext_dir="$user_home/.local/share/nautilus-python/extensions"
+mkdir -p "$ext_dir"
+
+ext_file="$ext_dir/copy-path.py"
+
+new_content=$(cat <<'PYEXT'
+from gi.repository import GObject, Nautilus
+import subprocess
+import os
+
+class CopyPathExtension(GObject.GObject, Nautilus.MenuProvider):
+    def get_file_items(self, files):
+        if not files:
+            return []
+        item = Nautilus.MenuItem(name='CopyPath::copy', label='Copy path')
+        item.connect('activate', lambda _m: self._copy(files[0]))
+        return [item]
+
+    def _copy(self, nautilus_file):
+        path = nautilus_file.get_location().get_path()
+        if not path:
+            return
+        session = os.environ.get('XDG_SESSION_TYPE', '')
+        if session == 'wayland' and subprocess.run(['which', 'wl-copy'], capture_output=True).returncode == 0:
+            subprocess.run(['wl-copy'], input=path.encode(), check=True)
+        else:
+            subprocess.run(['xclip', '-selection', 'clipboard'], input=path.encode(), check=True)
+PYEXT
+)
+
+if [[ -f "$ext_file" ]] && [[ "$(cat "$ext_file")" == "$new_content" ]]; then
+    printf 'Already up to date: %s\n' "$ext_file"
+else
+    printf '%s\n' "$new_content" > "$ext_file"
+    printf 'Installed: %s\n' "$ext_file"
+fi
+
+printf 'Restart Nautilus to activate: nautilus -q && nautilus\n'
