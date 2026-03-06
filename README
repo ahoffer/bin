@@ -129,6 +129,32 @@ No rotation is performed on any of these files.
 
 ## Colima scripts
 
+### Fix mixed OCI/Docker v2 image manifest format
+
+Docker 24+ with Colima's containerd-snapshotter enabled stores images in containerd's
+OCI format. Base layers pulled from Docker Hub arrive as OCI, while new build layers
+get Docker v2 types from the Docker build API. The result is a mixed-manifest image
+that skopeo cannot convert to docker-archive format, breaking CI Twistlock scans.
+
+Fix: disable containerd-snapshotter in `~/.colima/default/colima.yaml`:
+
+    docker:
+      features:
+        containerd-snapshotter: false
+
+Then restart Colima and prune stale snapshotter images before rebuilding:
+
+    colima restart
+    docker system prune -a --volumes -f
+
+After the prune, rebuild and repush. The resulting image will have a clean Docker
+Schema v2 manifest with all layers as `application/vnd.docker.image.rootfs.diff.tar.gzip`.
+
+Verify with:
+
+    skopeo inspect --raw docker://<registry>/<image>:<tag> \
+      | python3 -m json.tool | grep mediaType
+
 Colima launch helpers were removed from `~/bin` to avoid conflicting startup paths.
 
 Removed files:
