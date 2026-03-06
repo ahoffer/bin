@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-realClaude="$(PATH="${PATH//$HOME\/bin:/}" command -v claude 2>/dev/null || echo "")"
+# Strip ~/bin so command -v finds the real binary, not this wrapper.
+realClaude="$(PATH="$(tr ':' '\n' <<< "$PATH" | grep -vxF "$HOME/bin" | tr '\n' ':' | sed 's/:$//')" \
+    command -v claude 2>/dev/null || echo "")"
 if [[ -z "$realClaude" ]]; then
     echo "error: claude not found outside ~/bin" >&2
     exit 1
 fi
 
-if [[ -n "${TMUX:-}" ]]; then
-    exec wraplog "claude" "$realClaude" "$@"
-fi
-
-exec tmux new-session -- "$0" "$@"
+exec wraplog "claude" "$realClaude" "$@"

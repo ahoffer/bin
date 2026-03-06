@@ -56,26 +56,53 @@ when the command runs.
 
 ## Claude Code and Codex session wrappers
 
-`claude` and `codex` in ~/bin wrap the real binaries in named tmux sessions so sessions
-survive SSH/mosh disconnects. Running `claude` from a new shell either starts a new
-tmux session named `claude` or reattaches to one already running. Same for `codex`.
-If already inside tmux the wrapper passes through directly to the real binary.
+`claude` and `codex` in ~/bin find the real binary and hand off to `wraplog`, which
+runs the binary directly and indexes the session JSONL into `~/logs/` on exit.
 
 The real binaries are at `~/.local/bin/claude` and the nvm-managed path for codex.
 The wrappers strip ~/bin from PATH before resolving the real binary to prevent
 self-invocation.
 
-### Human-readable session logs
+## bigfish-shell
 
-`wraplog` records terminal output and writes cleaned logs to `~/logs/`:
+`bigfish-shell` is the resilient interactive entrypoint from clown to bigfish.
+It keeps your local terminal unchanged and uses remote tmux on bigfish so work
+survives short SSH disconnects.
 
-    ~/logs/claude-YYYYMMDD-HHMMSS-<session-uuid>.log
-    ~/logs/codex-YYYYMMDD-HHMMSS-rollout-<ts>-<uuid>.log
+Behavior:
 
-The session ID suffix matches the basename of the corresponding JSON session file,
-making it easy to correlate the terminal recording with the structured session data.
-If no session file was created (for example the tool exited immediately), the suffix
-is omitted.
+1. It connects with `ssh bigfish` and runs `tmux new-session -A -s <name>` on
+   bigfish (create-or-attach remote session).
+1. If SSH fails, it retries with bounded exponential backoff.
+1. It must run in an interactive terminal (TTY). Non-interactive runs fail fast.
+
+Usage:
+
+    bigfish-shell
+    bigfish-shell my-session
+
+Optional environment variables:
+
+    BIGFISH_HOST=bigfish
+    BIGFISH_TMUX_SESSION=bigfish
+    BIGFISH_SSH_MAX_ATTEMPTS=5
+    BIGFISH_SSH_MAX_DELAY=8
+
+Why this exists:
+
+* Keeps remote work alive inside tmux on bigfish.
+* Avoids any background watchdog process; recovery is explicit and operator driven.
+
+### Session log index
+
+`wraplog` creates a timestamped symlink in `~/logs/` pointing to the JSONL session
+file written by the tool:
+
+    ~/logs/claude-YYYYMMDD-HHMMSS-<session-uuid>.jsonl  -> ~/.claude/projects/.../uuid.jsonl
+    ~/logs/codex-YYYYMMDD-HHMMSS-rollout-<ts>-<uuid>.jsonl -> ~/.codex/sessions/.../uuid.jsonl
+
+The JSONL stays in its canonical location. The symlink provides a time-indexed entry
+point. If no session file was created the symlink is omitted.
 
 ### Claude Code session JSONs
 

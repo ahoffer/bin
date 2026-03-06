@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Wraps TUI binary with script(1) to capture human-readable session log.
+# Indexes the JSONL session file created during this run into ~/logs/.
 # Usage: wraplog TOOLNAME REALBINARY [ARGS...]
 
 toolName="$1"
@@ -9,8 +9,7 @@ realBinary="$2"
 shift 2
 
 mkdir -p "$HOME/logs"
-logFile="$HOME/logs/${toolName}-$(date +%Y%m%d-%H%M%S).log"
-rawFile="${logFile%.log}.raw"
+logPrefix="$HOME/logs/${toolName}-$(date +%Y%m%d-%H%M%S)"
 
 case "$toolName" in
     claude) sessionDir="$HOME/.claude/projects" ;;
@@ -18,23 +17,20 @@ case "$toolName" in
     *)      sessionDir="" ;;
 esac
 
-# Timestamp marker for detecting session files created during this run.
 timeRef=$(mktemp)
 
 cleanup() {
     exitCode=$?
-    if [[ -f "$rawFile" ]]; then
-        sed $'s/\033\\[[0-9;?]*[A-Za-z]//g\ns/\033][^\a]*\a//g\ns/\033[()][0-9A-Za-z]//g\ns/\033[A-Za-z]//g\ns/\r//g\ns/[[:blank:]]*$//' "$rawFile" \
-            | grep -Pv '[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f]' \
-            | grep -Ev '^Script (started|done) on ' > "$logFile"
-    fi
-    if [[ -n "$sessionDir" && -f "$logFile" && -f "$timeRef" ]]; then
+    set +e
+    if [[ -n "$sessionDir" && -f "$timeRef" ]]; then
         newSession=$(find "$sessionDir" -name "*.jsonl" ! -path "*/subagents/*" \
-            -newer "$timeRef" 2>/dev/null | head -1)
+            -newer "$timeRef" -printf '%T@ %p\n' 2>/dev/null \
+            | sort -rn | head -1 | cut -d' ' -f2- || true)
         if [[ -n "$newSession" ]]; then
             sessionId=$(basename "$newSession" .jsonl)
-            mv "$logFile" "${logFile%.log}-${sessionId}.log"
-            [[ -f "$rawFile" ]] && mv "$rawFile" "${rawFile%.raw}-${sessionId}.raw"
+            if [[ -z "$(find "$HOME/logs" -maxdepth 1 -name "*-${sessionId}.jsonl" 2>/dev/null)" ]]; then
+                ln -sf "$newSession" "${logPrefix}-${sessionId}.jsonl"
+            fi
         fi
     fi
     rm -f "$timeRef"
@@ -42,5 +38,4 @@ cleanup() {
 }
 trap cleanup EXIT
 
-cmd=$(printf '%q ' "$realBinary" "$@")
-script -q -f -e -O "$rawFile" -c "$cmd"
+"$realBinary" "$@"

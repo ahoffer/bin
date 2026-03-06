@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-realCodex="$(PATH="${PATH//$HOME\/bin:/}" command -v codex 2>/dev/null || echo "")"
+# Strip ~/bin so command -v finds the real binary, not this wrapper.
+realCodex="$(PATH="$(tr ':' '\n' <<< "$PATH" | grep -vxF "$HOME/bin" | tr '\n' ':' | sed 's/:$//')" \
+    command -v codex 2>/dev/null || echo "")"
 if [[ -z "$realCodex" ]]; then
     echo "error: codex not found outside ~/bin" >&2
     exit 1
 fi
 
-if [[ -n "${TMUX:-}" ]]; then
-    exec wraplog "codex" "$realCodex" "$@"
-fi
-
-exec tmux new-session -- "$0" "$@"
+exec wraplog "codex" "$realCodex" "$@"
