@@ -4,7 +4,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.aaron.xpra-healthcheck</string>
+    <string>com.aaron.xpra-healthcheck-client</string>
     <key>ProgramArguments</key>
     <array>
         <string>/Users/aaron/bin/xpra-healthcheck-client</string>
@@ -14,8 +14,8 @@
     <key>RunAtLoad</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/Users/aaron/Library/Logs/xpra-healthcheck.log</string>
+    <string>/Users/aaron/Library/Logs/xpra-healthcheck-client.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/aaron/Library/Logs/xpra-healthcheck.log</string>
+    <string>/Users/aaron/Library/Logs/xpra-healthcheck-client.log</string>
 </dict>
 </plist>

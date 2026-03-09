@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# bigfish-shell
+#
+# Purpose:
+#   Start or reattach a resilient interactive shell from clown to bigfish.
+#   Resilience is provided by remote tmux on bigfish. The SSH connection retries
+#   with bounded backoff so transient network churn can self-recover.
+#
+# Inputs:
+#   Positional arg 1 (optional): remote tmux session name.
+#   Env BIGFISH_HOST (default: bigfish): SSH host alias.
+#   Env BIGFISH_TMUX_SESSION (default: bigfish): remote tmux session name.
+#   Env BIGFISH_SSH_MAX_ATTEMPTS (default: 5): number of SSH attempts.
+#   Env BIGFISH_SSH_MAX_DELAY (default: 8): max retry sleep seconds.
+#
+# Exit codes:
+#   0 on success; non-zero if prerequisites are missing or all retries fail.
+
+if ! command -v ssh >/dev/null 2>&1; then
+  echo "error: ssh is required" >&2
+  exit 127
+fi
+if [[ ! -t 0 || ! -t 1 ]]; then
+  echo "error: bigfish-shell requires an interactive terminal" >&2
+  exit 3
+fi
+
+host="${BIGFISH_HOST:-bigfish}"
+session="${1:-${BIGFISH_TMUX_SESSION:-bigfish}}"
+max_attempts="${BIGFISH_SSH_MAX_ATTEMPTS:-5}"
+max_delay="${BIGFISH_SSH_MAX_DELAY:-8}"
+
+if ! [[ "$max_attempts" =~ ^[0-9]+$ ]] || (( max_attempts < 1 )); then
+  echo "error: BIGFISH_SSH_MAX_ATTEMPTS must be >= 1" >&2
+  exit 2
+fi
+if ! [[ "$max_delay" =~ ^[0-9]+$ ]] || (( max_delay < 1 )); then
+  echo "error: BIGFISH_SSH_MAX_DELAY must be >= 1" >&2
+  exit 2
+fi
+
+remote_cmd=(tmux new-session -A -s "$session")
+delay=1
+attempt=1
+
+while (( attempt <= max_attempts )); do
+  if ssh -t "$host" "${remote_cmd[@]}"; then
+    exit 0
+  else
+    rc=$?
+  fi
+  if (( attempt == max_attempts )); then
+    echo "error: failed to connect to $host after $attempt attempts (last rc=$rc)" >&2
+    exit "$rc"
+  fi
+
+  echo "warn: ssh attempt $attempt/$max_attempts failed (rc=$rc); retrying in ${delay}s..." >&2
+  sleep "$delay"
+  delay=$(( delay * 2 ))
+  if (( delay > max_delay )); then
+    delay="$max_delay"
+  fi
+  attempt=$(( attempt + 1 ))
+done

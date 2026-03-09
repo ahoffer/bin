@@ -207,34 +207,34 @@ Signal uses a dedicated user-data dir at `~/.config/signal-xpra`, isolated from 
 Signal installation. Connect from clown with `xprasignal` (delegates to `mac/xpra-signal`).
 
 To add another session: create a service file and connect script following the same pattern,
-then add a line to `xpra-healthcheck` on bigfish and `mac/xpra-healthcheck` on clown.
+then add a line to `xpra-healthcheck-server` on bigfish and `xpra-healthcheck-client` on clown.
 
 ### Xpra watchdog daemons
 
 One pair of daemons covers all sessions.
 
-On bigfish a systemd timer fires every 60 seconds and runs `xpra-healthcheck`. The script
-loops over every known display/service pair, probes each with a 10-second timeout, and
+On bigfish a systemd timer fires every 60 seconds and runs `xpra-healthcheck-server`. The server
+script loops over every known display/service pair, probes each with a 10-second timeout, and
 restarts the matching service if a probe fails or hangs.
 
-On clown a launchd agent fires every 60 seconds and runs `mac/xpra-healthcheck`. The script
-exits quietly if bigfish is unreachable. Otherwise it loops over every known port/connect-script
-pair, checks tunnel and probe health for each, and reconnects only the sessions that are
-unhealthy. Each tunnel uses its own SSH control socket (`~/.ssh/cm-xpra-bigfish-PORT`), so
-reconnects terminate only the dedicated xpra tunnel instead of any shared SSH master session.
-The stale-process killer at the top of the script queries all known ports together, so it never
-mistakes a healthy session for a stale one.
+On clown a launchd agent fires every 60 seconds as `com.aaron.xpra-healthcheck-client` and runs
+`xpra-healthcheck-client`. The client script exits quietly if bigfish is unreachable. Otherwise
+it loops over every known port/connect-script pair, checks tunnel and probe health for each, and
+reconnects only the sessions that are unhealthy. Each tunnel uses its own SSH control socket
+(`~/.ssh/cm-xpra-bigfish-PORT`), so reconnects terminate only the dedicated xpra tunnel instead
+of any shared SSH master session. The stale-process killer at the top of the script queries all
+known ports together, so it never mistakes a healthy session for a stale one.
 
 Check watchdog status on bigfish:
 
-    systemctl --user status xpra-healthcheck.timer
-    systemctl --user list-timers xpra-healthcheck.timer
-    journalctl --user -u xpra-healthcheck -n 50
+    systemctl --user status xpra-healthcheck-server.timer
+    systemctl --user list-timers xpra-healthcheck-server.timer
+    journalctl --user -u xpra-healthcheck-server.service -n 50
 
 Check watchdog status on clown:
 
-    launchctl list com.aaron.xpra-healthcheck
-    tail -100 ~/Library/Logs/xpra-healthcheck.log
+    launchctl list com.aaron.xpra-healthcheck-client
+    tail -100 ~/Library/Logs/xpra-healthcheck-client.log
 
 ### Xpra log scripts
 
@@ -243,6 +243,6 @@ server journal, and `xprawatchlog` follows the single shared watchdog journal. A
 pass through extra arguments to `journalctl`.
 
 On clown, `xpralogmac` streams Xpra.app output via `log stream` and `xprawatchlogmac`
-tails the watchdog log at `~/Library/Logs/xpra-healthcheck.log`. `xprasignalclientlog`
+tails the watchdog log at `~/Library/Logs/xpra-healthcheck-client.log`. `xprasignalclientlog`
 tails `~/Library/Logs/xpra-signal.log`, the Xpra.app client output for the Signal session.
 `xprachromeclientlog` tails `~/Library/Logs/xpra-chrome.log`, the equivalent for the Chrome session.

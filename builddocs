@@ -1,0 +1,11 @@
+#!/bin/bash
+set -e
+
+# On a proper git worktree, qb uses docbuild from the docs/ subdirectory.
+# On bigfish (bare-repo parent, no .git file), qb handles git setup itself
+# and builds via Maven.
+if [[ -f ".git" ]]; then
+    cd docs && exec qb "$@"
+else
+    exec qb -pl docs "$@"
+fi

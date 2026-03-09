@@ -1,1 +1,51 @@
+# Git
 .git
+.git/**
+
+# Build outputs
+target
+target/**
+build
+build/**
+dist
+dist/**
+out
+out/**
+
+# Node
+node_modules
+node_modules/**
+npm-debug.log
+yarn-error.log
+
+# Python
+__pycache__
+__pycache__/**
+*.pyc
+*.pyo
+*.pyd
+.venv
+venv
+
+# Java / IDE
+*.class
+.mvn
+.mvn/**
+.gradle
+.gradle/**
+.idea
+.idea/**
+*.iml
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temp
+tmp
+tmp/**
+temp
+temp/**

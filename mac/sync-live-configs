@@ -40,8 +40,11 @@ sync_xpra() {
 }
 
 sync_xpra_watchdog() {
-    local plist="$HOME/Library/LaunchAgents/com.aaron.xpra-healthcheck.plist"
-    cp "${CONFIG_DIR}/com.aaron.xpra-healthcheck.plist" "$plist"
+    local old_plist="$HOME/Library/LaunchAgents/com.aaron.xpra-healthcheck.plist"
+    local plist="$HOME/Library/LaunchAgents/com.aaron.xpra-healthcheck-client.plist"
+    launchctl bootout gui/"$(id -u)" "$old_plist" 2>/dev/null || true
+    rm -f "$old_plist"
+    copy_file "${CONFIG_DIR}/com.aaron.xpra-healthcheck-client.plist" "$plist"
     launchctl bootout gui/"$(id -u)" "$plist" 2>/dev/null || true
     launchctl bootstrap gui/"$(id -u)" "$plist"
 }

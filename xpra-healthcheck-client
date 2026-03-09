@@ -2,8 +2,8 @@
 set -euo pipefail
 
 HOST="${XPRA_HEALTHCHECK_HOST:-bigfish}"
-LOG="${XPRA_HEALTHCHECK_LOG:-$HOME/Library/Logs/xpra-healthcheck.log}"
-LOCKDIR="${XPRA_HEALTHCHECK_LOCKDIR:-${TMPDIR:-/tmp}/xpra-healthcheck.lock}"
+LOG="${XPRA_HEALTHCHECK_CLIENT_LOG:-${XPRA_HEALTHCHECK_LOG:-$HOME/Library/Logs/xpra-healthcheck-client.log}}"
+LOCKDIR="${XPRA_HEALTHCHECK_CLIENT_LOCKDIR:-${XPRA_HEALTHCHECK_LOCKDIR:-${TMPDIR:-/tmp}/xpra-healthcheck-client.lock}}"
 XPRA_BIN="${XPRA_HEALTHCHECK_XPRA_BIN:-/Applications/Xpra.app/Contents/MacOS/Xpra}"
 
 log() { echo "$(date -u +%FT%TZ) $*" >> "$LOG"; }
