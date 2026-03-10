@@ -9,4 +9,4 @@ if [[ -z "$realCodex" ]]; then
     exit 1
 fi
 
-exec wraplog "codex" "$realCodex" "$@"
+exec "$realCodex" "$@"

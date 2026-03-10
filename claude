@@ -9,4 +9,4 @@ if [[ -z "$realClaude" ]]; then
     exit 1
 fi
 
-exec wraplog "claude" "$realClaude" "$@"
+exec "$realClaude" "$@"

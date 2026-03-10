@@ -55,14 +55,10 @@ Then point Codex at it with an MCP entry like:
 This repo only provides the `mcpserve` wrapper; the Desktop Commander package is downloaded by `npx`
 when the command runs.
 
-## Claude Code and Codex session wrappers
+## Claude Code and Codex wrappers
 
-`claude` and `codex` in ~/bin find the real binary and hand off to `wraplog`, which
-runs the binary directly and indexes the session JSONL into `~/logs/` on exit.
-
-The real binaries are at `~/.local/bin/claude` and the nvm-managed path for codex.
-The wrappers strip ~/bin from PATH before resolving the real binary to prevent
-self-invocation.
+`claude` and `codex` in `~/bin` resolve the real binary outside `~/bin` and exec it.
+This keeps the wrapper predictable and avoids self-invocation.
 
 ## bigfish-shell
 
@@ -94,17 +90,6 @@ Why this exists:
 * Keeps remote work alive inside tmux on bigfish.
 * Avoids any background watchdog process; recovery is explicit and operator driven.
 
-### Session log index
-
-`wraplog` creates a timestamped symlink in `~/logs/` pointing to the JSONL session
-file written by the tool:
-
-    ~/logs/claude-YYYYMMDD-HHMMSS-<session-uuid>.jsonl  -> ~/.claude/projects/.../uuid.jsonl
-    ~/logs/codex-YYYYMMDD-HHMMSS-rollout-<ts>-<uuid>.jsonl -> ~/.codex/sessions/.../uuid.jsonl
-
-The JSONL stays in its canonical location. The symlink provides a time-indexed entry
-point. If no session file was created the symlink is omitted.
-
 ### Claude Code session JSONs
 
 Stored at `~/.claude/projects/`. Each project gets a subdirectory named after its path
@@ -123,7 +108,7 @@ Directories are created per calendar day.
 Global prompt history is at `~/.codex/history.jsonl`.
 
 Persistent conversation state lives in `~/.codex/state_5.sqlite` with standard SQLite
-WAL files alongside it. The TUI process log is at `~/.codex/log/codex-tui.log`.
+WAL files alongside it.
 
 No rotation is performed on any of these files.
 
