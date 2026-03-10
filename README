@@ -174,8 +174,17 @@ Check disabled state:
 
 ## Xpra on bigfish
 
-`mac/xpra-chrome` is the macOS-side helper that opens `Xpra.app` and attaches it to the forwarded
-xpra session exposed by `bigfish` on `tcp://127.0.0.1:14501`.
+`xpra-start-client` is the macOS-side helper that opens the hidden
+`/Applications/Xpra.app/Contents/Xpra_NoDock.app` bundle and attaches it to the
+forwarded xpra session exposed by `bigfish` on `tcp://127.0.0.1:14501`.
+
+The launch path matters. Invoking `/Applications/Xpra.app/Contents/MacOS/Xpra`
+directly worked functionally, but the installed Xpra bundle also ships a second
+`Info.plist` under `Contents/Resources/bin/` with the same bundle identifier.
+On clown that confused LaunchServices into recording the app as the internal
+`bin` folder, so the Dock kept flashing a recent item named `bin`. Launching
+the hidden helper bundle by absolute path avoids a normal Dock icon and keeps
+the attach flow in app-bundle mode.
 
 On the `bigfish` side, the attached xpra X11 display is currently visible as `:100`:
 
@@ -200,11 +209,12 @@ the existing Xpra app flow on the Mac.
 
 | App     | Display | Port  | Service        | Connect script    |
 |---------|---------|-------|----------------|-------------------|
-| Chrome  | :100    | 14501 | xprachrome     | mac/xpra-chrome   |
-| Signal  | :101    | 14502 | xpra-signal    | mac/xpra-signal   |
+| Chrome  | :100    | 14501 | xprachrome     | xpra-start-client |
+| Signal  | :101    | 14502 | xpra-signal    | xpra-start-client |
 
 Signal uses a dedicated user-data dir at `~/.config/signal-xpra`, isolated from any native
-Signal installation. Connect from clown with `xprasignal` (delegates to `mac/xpra-signal`).
+Signal installation. Connect from clown with `xprasignal`, which delegates to
+`xpra-start-client signal`.
 
 To add another session: create a service file and connect script following the same pattern,
 then add a line to `xpra-healthcheck-server` on bigfish and `xpra-healthcheck-client` on clown.
@@ -219,11 +229,13 @@ restarts the matching service if a probe fails or hangs.
 
 On clown a launchd agent fires every 60 seconds as `com.aaron.xpra-healthcheck-client` and runs
 `xpra-healthcheck-client`. The client script exits quietly if bigfish is unreachable. Otherwise
-it loops over every known port/connect-script pair, checks tunnel and probe health for each, and
-reconnects only the sessions that are unhealthy. Each tunnel uses its own SSH control socket
-(`~/.ssh/cm-xpra-bigfish-PORT`), so reconnects terminate only the dedicated xpra tunnel instead
-of any shared SSH master session. The stale-process killer at the top of the script queries all
-known ports together, so it never mistakes a healthy session for a stale one.
+it loops over every known port/session pair, checks tunnel and probe health for each, and
+reconnects only sessions that remain unhealthy past a grace window. Each tunnel uses its own SSH
+control socket (`~/.ssh/cm-xpra-bigfish-PORT`), so reconnects terminate only the dedicated xpra
+tunnel instead of any shared SSH master session. The watchdog also records per-session launch
+state in `~/Library/Caches/xpra-healthcheck-client` and treats recent launches or Xpra client
+sockets as signs of life, so it does not recycle healthy clients merely because they are idle or
+between tunnel states.
 
 Check watchdog status on bigfish:
 

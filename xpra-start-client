@@ -2,6 +2,13 @@
 set -euo pipefail
 
 # Attaches the local macOS Xpra.app client to a named xpra session on bigfish.
+# The original implementation exec'd /Applications/Xpra.app/Contents/MacOS/Xpra
+# directly. That worked for attach, but macOS recorded the launch against the
+# app bundle's duplicated Info.plist under Contents/Resources/bin, so the Dock
+# kept flashing a recent-item folder named "bin". On this machine LaunchServices
+# resolves the Xpra bundle id to that internal Resources/bin path, so bundle-id
+# lookup is not reliable either. Launching the hidden helper app by absolute
+# path keeps the client in app-bundle mode while avoiding a normal Dock icon.
 # Usage: xpra-start-client <session-name>
 # Add a case line here to introduce a new session.
 case "$1" in
@@ -12,8 +19,20 @@ esac
 
 HOST="bigfish"
 LOG="$HOME/Library/Logs/xpra-$1.log"
+STATE_DIR="${XPRA_STATE_DIR:-${XPRA_HEALTHCHECK_CLIENT_STATE_DIR:-$HOME/Library/Caches/xpra-healthcheck-client}}"
+APP_PATH="${XPRA_APP_PATH:-/Applications/Xpra.app/Contents/Xpra_NoDock.app}"
 # Dedicated control socket keeps this tunnel isolated from shared SSH masters.
 CONTROL_PATH="${HOME}/.ssh/cm-xpra-${HOST}-${PORT}"
+STATE_FILE="${STATE_DIR}/$1.state"
+
+save_launch_state() {
+  mkdir -p "$STATE_DIR"
+  cat >"$STATE_FILE" <<EOF
+last_launch_epoch=$(date +%s)
+first_unhealthy_epoch=0
+last_seen_client_pid=0
+EOF
+}
 
 # Assumes SSH key auth is configured so ssh bigfish does not prompt.
 # Bail out quietly if host is unreachable, prevents launchd restart loops.
@@ -43,8 +62,12 @@ for i in 6 5 4 3 2 1; do
   [ -f "${LOG}.${i}" ] && mv "${LOG}.${i}" "${LOG}.$((i+1))"
 done
 [ -f "$LOG" ] && mv "$LOG" "${LOG}.1"
-nohup /Applications/Xpra.app/Contents/MacOS/Xpra attach "tcp://127.0.0.1:${PORT}" \
-  >"$LOG" 2>&1 &
-# Detach from bash job table so bash does not emit job-death messages to stderr
-# when this script is called as a subprocess (e.g., from the healthcheck).
-disown
+save_launch_state
+# Use the hidden helper app by absolute path so LaunchServices does not resolve
+# org.xpra.xpra to the broken Contents/Resources/bin pseudo-bundle. The helper
+# keeps the client out of the Dock, which is the preferred behavior here.
+open -g -a "$APP_PATH" \
+  --stdin /dev/null \
+  --stdout "$LOG" \
+  --stderr "$LOG" \
+  --args attach "tcp://127.0.0.1:${PORT}"
