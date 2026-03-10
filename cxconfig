@@ -83,9 +83,23 @@ get_version() {
   echo "$ver"
 }
 
-# List modules declared in docker/pom.xml
+# Return 0 when a component can be built/pushed/deployed by the cx* helpers.
+# Deployable components either define a Dockerfile directly or have a pom.xml
+# that wires in the docker-maven-plugin image build flow. Modules that only
+# filter resources, like redis-proxy, are intentionally excluded.
+is_deployable_component() {
+  local comp="$1"
+  local compdir="$project_root/docker/$comp"
+  [[ -f "$compdir/Dockerfile" ]] && return 0
+  [[ -f "$compdir/pom.xml" ]] && grep -q "<artifactId>docker-maven-plugin</artifactId>" "$compdir/pom.xml"
+}
+
+# List deployable modules declared in docker/pom.xml
 get_all_modules() {
-  sed -n 's/.*<module>\(.*\)<\/module>.*/\1/p' "$project_root/docker/pom.xml"
+  local module
+  while IFS= read -r module; do
+    is_deployable_component "$module" && echo "$module"
+  done < <(sed -n 's/.*<module>\(.*\)<\/module>.*/\1/p' "$project_root/docker/pom.xml")
 }
 
 # List all components: subdirs of docker/ that have a pom.xml or Dockerfile
