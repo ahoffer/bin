@@ -10,6 +10,7 @@ set -euo pipefail
 # lookup is not reliable either. Launching the hidden helper app by absolute
 # path keeps the client in app-bundle mode while avoiding a normal Dock icon.
 # Usage: xpra-start-client <session-name>
+# Sessions (chrome, signal) are independent and can run simultaneously.
 # Add a case line here to introduce a new session.
 case "$1" in
   chrome) PORT=14501 ;;
@@ -66,7 +67,7 @@ save_launch_state
 # Use the hidden helper app by absolute path so LaunchServices does not resolve
 # org.xpra.xpra to the broken Contents/Resources/bin pseudo-bundle. The helper
 # keeps the client out of the Dock, which is the preferred behavior here.
-open -g -a "$APP_PATH" \
+open -gn -a "$APP_PATH" \
   --stdin /dev/null \
   --stdout "$LOG" \
   --stderr "$LOG" \
