@@ -1,8 +1,8 @@
 #!/bin/bash
 # Copy the most recent screenshot to the clipboard whenever a new one appears.
-# Triggered by a LaunchAgent watching ~/Pictures/Screenshots.
+# Triggered by a LaunchAgent watching ~/projects/share/Screenshots.
 
-WATCH_DIR="$HOME/Pictures/Screenshots"
+WATCH_DIR="$HOME/projects/share/Screenshots"
 STATE_FILE="$WATCH_DIR/.last_clipboard_copy"
 
 # Wait for the screenshot file to be fully written
