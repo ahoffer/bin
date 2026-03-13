@@ -39,14 +39,12 @@ sync_xpra() {
   copy_file "${CONFIG_DIR}/xpra.conf" "$HOME/.xpra/xpra.conf"
 }
 
-sync_xpra_watchdog() {
-    local old_plist="$HOME/Library/LaunchAgents/com.aaron.xpra-healthcheck.plist"
-    local plist="$HOME/Library/LaunchAgents/com.aaron.xpra-healthcheck-client.plist"
-    launchctl bootout gui/"$(id -u)" "$old_plist" 2>/dev/null || true
-    rm -f "$old_plist"
-    copy_file "${CONFIG_DIR}/com.aaron.xpra-healthcheck-client.plist" "$plist"
-    launchctl bootout gui/"$(id -u)" "$plist" 2>/dev/null || true
-    launchctl bootstrap gui/"$(id -u)" "$plist"
+sync_launchers() {
+  for app in "${ROOT}/Chrome on bigfish.app" "${ROOT}/Signal on bigfish.app"; do
+    dst="$HOME/Desktop/$(basename "$app")"
+    cp -r "$app" "$dst"
+    printf 'synced %s -> %s\n' "$app" "$dst"
+  done
 }
 
 sync_intellij_keymap() {
@@ -76,5 +74,5 @@ printf 'note  platform-macos.conf.bak has no mapped live destination yet\n'
 
 sync_uebersicht
 sync_xpra
-sync_xpra_watchdog
+sync_launchers
 sync_intellij_keymap
