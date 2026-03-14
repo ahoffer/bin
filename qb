@@ -9,14 +9,15 @@
 # flow needs to handle each layout explicitly instead of assuming a single
 # repository shape.
 #
-# In docs modules, delegates to docbuild because Antora cannot be driven
-# through Maven. In frontend modules, runs yarn prettier first because
-# the TypeScript compiler rejects unformatted code.
+# In docs modules, delegates to builddocs so the docs-specific worktree,
+# bare-parent, and regular-repo handling lives in one script. In frontend
+# modules, runs yarn prettier first because the TypeScript compiler rejects
+# unformatted code.
 #
 # In a git worktree, skips the license plugin because jgit does not support
-# linked worktrees. Full builds at the project root also exclude docs from
-# Maven and build them via docbuild afterward, because Antora cannot resolve
-# content sources from a worktree.
+# linked worktrees. At the project root, docs preparation is delegated to
+# builddocs, and docs are excluded from the main reactor only when qb itself
+# is selecting the full reactor rather than honoring an explicit -pl.
 #
 # For Docker build contexts, qb can also infer a single deploy target
 # architecture from the active kubectl cluster. This keeps routine local
@@ -40,7 +41,7 @@ goals=()
 arch="${QB_ARCH:-}"
 
 original_args=("$@")
-readonly docbuild="$HOME/bin/cxappdev/docbuild"
+has_project_list=false
 
 # On macOS, SSH sessions omit /opt/homebrew/bin from PATH, so mvn, docker,
 # colima, and other Homebrew tools are unreachable. Prepend it unconditionally.
@@ -168,6 +169,7 @@ EOF
         -am) mvn_args+=("$1") ;;
         -pl|-rf|-P|-f|-s|-gs)
             require_value "$1" "${2:-}"
+            [[ "$1" == "-pl" ]] && has_project_list=true
             mvn_args+=("$1" "$2")
             shift
             ;;
@@ -463,49 +465,8 @@ ensure_colima_space_if_needed() {
     (( avail_k < 5242880 )) && emit_qb_warning "Colima free space is low for Docker build: $avail_g GiB available"
 }
 
-# The docs module uses Antora for HTML and asciidoctor for PDFs.
-# In a regular checkout, Maven handles both via the full lifecycle.
-# In a worktree, Antora cannot resolve the playbook URL; docbuild
-# rewrites the URL first, then Maven runs with the frontend skipped
-# so it does not re-run Antora.
 if is_docs_context; then
-    docs_extra_args=()
-    if is_worktree; then
-        [[ -x "$docbuild" ]] || { echo "Error: docbuild not found at $docbuild." >&2; exit 1; }
-        "$docbuild" "${original_args[@]}" || exit $?
-        docs_extra_args=("-Dskip.yarn=true")
-    fi
-    if [[ $filter_level -eq 0 ]]; then
-        MVNFILTER_LEVEL=$filter_level mvn $threads --no-transfer-progress \
-            "${docs_extra_args[@]}" "${mvn_args[@]}" "${goals[@]}" >/dev/null 2>&1
-        build_status=$?
-    elif [[ $filter_level -eq 1 ]]; then
-        MVNFILTER_LEVEL=$filter_level mvn $threads --no-transfer-progress \
-            "${docs_extra_args[@]}" "${mvn_args[@]}" "${goals[@]}" >/dev/null
-        build_status=$?
-    elif [[ $filter_level -ge 7 ]]; then
-        emit_qb_info "Starting docs Maven install \"${_qb_branch} ${_qb_hash}\""
-        MVNFILTER_LEVEL=$filter_level mvn $threads --no-transfer-progress \
-            "${docs_extra_args[@]}" "${mvn_args[@]}" "${goals[@]}"
-        build_status=$?
-    else
-        { printf '[INFO] Starting docs Maven install "%s %s"\n' "$_qb_branch" "$_qb_hash"
-          MVNFILTER_LEVEL=$filter_level mvn $threads --no-transfer-progress \
-              "${docs_extra_args[@]}" "${mvn_args[@]}" "${goals[@]}"
-        } \
-            | MVNFILTER_THREADED=$filter_threaded mvnfilter \
-            | mvnformat \
-            | mvnts \
-            | mvntrim \
-            | mvnlevelcaps \
-            | mvnzerofilesnoise \
-            | MVNFILTER_THREADED=$filter_threaded mvnthreadednoise \
-            | MVNFILTER_LEVEL=$filter_level mvnlevel \
-            | mvncolor
-        build_status=${PIPESTATUS[0]}
-        supplement_build_summary "$build_status"
-    fi
-    exit $build_status
+    exec "$HOME/bin/builddocs" "${original_args[@]}"
 fi
 
 ensure_docker_daemon_if_needed
@@ -513,23 +474,20 @@ ensure_colima_shape_if_needed
 ensure_colima_space_if_needed
 resolve_qb_target_arch
 
-format_frontend || exit $?
+"$HOME/bin/builddocs"
 
-install_docs_artifact_if_needed(){ is_worktree&&is_project_root&&[[ -d "$git_root/docs" ]]||return 0; "$HOME/bin/qb-install-docs-artifact" "$git_root" "$filter_level"; }
+format_frontend || exit $?
 
 # The license plugin uses jgit, which does not support linked worktrees.
 # Skip license formatting in worktrees to avoid a bare-repository error.
-# At the project root, also exclude docs from Maven and build them via
-# docbuild afterward, because Antora cannot resolve content sources from
-# a worktree.
+# When qb is driving the whole reactor from a worktree root, exclude docs
+# because builddocs already prepared them separately.
 if is_worktree; then
     mvn_args+=("-Dlicense.skip=true")
-    if is_project_root && [[ -d "$git_root/docs" ]]; then
+    if ! $has_project_list && is_project_root && [[ -d "$git_root/docs" ]]; then
         mvn_args+=("-pl" "!docs")
     fi
 fi
-
-install_docs_artifact_if_needed
 
 # Always format and fix license headers before compiling.
 format_goals=()
@@ -596,10 +554,6 @@ if [[ -n "$arch" ]]; then
             done
         fi
     fi
-fi
-
-if [[ "${build_docs_separately:-}" == true ]]; then
-    ( cd "$git_root/docs" && "$docbuild" )
 fi
 
 exit 0

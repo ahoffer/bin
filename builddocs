@@ -1,11 +1,59 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-# On a proper git worktree, qb uses docbuild from the docs/ subdirectory.
-# On bigfish (bare-repo parent, no .git file), qb handles git setup itself
-# and builds via Maven.
-if [[ -f ".git" ]]; then
-    cd docs && exec qb "$@"
-else
-    exec qb -pl docs "$@"
+# Build or prepare docs across regular repos, worktrees, and bare-parent
+# layouts. When run from a docs context, this performs the docs build.
+# When run from a project root, it prepares the docs artifact that qb needs
+# before a worktree-root Maven build.
+
+find_project_root_for_docs() {
+    if [[ -f "$PWD/docs/site-playbook.yml" ]]; then
+        printf '%s\n' "$PWD"
+        return 0
+    fi
+
+    if [[ -f "$PWD/site-playbook.yml" && -d "$PWD/.." ]]; then
+        (cd "$PWD/.." && pwd)
+        return 0
+    fi
+
+    local git_root=""
+    git_root=$(git rev-parse --show-toplevel 2>/dev/null) || true
+    if [[ -n "$git_root" && -f "$git_root/docs/site-playbook.yml" ]]; then
+        printf '%s\n' "$git_root"
+        return 0
+    fi
+
+    return 1
+}
+
+project_root=$(find_project_root_for_docs) || {
+    echo "Error: could not locate project root for docs." >&2
+    exit 1
+}
+docs_dir="$project_root/docs"
+
+is_docs_context=false
+case "$(cd "$PWD" && pwd)" in
+    "$docs_dir"|"$docs_dir"/*) is_docs_context=true ;;
+esac
+
+# From the project root, only worktrees need special preparation. Regular
+# checkouts let the main Maven reactor handle docs directly.
+if ! $is_docs_context; then
+    [[ -d "$docs_dir" ]] || exit 0
+    if [[ -f "$project_root/.git" ]]; then
+        exec "$HOME/bin/qb-install-docs-artifact" "$project_root" "${MVNFILTER_LEVEL:-3}"
+    fi
+    exit 0
 fi
+
+# In a worktree docs module, Antora needs the playbook URL rewritten via
+# docbuild before Maven runs. Everywhere else the regular docs reactor works.
+if [[ -f "$project_root/.git" ]]; then
+    cd "$docs_dir"
+    exec "$HOME/bin/cxappdev/docbuild" "$@"
+fi
+
+cd "$project_root"
+exec "$HOME/bin/qb" -pl docs "$@"
