@@ -121,11 +121,28 @@ needs_cross_build() {
   [[ -n "$target" && "$target" != "$(host_arch)" ]]
 }
 
-# Default to amd64 for container builds. Most deployment targets
-# are amd64 hosts, so scripts like cxbuild and cxship get
-# cross-compilation automatically on arm64 dev machines.
-# Override with CONTAINER_ARCH=linux/arm64 for native arm64 builds.
-: "${CONTAINER_ARCH:=linux/amd64}"
+# Query the currently configured kubectl cluster for the architecture
+# of its first ready node and return the Docker platform string.
+# Falls back to linux/amd64 if kubectl is unavailable, not configured,
+# or returns no nodes. This is used to set CONTAINER_ARCH automatically
+# so builds always target the actual cluster without manual overrides.
+cluster_arch() {
+  local raw
+  raw=$(kubectl get nodes \
+    -o jsonpath='{.items[0].status.nodeInfo.architecture}' \
+    2>/dev/null) || true
+  case "${raw:-}" in
+    amd64|x86_64)  echo "linux/amd64" ;;
+    arm64|aarch64) echo "linux/arm64" ;;
+    "")            echo "linux/amd64" ;;  # kubectl unavailable or no nodes
+    *)             echo "linux/${raw}" ;;
+  esac
+}
+
+# Detect the target container architecture from the configured cluster.
+# Override by setting CONTAINER_ARCH in the environment before running,
+# for example CONTAINER_ARCH=linux/arm64 cxship app.
+: "${CONTAINER_ARCH:=$(cluster_arch)}"
 export CONTAINER_ARCH
 
 # ─────────────────────────────────────────────────────────────
@@ -182,16 +199,41 @@ acquire_lock() {
     lock_key=$(cd "$PROJECT_ROOT" && cd "$common_dir" && pwd)
   fi
   local project_hash
-  project_hash=$(echo "$lock_key" | md5sum | cut -c1-8)
-  local lock_file="/tmp/${lock_name}-${project_hash}.lock"
+  project_hash=$(printf '%s' "$lock_key" | cksum | awk '{print $1}' | cut -c1-8)
+  local lock_dir="/tmp/${lock_name}-${project_hash}.lock"
+  local pid_file="$lock_dir/pid"
 
-  exec 9>"$lock_file"
+  local lock_cleanup_trap=""
+  printf -v lock_cleanup_trap 'rm -rf %q' "$lock_dir"
 
-  if ! flock -n 9; then
+  if mkdir "$lock_dir" 2>/dev/null; then
+    echo "$$" > "$pid_file"
+    trap "$lock_cleanup_trap" EXIT
+    return
+  fi
+
+  local lock_pid=""
+  if [[ -f "$pid_file" ]]; then
+    lock_pid=$(<"$pid_file")
+  fi
+
+  if [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null; then
     err_msg "Another $lock_name is running for this project"
-    echo "Lock file: $lock_file" >&2
+    echo "Lock file: $lock_dir" >&2
     exit 1
   fi
+
+  rm -rf "$lock_dir" 2>/dev/null || true
+
+  if mkdir "$lock_dir" 2>/dev/null; then
+    echo "$$" > "$pid_file"
+    trap "$lock_cleanup_trap" EXIT
+    return
+  fi
+
+  err_msg "Another $lock_name is running for this project"
+  echo "Lock file: $lock_dir" >&2
+  exit 1
 }
 
 # ─────────────────────────────────────────────────────────────

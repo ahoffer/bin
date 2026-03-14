@@ -17,6 +17,12 @@
 # linked worktrees. Full builds at the project root also exclude docs from
 # Maven and build them via docbuild afterward, because Antora cannot resolve
 # content sources from a worktree.
+#
+# For Docker build contexts, qb can also infer a single deploy target
+# architecture from the active kubectl cluster. This keeps routine local
+# builds aligned with the current deployment target without forcing a
+# second architecture by default. Explicit overrides via -a/--arch or
+# QB_ARCH still win.
 
 skip_tests=true
 threads="-T6"
@@ -27,7 +33,10 @@ goals=()
 
 # Target architecture for docker image builds. Empty means native,
 # no cross-compilation. Set via -a flag or QB_ARCH env var
-# to cross-compile via buildx after the Maven build.
+# to cross-compile via buildx after the Maven build. When unset in a
+# Docker build context, qb will infer the target from the active kubectl
+# cluster. This keeps one-arch builds pointed at the current deploy target
+# while preserving explicit operator control.
 arch="${QB_ARCH:-}"
 
 original_args=("$@")
@@ -139,6 +148,8 @@ Default goal is install with 6 threads. Tests are skipped unless -t is passed.
   -a <platform>   Cross-compile Docker images via buildx after Maven for a
                   different CPU, for example linux/amd64 or linux/arm64.
                   Set QB_ARCH in the environment to avoid repeating.
+                  When omitted in a Docker build context, qb infers the
+                  target from the active kubectl cluster.
   -h              Show this help
 
 All other flags pass through to mvn, including -pl, -rf, -P, -am, and -f.
@@ -332,6 +343,41 @@ is_docker_build_context() {
     is_project_root && [[ -d "$git_root/docker" ]]
 }
 
+map_arch_to_platform() {
+    case "$1" in
+        amd64|x86_64) echo "linux/amd64" ;;
+        arm64|aarch64) echo "linux/arm64" ;;
+        *) return 1 ;;
+    esac
+}
+
+# Best-effort arch detection from the current kubectl target. This is only
+# used to choose a single deploy architecture when the operator did not
+# explicitly request one with -a/--arch or QB_ARCH.
+infer_arch_from_cluster() {
+    command -v kubectl >/dev/null 2>&1 || return 1
+    local raw
+    raw=$(kubectl get nodes -o jsonpath='{.items[0].status.nodeInfo.architecture}' 2>/dev/null) || return 1
+    [[ -n "$raw" ]] || return 1
+    map_arch_to_platform "$raw"
+}
+
+# Resolve the effective target architecture for Docker-oriented builds.
+# Precedence is:
+# 1. explicit -a/--arch
+# 2. QB_ARCH from the environment
+# 3. active kubectl cluster architecture
+# 4. native Docker build (empty arch)
+resolve_qb_target_arch() {
+    [[ -n "$arch" ]] && return 0
+    is_docker_build_context || return 0
+
+    local inferred_arch
+    inferred_arch=$(infer_arch_from_cluster) || return 0
+    arch="$inferred_arch"
+    emit_qb_info_at_level 4 "qb inferred deploy architecture from cluster: ${arch}"
+}
+
 # On macOS, SSH sessions do not include /opt/homebrew/bin in PATH, so colima
 # and docker are unreachable even when installed. This function starts Colima
 # if it is installed but not yet running, then returns. On Linux it is a no-op.
@@ -465,6 +511,7 @@ fi
 ensure_docker_daemon_if_needed
 ensure_colima_shape_if_needed
 ensure_colima_space_if_needed
+resolve_qb_target_arch
 
 format_frontend || exit $?
 
