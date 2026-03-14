@@ -49,3 +49,4 @@ tmp
 tmp/**
 temp
 temp/**
+.git*

@@ -160,3 +160,23 @@ Check disabled state:
 ## Xpra on bigfish
 
 See `XPRA_README.md` for full setup, configuration, and troubleshooting.
+
+## Future Enhancements
+
+### Cross-tool lock awareness in cx scripts
+
+`acquire_lock` in `cx.lib` uses a lock name (`build` or `deploy`) to create
+`/tmp/<name>-<project-hash>.lock`. Because the names differ, `cxdeploy` can
+run concurrently with `qb`, which creates a race: if `cxdeploy` calls
+`docker save` while `qb` is mid-`buildx --load` on the same tag, the saved
+image can be corrupt or wrong-platform, causing `exec format error` in k8s.
+
+Ideas:
+
+- Add a `check_lock` helper that tests for a conflicting lock name without
+  acquiring it. `cxdeploy` could call `check_lock build` and abort (or wait)
+  if a build is in progress.
+- Alternatively, give `acquire_lock` an optional list of lock names to treat
+  as conflicts, so a deploy can refuse to start while any listed lock is held.
+- A simpler convention: `cxdeploy` could check for any `/tmp/build-<hash>.lock`
+  before proceeding and print a clear warning rather than silently racing.
